@@ -122,11 +122,22 @@ function showLoginForm() {
 }
 
 async function login() {
-  const userid = ($('loginUserid').value || '').trim();
+  const useridInput = $('loginUserid');
   const err = $('loginError');
   
+  console.log('登录函数执行，用户ID输入框:', useridInput);
+  
+  if (!useridInput) {
+    console.error('找不到用户ID输入框 #loginUserid');
+    if (err) err.textContent = '页面加载错误，请刷新重试';
+    return;
+  }
+  
+  const userid = (useridInput.value || '').trim();
+  console.log('输入的用户ID:', userid);
+  
   if (!userid) { 
-    err.textContent = '请输入用户ID'; 
+    if (err) err.textContent = '请输入用户ID'; 
     return; 
   }
   
@@ -414,7 +425,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // 登录/注册/退出按钮
+  // 登录/注册/退出按钮 - 简单直接的绑定
   $('loginBtn')?.addEventListener('click', login);
   $('registerBtn')?.addEventListener('click', registerUser);
   $('logoutBtn')?.addEventListener('click', logout);
