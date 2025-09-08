@@ -141,10 +141,12 @@ async function login() {
   }
 }
 
+// appV1.js — 注册处理（最小改动版）
 async function registerUser(evt){
   evt?.preventDefault?.();
   const $ = id => document.getElementById(id);
 
+  // 1) 先取值（所有校验之前）
   const err        = $('registerError');
   const name       = $('registerName').value.trim();
   const email      = $('registerEmail').value.trim();
@@ -154,6 +156,7 @@ async function registerUser(evt){
   const majorFree  = $('registerMajorFree')?.value?.trim() || '';
   const major      = (department === '其他') ? majorFree : majorSel;
 
+  // 2) 单一入口校验（去掉你之前分散的三段）
   if (!name || !email || !department || !role) {
     err.textContent = '请填写姓名、邮箱、所属、身份'; return;
   }
@@ -164,6 +167,7 @@ async function registerUser(evt){
     err.textContent = '请选择一个专业'; return;
   }
 
+  // 3) 提示并提交
   err.style.color = '';
   err.textContent = '正在登记…';
   const r = await callAPI('registerByProfile', { name, email, department, major, role });
@@ -191,8 +195,13 @@ function logout() {
 }
 
 /* =============== 角色导航与页面切换 =============== */
+/** 管理员别名：侧栏 data-page -> 实际页面ID */
+// 统一：直接按 data-page 去找 `${pageId}Page`
+function resolvePageIdForRole(pageId) {
+  return pageId;
+}
 function showPage(pageIdRaw) {
-  const pageId = pageIdRaw;
+  const pageId = resolvePageIdForRole(pageIdRaw);
   document.querySelectorAll('.page-content').forEach(p => { p.classList.remove('active'); p.style.display='none'; });
   const panel = document.getElementById(pageId + 'Page');
   if (panel) { panel.style.display='block'; panel.classList.add('active'); }
@@ -219,7 +228,8 @@ function updateUserUI() {
   if (firstLink) {
     document.querySelectorAll('.nav-link').forEach(a=>a.classList.remove('active'));
     firstLink.classList.add('active');
-    showPage(firstLink.dataset.page);
+    const pid = resolvePageIdForRole(firstLink.dataset.page);
+    showPage(pid);
   } else {
     // 兜底到日历
     showPage('calendar');
