@@ -43,6 +43,40 @@ function setApiStatus({ok, text}) {
   }
 }
 
+// AXIS_START: constants & utils (progress axis)
+const AXIS_SLOT_TIME = '08:00:00';   
+const AXIS_LINE_MIN  = 5;            
+const AXIS_CLASS_BG    = 'evt-axis-bg';
+const AXIS_CLASS_HIT   = 'evt-axis-hit';
+const AXIS_CLASS_MONTH = 'evt-axis-month';
+
+function AXIS_addDays(isoDate, days){
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+
+function AXIS_parseDateRange(row) {
+  const raw = String(row.date || '').trim();
+  if (raw.includes('~')) {
+    const [s,e] = raw.split('~').map(x => x.trim());
+    return [s, e];
+  }
+  return [raw, raw];
+}
+
+function AXIS_eachDate(startISO, endISO) {
+  const out = [];
+  let d = new Date(startISO + 'T00:00:00');
+  const end = new Date(endISO + 'T00:00:00');
+  while (d <= end) { out.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
+  return out;
+}
+
+function AXIS_canSee(row, currentUser) {
+  return true; // 现在全员可见，以后可以在这里添加权限控制
+}
+// AXIS_END
 /* =============== 统一/适配 =============== */
 function normalizeUser(u = {}, fallbackId = '') {
   return {
@@ -316,16 +350,32 @@ function initCalendar() {
   const initialView = window.matchMedia('(max-width: 768px)').matches ? 'timeGridDay' : 'timeGridWeek';
   const cal = new FullCalendar.Calendar(el, {
     eventClick: function(info) {
-  const ev = info.event;
-  const ext = ev.extendedProps || {};
-  const title = ev.title || '';
-  const start = ev.start ? ev.start.toLocaleString('zh-CN') : '';
-  const end = ev.end ? ev.end.toLocaleString('zh-CN') : '';
-  const teacher = ext.teacher ? `\n任课老师：${ext.teacher}` : '';
-  const slotId = ext.slotId ? `\n槽位ID：${ext.slotId}` : '';
-  
-  alert(`课程：${title}\n时间：${start} ~ ${end}${teacher}${slotId}`);
-},
+      const props = info.event.extendedProps || {};
+      if (props.type === 'axis' || props.type === 'axis-hit' || props.type === 'axis-month') {
+        const row = props.sourceRow || props;
+        alert(`进度线：${row.title || info.event.title}\n时间：${row.date || ''}\n创建者：${row.creator || ''}\n备注：${row.notes || ''}`);
+        info.jsEvent?.preventDefault?.();
+        return;
+      }
+      
+      // 你原有的课程点击逻辑
+      const ev = info.event;
+      const ext = ev.extendedProps || {};
+      const title = ev.title || '';
+      const start = ev.start ? ev.start.toLocaleString('zh-CN') : '';
+      const end = ev.end ? ev.end.toLocaleString('zh-CN') : '';
+      const teacher = ext.teacher ? `\n任课老师：${ext.teacher}` : '';
+      const slotId = ext.slotId ? `\n槽位ID：${ext.slotId}` : '';
+      
+      alert(`课程：${title}\n时间：${start} ~ ${end}${teacher}${slotId}`);
+    },
+    slotLabelContent: (arg) => {
+      try {
+        const h = arg.date.getHours?.();
+        if (h === 8) return { html: '' };  // 隐藏08:00标签
+      } catch(_) {}
+      return undefined;
+    },
     initialView,
     locale: 'zh-cn',
     firstDay: 1,
@@ -338,7 +388,6 @@ function initCalendar() {
     expandRows:true,
     datesSet: updateCalendarTitle,
 
-    // ★ 新增：由 FullCalendar 主动拉取你的 API
     events: async function(info, success, failure) {
       try {
         const viewStart = info.startStr ? info.startStr.slice(0,10) : '';
@@ -346,12 +395,64 @@ function initCalendar() {
         const params = {
           userId: (currentUser && currentUser.userId) ? currentUser.userId : '',
           viewStart, viewEnd,
-          debugNoAuth: !currentUser   // 允许未登录自测
+          debugNoAuth: !currentUser
         };
         const res  = await callAPI('listVisibleSlots', params);
         const rows = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
-        const adaptedRows = adaptEvents(rows);
-        success(adaptedRows);
+        
+        // AXIS_START: separate normal and axis events
+        const normalEvents = [];
+        const axisEvents = [];
+        
+        rows.forEach(row => {
+          if (row.extendedProps && row.extendedProps.type === 'axis') {
+            // 处理进度轴事件
+            const sourceRow = row.extendedProps.sourceRow || row.extendedProps;
+            const [d0, d1] = AXIS_parseDateRange(sourceRow);
+            
+            // 周/日视图：背景线
+            axisEvents.push({
+              id: `axis-bg-${row.id}`,
+              title: row.title,
+              start: `${d0}T${AXIS_SLOT_TIME}`,
+              end: `${AXIS_addDays(d1,1)}T${AXIS_SLOT_TIME}`,
+              display: 'background',
+              classNames: [AXIS_CLASS_BG],
+              extendedProps: row.extendedProps
+            });
+            
+            // 周/日视图：可点击区域
+            AXIS_eachDate(d0, d1).forEach(di => {
+              axisEvents.push({
+                id: `axis-hit-${row.id}-${di}`,
+                title: row.title,
+                start: `${di}T${AXIS_SLOT_TIME}`,
+                end: `${di}T08:05:00`,
+                classNames: [AXIS_CLASS_HIT],
+                extendedProps: row.extendedProps
+              });
+            });
+            
+            // 月视图：跨日条
+            axisEvents.push({
+              id: `axis-month-${row.id}`,
+              title: row.title,
+              start: d0,
+              end: AXIS_addDays(d1,1),
+              allDay: true,
+              classNames: [AXIS_CLASS_MONTH],
+              extendedProps: row.extendedProps
+            });
+          } else {
+            // 普通课程事件，用你原有的适配逻辑
+            const adapted = adaptEvents([row]);
+            normalEvents.push(...adapted);
+          }
+        });
+        
+        const allEvents = [...normalEvents, ...axisEvents];
+        success(allEvents);
+        // AXIS_END
 
       } catch (err) {
         failure && failure(err);
@@ -407,6 +508,7 @@ function setSegActive(btn){
   ['dayBtn','weekBtn','monthBtn'].forEach(id=>{ const b=$(id); b && b.classList.remove('active'); });
   btn && btn.classList.add('active');
 }
+
 
 /* =============== 初始化 =============== */
 document.addEventListener('DOMContentLoaded', async () => {
