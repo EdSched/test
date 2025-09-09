@@ -156,11 +156,14 @@ async function login() {
 }
 
 // appV1.js — 注册处理（最小改动版）
+// 带完整调试功能的注册函数
 async function registerUser(evt){
   evt?.preventDefault?.();
+  console.log('🔥 注册函数开始执行');
+  
   const $ = id => document.getElementById(id);
 
-  // 1) 先取值（所有校验之前）
+  // 1) 获取所有表单元素和错误显示元素
   const err        = $('registerError');
   const name       = $('registerName').value.trim();
   const email      = $('registerEmail').value.trim();
@@ -170,30 +173,80 @@ async function registerUser(evt){
   const majorFree  = $('registerMajorFree')?.value?.trim() || '';
   const major      = (department === '其他') ? majorFree : majorSel;
 
-  // 2) 单一入口校验（去掉你之前分散的三段）
+  console.log('📝 收集到的表单数据:', {
+    name, email, department, role, 
+    majorSel, majorFree, major,
+    '所属是否为其他': department === '其他'
+  });
+
+  // 2) 数据验证
   if (!name || !email || !department || !role) {
-    err.textContent = '请填写姓名、邮箱、所属、身份'; return;
+    console.log('❌ 基础字段验证失败');
+    err.style.color = '#c00';
+    err.textContent = '请填写姓名、邮箱、所属、身份'; 
+    return;
   }
+  
   if (department === '其他' && !major) {
-    err.textContent = '所属为“其他”时，请填写专业'; return;
+    console.log('❌ 其他部门但未填写专业');
+    err.style.color = '#c00';
+    err.textContent = '所属为"其他"时，请填写专业'; 
+    return;
   }
+  
   if (department !== '其他' && !major) {
-    err.textContent = '请选择一个专业'; return;
+    console.log('❌ 非其他部门但未选择专业');
+    err.style.color = '#c00';
+    err.textContent = '请选择一个专业'; 
+    return;
   }
 
-  // 3) 提示并提交
+  console.log('✅ 数据验证通过，准备调用API');
+
+  // 3) 显示加载状态
   err.style.color = '';
   err.textContent = '正在登记…';
-  const r = await callAPI('registerByProfile', { name, email, department, major, role });
+  
+  // 4) 准备API参数
+  const apiParams = { name, email, department, major, role };
+  console.log('🚀 调用注册API，参数:', apiParams);
+  console.log('🌐 API地址:', API_URL);
 
-  if (r && (r.success || r.ok)) {
-    err.style.color = 'green';
-    err.textContent = (role.indexOf('老师') > -1)
-      ? '已完成注册，等待管理员分配用户ID'
-      : '已完成注册，等待老师分配ID';
-  } else {
+  try {
+    // 5) 调用API
+    const startTime = Date.now();
+    const r = await callAPI('registerByProfile', apiParams);
+    const endTime = Date.now();
+    
+    console.log(`📡 API调用完成，耗时: ${endTime - startTime}ms`);
+    console.log('📥 API返回结果:', r);
+    
+    // 6) 处理返回结果
+    if (r && r.success) {  // 注册API只检查 success，不检查 ok
+      console.log('✅ 注册成功');
+      err.style.color = 'green';
+      err.textContent = (role.indexOf('老师') > -1)
+        ? '已完成注册，等待管理员分配用户ID'
+        : '已完成注册，等待老师分配ID';
+    } else {
+      console.log('❌ 注册失败');
+      console.log('失败原因:', r ? r.message : '无返回信息');
+      
+      err.style.color = '#c00';
+      let msg = (r && r.message) ? r.message : '登记失败（无返回信息）';  // 只使用 message
+      
+      // 显示调试信息（如果有）
+      if (r && r.debug) {
+        console.log('🔍 调试信息:', r.debug);
+        msg += '\n调试信息: ' + JSON.stringify(r.debug, null, 2);
+      }
+      
+      err.textContent = msg;
+    }
+  } catch (error) {
+    console.error('💥 注册过程发生异常:', error);
     err.style.color = '#c00';
-    err.textContent = (r && r.message) ? r.message : '登记失败（无返回信息）';
+    err.textContent = '网络错误: ' + error.message;
   }
 }
 
