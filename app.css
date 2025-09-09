@@ -459,33 +459,3 @@ nav a.active {
     grid-template-columns: 1fr;
   }
 }
-
-/* AXIS_START: axis styles */
-.evt-axis-bg {
-  background: linear-gradient(to bottom, rgb(248, 243, 243), rgb(248, 246, 212)) !important;
-  opacity: 1 !important;
-  pointer-events: none !important;
-  margin-top: 1px;
-  margin-bottom: 1px;
-}
-
-.evt-axis-hit {
-  background: transparent !important;
-  border: none !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-  z-index: 2;
-}
-
-.evt-axis-month {
-  padding: 0 !important;
-  border: none !important;
-  background: rgb(240, 225, 185) !important;
-  height: 3px;
-  line-height: 0;
-}
-
-.fc-dayGrid .evt-axis-bg,
-.fc-dayGrid .evt-axis-hit { display: none !important; }
-.fc-timeGrid .evt-axis-month { display: none !important; }
-/* AXIS_END */
