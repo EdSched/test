@@ -151,7 +151,7 @@ async function login() {
     loadCalendarEvents();
   } else {
     err.style.color='#c00';
-    err.textContent = (r && r.message) || '登录失败：用户ID不存在';
+    err.textContent = (r && (r.message || r.msg)) || '登录失败：用户ID不存在';
   }
 }
 
@@ -297,8 +297,9 @@ function initCalendar() {
         };
         const res  = await callAPI('listVisibleSlots', params);
         const rows = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
-        // 你的后端已按 FullCalendar 事件结构返回，可直接给 success
-        success(rows);
+        const adaptedRows = adaptEvents(rows);
+        success(adaptedRows);
+
       } catch (err) {
         failure && failure(err);
       }
