@@ -46,10 +46,10 @@ function setApiStatus({ok, text}) {
 /* =============== 统一/适配 =============== */
 function normalizeUser(u = {}, fallbackId = '') {
   return {
-    userId: u.userId || u.username || u.id || fallbackId || '',
+    userId: u.userid || u.userId || u.username || u.id || fallbackId || '',
     name: u.name || u.realName || u.displayName || '',
     role: u.role || u.identity || '',
-    department: u.department || u.affiliation || u.dept || '',
+    department: u.affiliation || u.department || u.dept || '',
     major: u.major || u.subject || ''
   };
 }
@@ -59,6 +59,20 @@ function normalizeRole(user){
   if (r0.includes('admin') || r0.includes('管') || id.startsWith('A')) return 'admin';
   if (r0.includes('teacher') || r0.includes('师') || id.startsWith('T')) return 'teacher';
   return 'student';
+}
+function adaptEvents(rows) {
+  if (!Array.isArray(rows)) return [];
+  
+  // 后端已返回标准 FullCalendar 格式，只做基本过滤和清理
+  return rows.filter(r => r && r.start && r.title).map(r => ({
+    id: r.id,
+    title: r.title,
+    start: r.start,
+    end: r.end,
+    backgroundColor: r.backgroundColor,
+    borderColor: r.borderColor,
+    extendedProps: r.extendedProps || {}
+  }));
 }
 
 /* =============== API =============== */
@@ -161,7 +175,7 @@ async function registerUser(evt){
     err.textContent = '请填写姓名、邮箱、所属、身份'; return;
   }
   if (department === '其他' && !major) {
-    err.textContent = '所属为"其他"时，请填写专业'; return;
+    err.textContent = '所属为“其他”时，请填写专业'; return;
   }
   if (department !== '其他' && !major) {
     err.textContent = '请选择一个专业'; return;
@@ -187,7 +201,7 @@ function logout() {
   currentUser = null;
   $('mainApp').style.display = 'none';
   $('loginContainer').style.display = 'flex';
-  $('loginUserid').value = '';
+  $('loginUsername').value = '';
   $('loginError').textContent = '';
   setApiStatus({ok:null, text:'API 检测中'});
   try{ window.location.hash = '#login'; }catch{}
@@ -209,6 +223,13 @@ function showPage(pageIdRaw) {
   const active = document.querySelector(`.nav-link[data-page="${pageIdRaw}"]`);
   if (active) active.classList.add('active');
   if (pageId === 'calendar' && window.calendar) setTimeout(()=>window.calendar.updateSize(), 60);
+  
+  // 添加预约功能调用
+  if (pageId === 'mycourses' && window.bookingModule) {
+    setTimeout(() => {
+      window.bookingModule.loadMyConfirmations();
+    }, 100);
+  }
 }
 function updateUserUI() {
   if (!currentUser) return;
@@ -242,17 +263,16 @@ function initCalendar() {
   const initialView = window.matchMedia('(max-width: 768px)').matches ? 'timeGridDay' : 'timeGridWeek';
   const cal = new FullCalendar.Calendar(el, {
     eventClick: function(info) {
-      const ev = info.event;
-      const ext = ev.extendedProps || {};
-      const t = ev.title || '';
-      const s = ev.start ? ev.start.toLocaleString('zh-CN') : '';
-      const e = ev.end   ? ev.end.toLocaleString('zh-CN')   : '';
-      const teacher = ext.teacher ? `\n任课老师：${ext.teacher}` : '';
-      const sid = ext.slotId ? `\n槽位ID：${ext.slotId}` : '';
-      
-      // 默认显示详情
-      alert(`课程：${t}\n时间：${s} ~ ${e}${teacher}${sid}`);
-    },
+  const ev = info.event;
+  const ext = ev.extendedProps || {};
+  const title = ev.title || '';
+  const start = ev.start ? ev.start.toLocaleString('zh-CN') : '';
+  const end = ev.end ? ev.end.toLocaleString('zh-CN') : '';
+  const teacher = ext.teacher ? `\n任课老师：${ext.teacher}` : '';
+  const slotId = ext.slotId ? `\n槽位ID：${ext.slotId}` : '';
+  
+  alert(`课程：${title}\n时间：${start} ~ ${end}${teacher}${slotId}`);
+},
     initialView,
     locale: 'zh-cn',
     firstDay: 1,
@@ -272,7 +292,8 @@ function initCalendar() {
         const viewEnd   = info.endStr   ? info.endStr.slice(0,10)   : '';
         const params = {
           userId: (currentUser && currentUser.userId) ? currentUser.userId : '',
-          viewStart, viewEnd
+          viewStart, viewEnd,
+          debugNoAuth: !currentUser   // 允许未登录自测
         };
         const res  = await callAPI('listVisibleSlots', params);
         const rows = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
@@ -305,6 +326,8 @@ async function loadCalendarEvents() {
   // 新：统一交给 FullCalendar 触发拉取逻辑
   try { calendar.refetchEvents(); } catch {}
 }
+
+
 
 function updateTodayStats(){
   // 占位（不连后台统计）
@@ -351,6 +374,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('showLoginBtn')?.addEventListener('click', showLoginForm);
   $('loginUserid')?.addEventListener('keypress', (e)=>{ if (e.key==='Enter') login(); });
 
+
   // —— 注册表单：所属部门 → 专业 联动（极简，不记历史）——
   (function () {
     const depSel    = document.getElementById('registerDepartment');
@@ -380,13 +404,59 @@ document.addEventListener('DOMContentLoaded', async () => {
         majorFree.style.display = '';
         majorSel.innerHTML = '<option value="">选择专业</option>'; // 清空下拉
         majorSel.value = '';
-        majorFree.value = '';     // 切换到"其他"时也清空
+        majorFree.value = '';     // 切换到“其他”时也清空
       }
     };
 
     apply();
     depSel.addEventListener('change', apply);
   })();
+
+  // —— 发布对象：所属 → 专业（可不选 + 全选）——
+// —— 发布对象：所属 → 专业（多选；所属=全部/未选时禁用专业）——
+(function () {
+  const depSel   = document.getElementById('pubDepartment');
+  const majorSel = document.getElementById('pubMajor');
+  if (!depSel || !majorSel) return;
+
+  const fill = (arr) => {
+    majorSel.innerHTML =
+      '<option value="" disabled>（可不选，可多选）</option>' +
+      (arr || []).map(v => `<option value="${v}">${v}</option>`).join('');
+  };
+
+  const disableMajor = (flag) => {
+    majorSel.disabled = !!flag;
+    if (flag) {
+      // 清空已选
+      Array.from(majorSel.options).forEach(o => o.selected = false);
+    }
+  };
+
+  const apply = () => {
+    const dep  = depSel.value || '';
+    if (!dep || dep === '全部') {
+      fill([]);              // 只保留提示行
+      disableMajor(true);    // 全选/未选所属：禁用专业
+      return;
+    }
+    const list = MAJOR_OPTIONS[dep];
+    fill(Array.isArray(list) ? list : []);
+    disableMajor(false);
+  };
+
+  // 关键：让多选无需按 Ctrl/⌘，点一下就切换选中
+  majorSel.addEventListener('mousedown', (e) => {
+    const opt = e.target;
+    if (opt && opt.tagName === 'OPTION' && !opt.disabled) {
+      e.preventDefault();           // 阻止原生“清空其他选项”的行为
+      opt.selected = !opt.selected; // 切换选中
+    }
+  });
+
+  apply();
+  depSel.addEventListener('change', apply);
+})();
 
   // API 健康检查
   setApiStatus({ok:null, text:'API 检测中'});
