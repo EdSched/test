@@ -135,7 +135,7 @@ function showLoginForm() {
   $('registerError').textContent = '';
 }
 async function login() {
-  const userid = ($('loginUserid').value || '').trim();
+  const userid = ($('loginUsername').value || '').trim();
   const err = $('loginError');
   if (!userid) { err.textContent = '请输入用户ID'; return; }
   err.style.color=''; err.textContent='正在登录…';
