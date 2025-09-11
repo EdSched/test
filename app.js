@@ -546,3 +546,287 @@ document.addEventListener('DOMContentLoaded', async () => {
     mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
   })();
 });
+/* =============== ACT 预约功能模块（视觉交互） =============== */
+
+// ACT预约模块 - 仅处理视觉交互，不涉及后端API
+window.bookingModule = {
+  modal: null,
+  currentSlotData: null,
+
+  init() {
+    this.bindEventListeners();
+    this.setupCalendarEventHandling();
+  },
+
+  // 绑定基础事件监听器
+  bindEventListeners() {
+    // 图例开关切换
+    const toggleBookables = document.getElementById('ACT_toggleBookables');
+    if (toggleBookables) {
+      toggleBookables.addEventListener('change', (e) => {
+        this.toggleBookableEvents(e.target.checked);
+      });
+    }
+
+    // 模态框相关
+    this.modal = document.getElementById('ACT_bookingModal');
+    if (this.modal) {
+      // 关闭按钮
+      const closeBtn = this.modal.querySelector('.modal__close');
+      const cancelBtn = document.getElementById('ACT_bookingCancel');
+      
+      if (closeBtn) closeBtn.addEventListener('click', () => this.hideModal());
+      if (cancelBtn) cancelBtn.addEventListener('click', () => this.hideModal());
+      
+      // 点击遮罩关闭
+      const overlay = this.modal.querySelector('.modal__overlay');
+      if (overlay) {
+        overlay.addEventListener('click', () => this.hideModal());
+      }
+
+      // 提交按钮（仅视觉反馈）
+      const submitBtn = document.getElementById('ACT_bookingSubmit');
+      if (submitBtn) {
+        submitBtn.addEventListener('click', () => this.handleBookingSubmit());
+      }
+    }
+  },
+
+  // 设置日历事件处理
+  setupCalendarEventHandling() {
+    // 等待日历初始化完成后再设置
+    const checkCalendar = () => {
+      if (window.calendar) {
+        this.enhanceCalendarEvents();
+      } else {
+        setTimeout(checkCalendar, 100);
+      }
+    };
+    checkCalendar();
+  },
+
+  // 增强日历事件显示
+  enhanceCalendarEvents() {
+    if (!window.calendar) return;
+
+    // 重写事件内容渲染，添加状态样式
+    window.calendar.setOption('eventContent', (arg) => {
+      const event = arg.event;
+      const props = event.extendedProps || {};
+      
+      // 基础内容
+      const title = event.title || '';
+      const timeText = arg.timeText || '';
+      
+      // 创建容器
+      const container = document.createElement('div');
+      container.className = 'fc-event-main-frame';
+      
+      // 添加时间和标题
+      container.innerHTML = `
+        <div class="fc-event-time">${timeText}</div>
+        <div class="fc-event-title">${title}</div>
+      `;
+
+      // 根据事件状态添加CSS类和特殊元素
+      const eventEl = arg.el;
+      
+      // 清除之前的状态类
+      eventEl.classList.remove('evt-bookable', 'evt-bookable--teacher', 'evt-booked', 'evt-confirmed');
+      
+      // 模拟事件状态（后续可从后端数据获取）
+      const status = props.status || this.mockEventStatus(event);
+      
+      switch (status) {
+        case 'bookable':
+          if (currentUser && currentUser.roleNorm === 'student') {
+            eventEl.classList.add('evt-bookable');
+            // 添加"可预约"小贴片
+            const pill = document.createElement('span');
+            pill.className = 'pill-book';
+            pill.textContent = '可预约';
+            container.appendChild(pill);
+          } else {
+            eventEl.classList.add('evt-bookable--teacher');
+          }
+          break;
+        case 'booked':
+          eventEl.classList.add('evt-booked');
+          break;
+        case 'confirmed':
+          eventEl.classList.add('evt-confirmed');
+          break;
+      }
+
+      return { domNodes: [container] };
+    });
+
+    // 重写事件点击处理
+    window.calendar.setOption('eventClick', (info) => {
+      const event = info.event;
+      const props = event.extendedProps || {};
+      const status = props.status || this.mockEventStatus(event);
+      
+      // 学生点击可预约事件时显示预约弹窗
+      if (currentUser && currentUser.roleNorm === 'student' && status === 'bookable') {
+        this.showBookingModal(event);
+        info.jsEvent.preventDefault();
+        return;
+      }
+      
+      // 其他情况显示基本信息
+      this.showEventInfo(event);
+    });
+
+    // 刷新事件以应用新的渲染
+    window.calendar.refetchEvents();
+  },
+
+  // 模拟事件状态（后续从后端获取）
+  mockEventStatus(event) {
+    const title = event.title || '';
+    
+    // 简单的状态模拟逻辑
+    if (title.includes('VIP') || title.includes('面谈')) {
+      return Math.random() > 0.5 ? 'bookable' : 'confirmed';
+    } else if (title.includes('已预约')) {
+      return 'booked';
+    } else if (title.includes('确认')) {
+      return 'confirmed';
+    } else {
+      return 'bookable';
+    }
+  },
+
+  // 切换可预约事件显示
+  toggleBookableEvents(show) {
+    if (!window.calendar) return;
+    
+    // 简单的视觉切换（后续可改为过滤API数据）
+    const bookableEvents = document.querySelectorAll('.evt-bookable, .evt-bookable--teacher');
+    bookableEvents.forEach(el => {
+      el.style.display = show ? '' : 'none';
+    });
+  },
+
+  // 显示预约模态框
+  showBookingModal(event) {
+    if (!this.modal) return;
+    
+    const props = event.extendedProps || {};
+    this.currentSlotData = {
+      slotId: props.slotId || event.id,
+      title: event.title,
+      teacher: props.teacher || '未指定',
+      start: event.start,
+      end: event.end
+    };
+
+    // 填充模态框内容
+    const courseEl = document.getElementById('ACT_bookingCourse');
+    const teacherEl = document.getElementById('ACT_bookingTeacher');
+    const timeEl = document.getElementById('ACT_bookingTime');
+    const noteEl = document.getElementById('ACT_bookingNote');
+
+    if (courseEl) courseEl.textContent = this.currentSlotData.title;
+    if (teacherEl) teacherEl.textContent = this.currentSlotData.teacher;
+    if (timeEl) {
+      const timeStr = this.formatEventTime(this.currentSlotData.start, this.currentSlotData.end);
+      timeEl.textContent = timeStr;
+    }
+    if (noteEl) noteEl.value = '';
+
+    // 显示模态框
+    this.modal.hidden = false;
+    this.modal.style.display = 'block';
+    
+    // 聚焦到备注框
+    setTimeout(() => {
+      if (noteEl) noteEl.focus();
+    }, 100);
+  },
+
+  // 隐藏模态框
+  hideModal() {
+    if (this.modal) {
+      this.modal.hidden = true;
+      this.modal.style.display = 'none';
+    }
+    this.currentSlotData = null;
+  },
+
+  // 处理预约提交（仅视觉反馈）
+  handleBookingSubmit() {
+    const noteEl = document.getElementById('ACT_bookingNote');
+    const note = noteEl ? noteEl.value.trim() : '';
+    
+    console.log('预约提交（视觉演示）:', {
+      slotData: this.currentSlotData,
+      note: note,
+      userId: currentUser ? currentUser.userId : 'unknown'
+    });
+
+    // 模拟提交成功
+    alert('预约提交成功！\n（这是视觉演示，实际需要连接后端API）');
+    
+    this.hideModal();
+    
+    // 刷新日历显示
+    if (window.calendar) {
+      window.calendar.refetchEvents();
+    }
+  },
+
+  // 显示事件基本信息
+  showEventInfo(event) {
+    const props = event.extendedProps || {};
+    const timeStr = this.formatEventTime(event.start, event.end);
+    const teacher = props.teacher ? `\n任课老师：${props.teacher}` : '';
+    const slotId = props.slotId ? `\n槽位ID：${props.slotId}` : '';
+    
+    alert(`课程：${event.title}\n时间：${timeStr}${teacher}${slotId}`);
+  },
+
+  // 格式化事件时间
+  formatEventTime(start, end) {
+    if (!start) return '时间未定';
+    
+    const startStr = start.toLocaleString('zh-CN');
+    const endStr = end ? end.toLocaleString('zh-CN') : '';
+    
+    return endStr ? `${startStr} ~ ${endStr}` : startStr;
+  },
+
+  // 加载我的确认记录（占位函数）
+  loadMyConfirmations() {
+    const wrapEl = document.getElementById('myConfirmationsWrap');
+    if (!wrapEl) return;
+    
+    // 模拟数据显示
+    wrapEl.innerHTML = `
+      <div style="margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:6px;">
+        <div style="font-weight:bold;">社会学专业课</div>
+        <div style="font-size:12px;color:#666;">2025-01-15 14:00-16:00 | 状态：已确认</div>
+        <div style="font-size:12px;margin-top:4px;">备注：准备课堂讨论材料</div>
+      </div>
+      <div style="margin:8px 0;padding:8px;border:1px solid #ddd;border-radius:6px;">
+        <div style="font-weight:bold;">VIP面谈</div>
+        <div style="font-size:12px;color:#666;">2025-01-18 10:00-11:00 | 状态：待确认</div>
+        <div style="font-size:12px;margin-top:4px;">备注：讨论研究方向</div>
+      </div>
+      <div style="color:#999;font-size:12px;margin-top:12px;">
+        （以上为演示数据，实际需要从后端API获取）
+      </div>
+    `;
+  }
+};
+
+// 在DOM加载完成后初始化ACT模块
+document.addEventListener('DOMContentLoaded', () => {
+  // 延迟初始化，确保主应用加载完成
+  setTimeout(() => {
+    if (window.bookingModule) {
+      window.bookingModule.init();
+    }
+  }, 500);
+});
