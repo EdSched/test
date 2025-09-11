@@ -609,59 +609,10 @@ window.bookingModule = {
   enhanceCalendarEvents() {
     if (!window.calendar) return;
 
-    // 重写事件内容渲染，添加状态样式
-    window.calendar.setOption('eventContent', (arg) => {
-      const event = arg.event;
-      const props = event.extendedProps || {};
-      
-      // 基础内容
-      const title = event.title || '';
-      const timeText = arg.timeText || '';
-      
-      // 创建容器
-      const container = document.createElement('div');
-      container.className = 'fc-event-main-frame';
-      
-      // 添加时间和标题
-      container.innerHTML = `
-        <div class="fc-event-time">${timeText}</div>
-        <div class="fc-event-title">${title}</div>
-      `;
-
-      // 根据事件状态添加CSS类和特殊元素
-      const eventEl = arg.el;
-      
-      // 清除之前的状态类
-      eventEl.classList.remove('evt-bookable', 'evt-bookable--teacher', 'evt-booked', 'evt-confirmed');
-      
-      // 模拟事件状态（后续可从后端数据获取）
-      const status = props.status || this.mockEventStatus(event);
-      
-      switch (status) {
-        case 'bookable':
-          if (currentUser && currentUser.roleNorm === 'student') {
-            eventEl.classList.add('evt-bookable');
-            // 添加"可预约"小贴片
-            const pill = document.createElement('span');
-            pill.className = 'pill-book';
-            pill.textContent = '可预约';
-            container.appendChild(pill);
-          } else {
-            eventEl.classList.add('evt-bookable--teacher');
-          }
-          break;
-        case 'booked':
-          eventEl.classList.add('evt-booked');
-          break;
-        case 'confirmed':
-          eventEl.classList.add('evt-confirmed');
-          break;
-      }
-
-      return { domNodes: [container] };
-    });
-
-    // 重写事件点击处理
+    // 保存原有的eventClick处理函数
+    const originalEventClick = window.calendar.getOption('eventClick');
+    
+    // 增强事件点击处理（保留原有逻辑）
     window.calendar.setOption('eventClick', (info) => {
       const event = info.event;
       const props = event.extendedProps || {};
@@ -674,12 +625,87 @@ window.bookingModule = {
         return;
       }
       
-      // 其他情况显示基本信息
-      this.showEventInfo(event);
+      // 否则执行原有的点击处理
+      if (originalEventClick && typeof originalEventClick === 'function') {
+        originalEventClick(info);
+      } else {
+        this.showEventInfo(event);
+      }
     });
 
-    // 刷新事件以应用新的渲染
-    window.calendar.refetchEvents();
+    // 监听事件渲染，添加状态样式（不重写eventContent）
+    this.addEventClassesAfterRender();
+  },
+
+  // 在事件渲染后添加状态类
+  addEventClassesAfterRender() {
+    // 监听FullCalendar的事件渲染
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1 && node.classList && node.classList.contains('fc-event')) {
+            this.enhanceEventElement(node);
+          }
+        });
+      });
+    });
+
+    const calendarEl = document.getElementById('mainCalendar');
+    if (calendarEl) {
+      observer.observe(calendarEl, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    // 初始渲染的事件也要处理
+    setTimeout(() => {
+      document.querySelectorAll('#mainCalendar .fc-event').forEach(el => {
+        this.enhanceEventElement(el);
+      });
+    }, 100);
+  },
+
+  // 增强单个事件元素
+  enhanceEventElement(eventEl) {
+    if (!eventEl || eventEl.dataset.actEnhanced) return;
+    
+    // 标记已处理，避免重复处理
+    eventEl.dataset.actEnhanced = 'true';
+    
+    // 获取事件数据
+    const fcEvent = window.calendar?.getEventById?.(eventEl.dataset.eventId);
+    if (!fcEvent) return;
+    
+    const props = fcEvent.extendedProps || {};
+    const status = props.status || this.mockEventStatus(fcEvent);
+    
+    // 清除之前的状态类
+    eventEl.classList.remove('evt-bookable', 'evt-bookable--teacher', 'evt-booked', 'evt-confirmed');
+    
+    // 添加状态类
+    switch (status) {
+      case 'bookable':
+        if (currentUser && currentUser.roleNorm === 'student') {
+          eventEl.classList.add('evt-bookable');
+          // 添加"可预约"小贴片
+          if (!eventEl.querySelector('.pill-book')) {
+            const pill = document.createElement('span');
+            pill.className = 'pill-book';
+            pill.textContent = '可预约';
+            eventEl.appendChild(pill);
+          }
+        } else {
+          eventEl.classList.add('evt-bookable--teacher');
+        }
+        break;
+      case 'booked':
+        eventEl.classList.add('evt-booked');
+        break;
+      case 'confirmed':
+        eventEl.classList.add('evt-confirmed');
+        break;
+    }
   },
 
   // 模拟事件状态（后续从后端获取）
