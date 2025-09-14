@@ -132,7 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // —— 调用后端 —— //
       btn.disabled = true;
-      const oldText = btn.textContent;
       btn.textContent = '发布中…';
       
       try {
@@ -166,10 +165,10 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('脚本异常：' + (e && e.message ? e.message : e));
       console.error('脚本异常:', e);
     } finally {
-      // 确保按钮状态恢复
-      btn.disabled = false;
-      btn.textContent = oldText || '发布';
-    }
+  // 确保按钮状态恢复
+  btn.disabled = false;
+  btn.textContent = '发布';
+}
   });
 
   // 清空表单的辅助函数
