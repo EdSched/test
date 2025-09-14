@@ -42,6 +42,37 @@ function setApiStatus({ok, text}) {
     inline.append(text ? (' ' + text) : (ok ? ' API连接成功' : (ok===false ? ' API连接失败' : ' 正在检测 API 连接…')));
   }
 }
+// 读取当前角色（若你用别的存储键名，改这里）
+function getCurrentRole() {
+  try {
+    const raw = localStorage.getItem('edsched_user');
+    if (!raw) return '';
+    const u = JSON.parse(raw);
+    return String(u.role || '').trim(); // 学生/老师/管理员
+  } catch { return ''; }
+}
+
+// 写回后端：预约 / 定课 / 休讲
+async function apiUpdateSlotAction(actionType, slotId, isoStart) {
+  const classDate = (isoStart || '').slice(0, 10); // YYYY-MM-DD
+  const res = await callAPI('updateSlotAction', { actionType, slotId, classDate });
+  if (!res || res.success !== true) {
+    alert(res && res.message ? res.message : '操作失败');
+    return;
+  }
+  if (window.__fc_calendar) window.__fc_calendar.refetchEvents();
+}
+
+// 小按钮
+function makeMiniBtn(text, onClick, variant) {
+  const btn = document.createElement('button');
+  btn.className = 'fc-mini-btn' + (variant ? ` fc-mini-btn--${variant}` : '');
+  btn.type = 'button';
+  btn.textContent = text;
+  btn.onclick = (e) => { e.stopPropagation(); onClick && onClick(); };
+  return btn;
+}
+
 
 /* =============== 统一/适配 =============== */
 function normalizeUser(u = {}, fallbackId = '') {
@@ -312,19 +343,76 @@ function updateUserUI() {
 
 /* =============== 日历 =============== */
 function initCalendar() {
-  const el = $('mainCalendar'); if (!el) return;
+  const el = $('mainCalendar');
+  if (!el) return;
+
   const initialView = window.matchMedia('(max-width: 768px)').matches ? 'timeGridDay' : 'timeGridWeek';
+
   const cal = new FullCalendar.Calendar(el, {
-    eventClick: function(info) {
+   eventClick: function(info) {
   const ev = info.event;
   const ext = ev.extendedProps || {};
-  const title = ev.title || '';
-  const start = ev.start ? ev.start.toLocaleString('zh-CN') : '';
-  const end = ev.end ? ev.end.toLocaleString('zh-CN') : '';
-  const teacher = ext.teacher ? `\n任课老师：${ext.teacher}` : '';
-  const slotId = ext.slotId ? `\n槽位ID：${ext.slotId}` : '';
-  
-  alert(`课程：${title}\n时间：${start} ~ ${end}${teacher}${slotId}`);
+  const role = (window.currentUser && window.currentUser.roleNorm) || '';
+  const slotId = ext.slotId || ev.id || '';
+
+  // 生成弹窗容器
+  const dlg = document.createElement('div');
+  dlg.className = 'event-dialog';
+  dlg.innerHTML = `
+    <div class="event-title">${ev.title || ''}</div>
+    <div class="event-time">
+      ${ev.start ? ev.start.toLocaleString() : ''} ~ ${ev.end ? ev.end.toLocaleString() : ''}
+    </div>
+    <div class="event-actions"></div>
+  `;
+
+  // 关闭功能
+  dlg.addEventListener('click', e => {
+    if (e.target.classList.contains('event-dialog')) {
+      document.body.removeChild(dlg);
+    }
+  });
+
+  // 操作按钮区域
+  const actionsBox = dlg.querySelector('.event-actions');
+
+  // 学生：可预约
+  if (role === 'student' && ext.status === '可预约') {
+    const btn = document.createElement('button');
+    btn.textContent = '预约';
+    btn.className = 'btn btn-primary';
+    btn.onclick = () => {
+      console.log('预约:', slotId);
+      document.body.removeChild(dlg);
+    };
+    actionsBox.appendChild(btn);
+  }
+
+  // 老师：可定课
+  if (role === 'teacher' && ext.status === '可定课') {
+    const btn = document.createElement('button');
+    btn.textContent = '定课';
+    btn.className = 'btn btn-outline';
+    btn.onclick = () => {
+      console.log('定课:', slotId);
+      document.body.removeChild(dlg);
+    };
+    actionsBox.appendChild(btn);
+  }
+
+  // 老师/管理员：休讲（仅正常开启的课）
+  if ((role === 'teacher' || role === 'admin') && ext.status === '正常开启') {
+    const btn = document.createElement('button');
+    btn.textContent = '休讲';
+    btn.className = 'btn btn-danger';
+    btn.onclick = () => {
+      console.log('休讲:', slotId);
+      document.body.removeChild(dlg);
+    };
+    actionsBox.appendChild(btn);
+  }
+
+  document.body.appendChild(dlg);
 },
     initialView,
     locale: 'zh-cn',
@@ -332,36 +420,90 @@ function initCalendar() {
     height: 'auto',
     headerToolbar: false,
     allDaySlot: false,
-    slotMinTime:'08:00:00',
-    slotMaxTime:'22:00:00',
-    slotDuration:'00:30:00',
-    expandRows:true,
+    slotMinTime: '08:00:00',
+    slotMaxTime: '22:00:00',
+    slotDuration: '00:30:00',
+    expandRows: true,
     datesSet: updateCalendarTitle,
 
     // ★ 新增：由 FullCalendar 主动拉取你的 API
     events: async function(info, success, failure) {
       try {
-        const viewStart = info.startStr ? info.startStr.slice(0,10) : '';
-        const viewEnd   = info.endStr   ? info.endStr.slice(0,10)   : '';
+        const viewStart = info.startStr ? info.startStr.slice(0, 10) : '';
+        const viewEnd = info.endStr ? info.endStr.slice(0, 10) : '';
         const params = {
           userId: (currentUser && currentUser.userId) ? currentUser.userId : '',
-          viewStart, viewEnd,
-          debugNoAuth: !currentUser   // 允许未登录自测
+          viewStart,
+          viewEnd,
+          debugNoAuth: !currentUser // 允许未登录自测
         };
-        const res  = await callAPI('listVisibleSlots', params);
+        const res = await callAPI('listVisibleSlots', params);
         const rows = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
-        const adaptedRows = adaptEvents(rows);
+       const adaptedRows = rows.map(row => ({
+          id: row.slotId, // FullCalendar 事件的 ID
+          title: row.title, // 课程名称
+          start: row.startTime, // 事件开始时间
+          end: row.endTime, // 事件结束时间
+          extendedProps: {
+            teacher: row.teacher, // 任课老师
+            slotId: row.slotId, // 槽位ID
+            status: row.status || '正常开启', // 课程状态
+          }
+        }));
         success(adaptedRows);
 
       } catch (err) {
         failure && failure(err);
       }
+    },
+
+    // --- Here's where you add your eventContent function ---
+    eventContent: function(arg) {
+      const role = getCurrentRole(); // 学生 / 老师 / 管理员
+      const ep = arg.event.extendedProps || {};
+      const status = String(ep.status || '').trim(); // 来自后端的“课程状态”
+      const slotId = ep.slotId || arg.event.id; // 确保能拿到槽位ID
+
+      const box = document.createElement('div');
+      box.className = 'fc-title-with-actions';
+
+      const title = document.createElement('span');
+      title.textContent = arg.event.title || '';
+      box.appendChild(title);
+
+      // 学生：可预约
+      if (role.includes('学生') && status === '可预约') {
+        box.appendChild(makeMiniBtn('预约', () =>
+          apiUpdateSlotAction('book', slotId, arg.event.startStr), 'primary'));
+      }
+
+      // 老师：可定课
+      if (role.includes('老师') && status === '可定课') {
+        box.appendChild(makeMiniBtn('定课', () =>
+          apiUpdateSlotAction('claim', slotId, arg.event.startStr), 'primary'));
+      }
+
+      // 老师/管理员：正常开启 -> 休讲
+      if ((role.includes('老师') || role.includes('管理员')) && status === '正常开启') {
+  box.appendChild(
+    makeMiniBtn('休讲', () => {
+      const msg = '确认将本次课程标记为【休讲】吗？\n提示：仅本次课会显示“休讲”，后续顺延在部署阶段生效。';
+      if (window.confirm(msg)) {
+        apiUpdateSlotAction('cancel', slotId, arg.event.startStr);
+      }
+    }, 'danger')
+  );
+}
+
+      return { domNodes: [box] };
     }
+    // --- End of eventContent function ---
   });
+
   cal.render();
   window.calendar = cal;
   calendar = cal;
-  setTimeout(()=>{ try{ cal.updateSize(); }catch{} }, 60);
+  setTimeout(() => { try { cal.updateSize(); } catch {} }, 60);
   updateCalendarTitle();
 }
 
@@ -380,7 +522,6 @@ async function loadCalendarEvents() {
   // 新：统一交给 FullCalendar 触发拉取逻辑
   try { calendar.refetchEvents(); } catch {}
 }
-
 
 
 function updateTodayStats(){
