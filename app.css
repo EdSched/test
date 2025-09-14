@@ -459,3 +459,44 @@ nav a.active {
     grid-template-columns: 1fr;
   }
 }
+/* === badges（小徽标） === */
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  vertical-align: middle;
+  border: 1px solid rgba(0,0,0,.08);
+  background: #f6f7f9;
+}
+.badge--bookable   { background: #e8f5e9; border-color:#c8e6c9; }
+.badge--claimable  { background: #e3f2fd; border-color:#bbdefb; }
+.badge--claimed    { background: #eef2ff; border-color:#c7d2fe; }
+.badge--booked     { background: #fff7ed; border-color:#ffedd5; }
+.badge--canceled   { background: #f3f4f6; border-color:#e5e7eb; color:#6b7280; }
+
+/* === 休讲外观（仅视觉层） === */
+.event--canceled {
+  opacity: .65;
+  filter: grayscale(0.4);
+  border-style: dashed !important;
+}
+
+/* === 轻量弹窗 === */
+.eds-mini-modal__overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.25);
+  display:flex; align-items:center; justify-content:center; z-index: 9999;
+}
+.eds-mini-modal {
+  min-width: 280px; max-width: 90vw;
+  background:#fff; border-radius:12px; padding:16px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.2);
+}
+.eds-mini-modal__title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.eds-mini-modal__actions { display:flex; gap:8px; flex-wrap: wrap; }
+.eds-mini-modal__btn {
+  padding:8px 12px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; font-size: 13px;
+}
+.eds-mini-modal__btn.primary { border-color:#93c5fd; background:#e0f2fe; }
+.eds-mini-modal__btn.danger  { border-color:#fecaca; background:#fee2e2; }
