@@ -264,66 +264,6 @@ function logout() {
 /* =============== 角色导航与页面切换 =============== */
 /** 管理员别名：侧栏 data-page -> 实际页面ID */
 // 统一：直接按 data-page 去找 `${pageId}Page`
-// === [预约/定课/休讲] 前端临时状态（不落表） ===
-const __uiState = {
-  booked:   new Set(), // 学生端“已预约”
-  claimed:  new Set(), // 老师端“已定课（待确认）”
-  canceled: new Set()  // 已休讲（只标记这一次）
-};
-
-// 角色判定：沿用你登录成功后保存的 user 对象
-function getCurrentRole() {
-  try {
-    const raw = localStorage.getItem('edsched_user'); // ← 若你用别的键，改这里
-    if (!raw) return '';
-    const u = JSON.parse(raw);
-    return String(u.role || '').trim(); // '学生' / '老师' / '管理员' 等
-  } catch { return ''; }
-}
-
-// 事件标记提取：仅用于“视觉模拟”
-// 规则：学生端：标题含「面谈 / VIP」→ 可预约；老师端：未休讲→ 可定课
-function deriveFlags(event) {
-  const id   = event.id;
-  const tit  = (event.title || '');
-  const role = getCurrentRole();
-
-  const isCanceled = __uiState.canceled.has(id);
-  const isBooked   = __uiState.booked.has(id);
-  const isClaimed  = __uiState.claimed.has(id);
-
-  const isInterviewOrVip = /面谈|VIP/i.test(tit);
-
-  const canBook   = (role.includes('学生') && isInterviewOrVip && !isCanceled);
-  const canClaim  = (role.includes('老师') && !isCanceled);
-  const canCancel = (role.includes('老师') || role.includes('管理员')) && !isCanceled && !isInterviewOrVip;
-  // ^ 休讲按钮：按你描述，仅“已安排/正常发布”的课允许。这里先放宽为老师/管理员可见（仅视觉），真正判断等接后端。
-
-  return { isCanceled, isBooked, isClaimed, canBook, canClaim, canCancel };
-}
-
-// 轻量弹窗（不改你现有UI就用这个；如果你已有Modal组件，换成你自己的API即可）
-function openMiniDialog(title, actions = []) {
-  // actions: [{text, handler, variant}] ; variant 可为 'danger'|'primary'|'ghost'
-  const overlay = document.createElement('div');
-  overlay.className = 'eds-mini-modal__overlay';
-  const dlg = document.createElement('div');
-  dlg.className = 'eds-mini-modal';
-  dlg.innerHTML = `<div class="eds-mini-modal__title">${title}</div>
-                   <div class="eds-mini-modal__actions"></div>`;
-  const box = dlg.querySelector('.eds-mini-modal__actions');
-  actions.forEach(a=>{
-    const btn = document.createElement('button');
-    btn.className = `eds-mini-modal__btn ${a.variant||''}`;
-    btn.textContent = a.text;
-    btn.onclick = ()=>{ try{ a.handler&&a.handler(); } finally { document.body.removeChild(overlay); } };
-    box.appendChild(btn);
-  });
-  overlay.onclick = (e)=>{ if(e.target===overlay) document.body.removeChild(overlay); };
-  overlay.appendChild(dlg);
-  document.body.appendChild(overlay);
-}
-
 function resolvePageIdForRole(pageId) {
   return pageId;
 }
@@ -372,118 +312,21 @@ function updateUserUI() {
 
 /* =============== 日历 =============== */
 function initCalendar() {
-  const el = $('mainCalendar');
-  if (!el) return;
-
+  const el = $('mainCalendar'); if (!el) return;
   const initialView = window.matchMedia('(max-width: 768px)').matches ? 'timeGridDay' : 'timeGridWeek';
-
-  const calendarOptions = {
-    // === 加入：渲染徽标（eventDidMount） ===
-    eventDidMount: function(info) {
-      const ev = info.event;
-      const flags = deriveFlags(ev);
-
-      // 休讲样式
-      if (flags.isCanceled) {
-        info.el.classList.add('event--canceled');
-        // 标题右侧加【休讲】
-        const tag = document.createElement('span');
-        tag.className = 'badge badge--canceled';
-        tag.textContent = '休讲';
-        info.el.querySelector('.fc-event-title')?.appendChild(tag);
-      }
-
-      // 老师端"可定课"
-      if (flags.canClaim && !flags.isClaimed) {
-        const tag = document.createElement('span');
-        tag.className = 'badge badge--claimable';
-        tag.textContent = '可定课';
-        info.el.querySelector('.fc-event-title')?.appendChild(tag);
-      }
-      // 学生端"可预约"
-      if (flags.canBook && !flags.isBooked) {
-        const tag = document.createElement('span');
-        tag.className = 'badge badge--bookable';
-        tag.textContent = '可预约';
-        info.el.querySelector('.fc-event-title')?.appendChild(tag);
-      }
-      // 已定课 / 已预约 的轻标签
-      if (flags.isClaimed) {
-        const tag = document.createElement('span');
-        tag.className = 'badge badge--claimed';
-        tag.textContent = '已定课';
-        info.el.querySelector('.fc-event-title')?.appendChild(tag);
-      }
-      if (flags.isBooked) {
-        const tag = document.createElement('span');
-        tag.className = 'badge badge--booked';
-        tag.textContent = '已预约';
-        info.el.querySelector('.fc-event-title')?.appendChild(tag);
-      }
-    },
-
-    // === 加入：点击交互（eventClick） ===
+  const cal = new FullCalendar.Calendar(el, {
     eventClick: function(info) {
-      const ev = info.event;
-      const id = ev.id;
-      const title = ev.title || '';
-      const flags = deriveFlags(ev);
-
-      // 构建动作集合（仅视觉，不落表）
-      const actions = [];
-
-      // 学生端：可预约
-      if (flags.canBook && !flags.isBooked) {
-        actions.push({
-          text: '预约',
-          variant: 'primary',
-          handler: () => {
-            __uiState.booked.add(id);
-            info.view.calendar.refetchEvents();
-          }
-        });
-      }
-
-      // 老师端：可定课（未定）
-      if (flags.canClaim && !flags.isClaimed) {
-        actions.push({
-          text: '定课（待确认）',
-          variant: 'primary',
-          handler: () => {
-            __uiState.claimed.add(id);
-            info.view.calendar.refetchEvents();
-          }
-        });
-      }
-
-      // 老师端：安排休讲（仅这一次、只做前端置灰）
-      if (flags.canCancel) {
-        actions.push({
-          text: '安排休讲（仅本次）',
-          variant: 'danger',
-          handler: () => {
-            __uiState.canceled.add(id);
-            info.view.calendar.refetchEvents();
-          }
-        });
-      }
-
-      // 没有动作就不弹
-      if (actions.length === 0) {
-        // 如果没有可执行的动作，则保留你原有的 alert 逻辑
-        const ext = ev.extendedProps || {};
-        const start = ev.start ? ev.start.toLocaleString('zh-CN') : '';
-        const end = ev.end ? ev.end.toLocaleString('zh-CN') : '';
-        const teacher = ext.teacher ? `\n任课老师：${ext.teacher}` : '';
-        const slotId = ext.slotId ? `\n槽位ID：${ext.slotId}` : '';
-        alert(`课程：${title}\n时间：${start} ~ ${end}${teacher}${slotId}`);
-        return;
-      }
-
-      openMiniDialog(title, actions);
-    },
-
-    initialView: initialView,
+  const ev = info.event;
+  const ext = ev.extendedProps || {};
+  const title = ev.title || '';
+  const start = ev.start ? ev.start.toLocaleString('zh-CN') : '';
+  const end = ev.end ? ev.end.toLocaleString('zh-CN') : '';
+  const teacher = ext.teacher ? `\n任课老师：${ext.teacher}` : '';
+  const slotId = ext.slotId ? `\n槽位ID：${ext.slotId}` : '';
+  
+  alert(`课程：${title}\n时间：${start} ~ ${end}${teacher}${slotId}`);
+},
+    initialView,
     locale: 'zh-cn',
     firstDay: 1,
     height: 'auto',
@@ -514,9 +357,7 @@ function initCalendar() {
         failure && failure(err);
       }
     }
-  };
-
-  const cal = new FullCalendar.Calendar(el, calendarOptions);
+  });
   cal.render();
   window.calendar = cal;
   calendar = cal;
@@ -566,7 +407,6 @@ function setSegActive(btn){
   ['dayBtn','weekBtn','monthBtn'].forEach(id=>{ const b=$(id); b && b.classList.remove('active'); });
   btn && btn.classList.add('active');
 }
-
 
 /* =============== 初始化 =============== */
 document.addEventListener('DOMContentLoaded', async () => {
