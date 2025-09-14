@@ -372,7 +372,7 @@ function updateUserUI() {
 
 /* =============== 日历 =============== */
 function initCalendar() {
-  const el = $('mainCalendar'); // 假设 $ 是一个获取 DOM 元素的方法
+  const el = $('mainCalendar');
   if (!el) return;
 
   const initialView = window.matchMedia('(max-width: 768px)').matches ? 'timeGridDay' : 'timeGridWeek';
@@ -381,7 +381,7 @@ function initCalendar() {
     // === 加入：渲染徽标（eventDidMount） ===
     eventDidMount: function(info) {
       const ev = info.event;
-      const flags = deriveFlags(ev); // 假设 deriveFlags 函数存在
+      const flags = deriveFlags(ev);
 
       // 休讲样式
       if (flags.isCanceled) {
@@ -427,7 +427,7 @@ function initCalendar() {
       const ev = info.event;
       const id = ev.id;
       const title = ev.title || '';
-      const flags = deriveFlags(ev); // 假设 deriveFlags 函数存在
+      const flags = deriveFlags(ev);
 
       // 构建动作集合（仅视觉，不落表）
       const actions = [];
@@ -438,9 +438,8 @@ function initCalendar() {
           text: '预约',
           variant: 'primary',
           handler: () => {
-            // 假设 __uiState.booked 是一个 Set
             __uiState.booked.add(id);
-            info.view.calendar.refetchEvents(); // 触发重渲染
+            info.view.calendar.refetchEvents();
           }
         });
       }
@@ -451,7 +450,6 @@ function initCalendar() {
           text: '定课（待确认）',
           variant: 'primary',
           handler: () => {
-            // 假设 __uiState.claimed 是一个 Set
             __uiState.claimed.add(id);
             info.view.calendar.refetchEvents();
           }
@@ -464,7 +462,6 @@ function initCalendar() {
           text: '安排休讲（仅本次）',
           variant: 'danger',
           handler: () => {
-            // 假设 __uiState.canceled 是一个 Set
             __uiState.canceled.add(id);
             info.view.calendar.refetchEvents();
           }
@@ -483,20 +480,10 @@ function initCalendar() {
         return;
       }
 
-      // 假设 openMiniDialog 函数存在
       openMiniDialog(title, actions);
     },
 
-    // ... 其他 FullCalendar 配置项 ...
     initialView: initialView,
-    // ...
-  };
-
-  const cal = new FullCalendar.Calendar(el, calendarOptions);
-
-  cal.render();
-},
-    initialView,
     locale: 'zh-cn',
     firstDay: 1,
     height: 'auto',
@@ -527,7 +514,9 @@ function initCalendar() {
         failure && failure(err);
       }
     }
-  });
+  };
+
+  const cal = new FullCalendar.Calendar(el, calendarOptions);
   cal.render();
   window.calendar = cal;
   calendar = cal;
