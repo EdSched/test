@@ -136,6 +136,7 @@ async function fetchBookingsBySlots(slotIds) {
 }
 
 async function initMajor() {
+  if (typeof loadMajorsFromDB === 'function') await loadMajorsFromDB();
   const p = new URLSearchParams(window.location.search);
   major = p.get('major');
   if (major && (MAJORS[major] || major === 'shakai_group')) {
