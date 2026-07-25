@@ -986,6 +986,100 @@ function courseColorText(name) {
 
 // ── 作业反馈：见 teacher-homework.js ──
 
+let myScheduleView = 'list';
+let myScheduleCalMonth = null;
+
+function renderMySchedule(mc) {
+  // VIP 已确认预约也要并入课表（这是老师要上的课，必须和大课一样被看到）
+  const vipSessions = (cachedTeacherBookings || [])
+    .filter(b => b.type === 'vip' && b.status === 'confirmed')
+    .map(b => ({
+      _isVip: true,
+      id: b.id,
+      session_date: b.slot_date,
+      time_range: b.slot_time_range,
+      course_name: `${b.name} 的VIP课程`,
+      session_title: b.vip_session_notes ? '' : ((cachedTeacherSlots.find(s => s.id === b.slot_id)?.vip_content || []).join('・') || '内容待定'),
+      vip_booking: b,
+    }));
+  const allSessions = [...confirmedSessions, ...vipSessions];
+
+  if (!allSessions.length) { mc.innerHTML = '<div class="empty">暂无已确定的课程<br><span style="font-size:11px">排课确认后这里会显示您的完整课表</span></div>'; return; }
+  if (!myScheduleCalMonth) {
+    const today = new Date().toISOString().slice(0,7);
+    const future = allSessions.filter(s => s.session_date >= today);
+    myScheduleCalMonth = (future.length ? future.sort((a,b)=>a.session_date.localeCompare(b.session_date))[0].session_date : allSessions[0].session_date).slice(0,7);
+  }
+  const monthNames = { '01': '一月', '02': '二月', '03': '三月', '04': '四月', '05': '五月', '06': '六月', '07': '七月', '08': '八月', '09': '九月', '10': '十月', '11': '十一月', '12': '十二月' };
+
+  // 列表视图：只显示今天及以后的课次，已上完的收进历史
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const upcomingSessions = allSessions.filter(s => s.session_date >= todayStr).sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const pastSessions = allSessions.filter(s => s.session_date < todayStr).sort((a,b)=>a.session_date.localeCompare(b.session_date));
+
+  const byMonthUpcoming = {};
+  upcomingSessions.forEach(s => { const m = s.session_date.slice(0, 7); if (!byMonthUpcoming[m]) byMonthUpcoming[m] = []; byMonthUpcoming[m].push(s); });
+
+  const byMonthAll = {};
+  allSessions.forEach(s => { const m = s.session_date.slice(0, 7); if (!byMonthAll[m]) byMonthAll[m] = []; byMonthAll[m].push(s); });
+
+  const listHtml = Object.entries(byMonthUpcoming).map(([ym, sessions]) => `
+    <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);padding:10px 0 6px;border-bottom:1px solid var(--border-light);margin-bottom:8px">
+      ${ym.slice(0, 4)}年 ${monthNames[ym.slice(5, 7)] || ym.slice(5, 7) + '月'} · ${sessions.length}课次
+    </div>
+    ${sessions.map(s => s._isVip ? renderMyVipRow(s.vip_booking, s) : renderMySessionRow(s)).join('')}`).join('')
+    || '<div style="font-size:12px;color:var(--text-3);padding:12px 0">近期暂无排课</div>';
+
+  const historyHtml = pastSessions.length ? `
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-light)">
+      <div style="cursor:pointer;font-size:11px;color:var(--text-3);padding:4px 0" onclick="toggleScheduleHistory()">
+        <span id="sched_history_arrow">▸</span> 已上完的课次（${pastSessions.length} 节）
+      </div>
+      <div id="sched_history_body" style="display:none;margin-top:8px">
+        ${[...pastSessions].reverse().map(s => s._isVip ? renderMyVipRow(s.vip_booking, s) : renderMySessionRow(s)).join('')}
+      </div>
+    </div>` : '';
+
+  const calHtml = renderMyCalendar(myScheduleCalMonth, byMonthAll, monthNames);
+  mc.innerHTML = `
+  <div class="page-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-family:'Noto Serif SC',serif;font-size:15px;font-weight:600">我的课表</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:11px;color:var(--text-3)">共 ${allSessions.length} 课次</div>
+        <div style="display:flex;border:1px solid var(--border);border-radius:3px;overflow:hidden">
+          <button onclick="setMyScheduleView('list')" style="padding:4px 10px;font-size:11px;border:none;cursor:pointer;font-family:inherit;background:${myScheduleView==='list'?'var(--accent)':'var(--surface)'};color:${myScheduleView==='list'?'#fff':'var(--text-2)'}">列表</button>
+          <button onclick="setMyScheduleView('calendar')" style="padding:4px 10px;font-size:11px;border:none;border-left:1px solid var(--border);cursor:pointer;font-family:inherit;background:${myScheduleView==='calendar'?'var(--accent)':'var(--surface)'};color:${myScheduleView==='calendar'?'#fff':'var(--text-2)'}">日历</button>
+        </div>
+      </div>
+    </div>
+    <div id="myScheduleBody">
+      ${myScheduleView === 'list' ? listHtml + historyHtml : calHtml}
+    </div>
+  </div>`;
+}
+
+function toggleScheduleHistory() {
+  const body = document.getElementById('sched_history_body');
+  const arrow = document.getElementById('sched_history_arrow');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
+}
+
+function setMyScheduleView(v) {
+  myScheduleView = v;
+  renderMySchedule(document.getElementById('mainContent'));
+}
+
+function shiftMyCalMonth(delta) {
+  const [y, m] = myScheduleCalMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  myScheduleCalMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  renderMySchedule(document.getElementById('mainContent'));
+}
+
 // ── VIP 上课记录填写 ──
 const VIP_CONTENT_OPTIONS = ['专业课指导', '过去问对策', '研究计划书', '出愿指导', '面试对策', 'TA指导'];
 
