@@ -12,7 +12,7 @@ let teacherProgressData = { students: [], timeline: {}, schoolPlans: {}, planDra
 // 专业筛选 chips（按老师可见范围裁剪）；setterName 为点击时调用的全局函数名
 function tpMajorChipsHtml(cur, setterName) {
   const set = tsaAllowedSet();
-  const opts = [['','全部专业'],['keiei','経営学'],['keizai','経済学'],['shakai_group','社会人文'],['shakai','社会学'],['fukushi','社会福祉学'],['shinpan','新闻传播学']];
+  const opts = [['','全部专业'], ...majorFilterKeys().map(k => [k, majorLabel(k)])];
   return opts.filter(([k]) => {
     if (!k || !set) return true;
     if (k === 'shakai_group') return SHAKAI_GROUP.some(m => set.has(m));
