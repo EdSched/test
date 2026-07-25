@@ -53,7 +53,7 @@ function renderStudentsPage(mc){
     </div>
   </div>
   <div class="filter-row">
-    ${['all','keiei','keizai','shakai_group','shakai','shinpan','fukushi'].map((m,i)=>`<div class="filter-chip${stMajorFilter===m?' active':''}" onclick="setStMajor('${m}',this)">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
+    ${majorFilterKeys({includeAll:true}).map((m,i)=>`<div class="filter-chip${stMajorFilter===m?' active':''}" onclick="setStMajor('${m}',this)">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
   </div>
   <div class="filter-row">
     ${[['active','在籍'],['graduated','已合格'],['expired','已到期'],['stopped','停课'],['withdrawn','退学'],['all','全部']].map(([v,l])=>`<div class="filter-chip${stStatus===v?' active':''}" onclick="setStStatus('${v}',this)">${l}</div>`).join('')}
@@ -588,7 +588,7 @@ async function renderProgressPage(mc, focusStudentId=null){
     </div>
   </div>
   <div class="filter-row">
-    ${['all','keiei','keizai','shakai_group','shakai','shinpan','fukushi'].map((m,i)=>`<div class="filter-chip${stMajorFilter===m?' active':''}" onclick="setStMajor('${m}',this);renderProgressPage(document.getElementById('mainContent'))">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
+    ${majorFilterKeys({includeAll:true}).map((m,i)=>`<div class="filter-chip${stMajorFilter===m?' active':''}" onclick="setStMajor('${m}',this);renderProgressPage(document.getElementById('mainContent'))">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
   </div>
   <div class="search-bar"><input id="progress_search_input" placeholder="搜索学生姓名…" value="${progressStudentFilter}" oninput="handleProgressSearchInput(this)" oncompositionstart="this.dataset.composing='1'" oncompositionend="this.dataset.composing='';handleProgressSearchInput(this)"></div>
   <div style="display:flex;flex-direction:column;gap:8px">${cards}</div>
@@ -799,7 +799,9 @@ function detectMajorFromSheet(sheetName) {
   for (const [key, val] of Object.entries(SHEET_MAJOR_MAP)) {
     if (name.includes(key.toLowerCase())) return val;
   }
-  return null;
+  // 兜底：用 MAJORS 反查，支持数据库新增专业（sheet 名为中文专业名时）
+  const k = (typeof majorKeyFromText === 'function') ? majorKeyFromText(sheetName) : '';
+  return k || null;
 }
 
 function handleImportFile(input) {
@@ -957,7 +959,7 @@ async function renderSeasonView(mc, students, timelineMap) {
     </div>
   </div>
   <div class="filter-row">
-    ${['all','keiei','keizai','shakai_group','shakai','shinpan','fukushi'].map((m,i)=>`<div class="filter-chip${stMajorFilter===m?' active':''}" onclick="setStMajor('${m}',this);renderProgressPage(document.getElementById('mainContent'))">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
+    ${majorFilterKeys({includeAll:true}).map((m,i)=>`<div class="filter-chip${stMajorFilter===m?' active':''}" onclick="setStMajor('${m}',this);renderProgressPage(document.getElementById('mainContent'))">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
   </div>`;
 
   if (!allPlans.length) {
