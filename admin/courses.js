@@ -966,6 +966,7 @@ async function publishSelected(confirm_val){
 function openAddCourseModal(editId){
   document.getElementById('addCourseModalTitle').textContent=editId?'编辑课程':'手动添加课程';
   document.getElementById('ac_editing_id').value=editId||'';
+  acRenderMajorCheckboxes();
   if(editId){
     const c=cachedCourses.find(x=>x.id===editId);
     if(!c) return;
@@ -1019,6 +1020,15 @@ function acOnTypeChange(val){
   if(val==='共通课'){
     document.querySelectorAll('#ac_major_checkboxes input').forEach(cb=>cb.checked=true);
   }
+}
+
+// 动态生成课程专业勾选项（含社会人文组 + 全部真实专业；数据库新增专业自动出现）
+function acRenderMajorCheckboxes(){
+  const box=document.getElementById('ac_major_checkboxes');
+  if(!box) return;
+  box.innerHTML=majorFilterKeys().map(m=>
+    `<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;white-space:nowrap"><input type="checkbox" value="${m}" style="accent-color:var(--accent)">${majorLabel(m)}</label>`
+  ).join('');
 }
 
 function acGetMajors(){
