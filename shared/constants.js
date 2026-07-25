@@ -79,22 +79,31 @@ async function loadMajorsFromDB() {
 
 // 中文专业名 → 生成一个安全的英文 key（拼音首字母不可行时退回时间戳后缀，保证唯一）
 function generateMajorKey(label) {
-  const pinyinMap = {
-    '国': 'guo','际': 'ji','关': 'guan','系': 'xi','学': 'xue','文': 'wen',
-    '化': 'hua','表': 'biao','象': 'xiang','艺': 'yi','术': 'shu','传': 'chuan',
-    '播': 'bo','心': 'xin','理': 'li','教': 'jiao','育': 'yu','法': 'fa',
-    '律': 'lv','医': 'yi','工': 'gong','程': 'cheng','计': 'ji','算': 'suan',
-    '机': 'ji','环': 'huan','境': 'jing','建': 'jian','筑': 'zhu','农': 'nong',
-    '生': 'sheng','物': 'wu','化学': 'huaxue','物理': 'wuli','数': 'shu',
+  // 常见专业汉字 → 日语罗马字读音（中/日两种写法都映射到同一个 key，风格与 keiei/shakai 一致）
+  const romaji = {
+    '経':'kei','经':'kei','営':'ei','营':'ei','済':'zai','济':'zai',
+    '社':'sha','会':'kai','福':'fuku','祉':'shi',
+    '新':'shin','聞':'bun','闻':'bun','伝':'den','传':'den','播':'pa','報':'hou','报':'hou','情':'jou',
+    '観':'kan','观':'kan','光':'kou',
+    '心':'shin','理':'ri','認':'nin','认':'nin','知':'chi','臨':'rin','临':'rin','床':'shou','発':'hatsu','達':'tatsu','达':'tatsu',
+    '教':'kyou','育':'iku',
+    '法':'hou','律':'ritsu','政':'sei','治':'ji',
+    '国':'koku','際':'sai','际':'sai','関':'kan','关':'kan',
+    '文':'bun','化':'ka','言':'gen','語':'go','语':'go','歴':'reki','歷':'reki','历':'reki','史':'shi',
+    '芸':'gei','艺':'gei','術':'jutsu','术':'jutsu','美':'bi','建':'ken','築':'chiku','筑':'chiku','都':'to','市':'shi','域':'iki','地':'chi',
+    '環':'kan','环':'kan','境':'kyou',
+    '数':'suu','統':'tou','统':'tou','計':'kei','计':'kei','量':'ryou',
+    '物':'butsu','質':'shitsu','质':'shitsu','生':'sei','命':'mei','医':'i','薬':'yaku','药':'yaku',
+    '工':'kou','機':'ki','机':'ki','械':'kai','電':'den','电':'den','気':'ki','材':'zai','料':'ryou','土':'do','木':'boku','交':'kou','通':'tsuu',
+    '農':'nou','农':'nou','商':'shou','情':'jou','報':'hou',
+    '哲':'tetsu','宗':'shuu','人':'jin','間':'kan','间':'kan','民':'min','俗':'zoku','精':'sei','神':'shin',
   };
+  // 去掉常见词尾（不影响区分度），再逐字转写
+  let s = String(label).replace(/(学科|学部|研究科|専攻|专业|学|科|系|論|论)/g, '');
   let key = '';
-  for (const ch of String(label)) {
-    key += pinyinMap[ch] || '';
-  }
-  // 没匹配到足够字符时（生僻字较多），退回用 base36 短哈希保证可用且唯一
-  if (key.length < 2) {
-    key = 'm' + Date.now().toString(36).slice(-6);
-  }
+  for (const ch of s) key += romaji[ch] || '';
+  // 没匹配到足够字符（生僻字多）→ 退回 base36 短哈希，保证可用且唯一
+  if (key.length < 2) key = 'm' + Date.now().toString(36).slice(-6);
   return key;
 }
 
