@@ -11,6 +11,59 @@ let MAJORS = {
 };
 const SHAKAI_GROUP = ['shakai', 'shinpan', 'fukushi'];
 
+// ── 专业派生工具（单一数据源；新增专业只需写入 DB majors 表，即可自动流通全站）──
+// MAJOR_GROUPS：虚拟分组 key → 展开后的真实专业 key 列表（目前仅「社会人文」一组）
+const MAJOR_GROUPS = { shakai_group: SHAKAI_GROUP };
+// 核心专业的固定展示顺序；数据库新增的专业会自动追加到其后
+const CORE_MAJOR_ORDER = ['keiei', 'keizai', 'shakai', 'shinpan', 'fukushi'];
+
+// 所有「真实」专业 key（核心在前，DB 新增在后），不含虚拟分组 shakai_group
+function allMajorKeys() {
+  const keys = [...CORE_MAJOR_ORDER];
+  Object.keys(MAJORS).forEach(k => { if (k !== 'shakai_group' && !keys.includes(k)) keys.push(k); });
+  return keys;
+}
+
+// 把一个筛选 key 展开成真实专业 key 数组：
+//   'all' → 全部真实专业；分组 key（如 shakai_group）→ 其成员；其他 → [自身]
+function expandMajorFilter(key) {
+  if (key === 'all') return allMajorKeys();
+  if (MAJOR_GROUPS[key]) return [...MAJOR_GROUPS[key]];
+  return [key];
+}
+
+// 筛选栏 chip 顺序：经营 经济 [社会人文组] 社会 新传 福祉 …新增专业追加末尾
+//   opts.includeAll=true 时在最前面加入 'all'
+function majorFilterKeys(opts = {}) {
+  const ordered = ['keiei', 'keizai', 'shakai_group', 'shakai', 'shinpan', 'fukushi'];
+  allMajorKeys().forEach(k => { if (!ordered.includes(k)) ordered.push(k); });
+  return opts.includeAll ? ['all', ...ordered] : ordered;
+}
+
+// 生成 <option> 列表（默认所有真实专业，不含 all/分组）
+function majorOptionsHtml(selectedKey, opts = {}) {
+  const keys = opts.keys || allMajorKeys();
+  let html = opts.placeholder ? `<option value="">${opts.placeholder}</option>` : '';
+  html += keys.map(k => `<option value="${k}"${k === selectedKey ? ' selected' : ''}>${majorLabel(k)}</option>`).join('');
+  return html;
+}
+
+// 中文名/别名 → 专业 key（Excel 导入等场景用）：先精确反查 MAJORS，再退回内置别名正则
+function majorKeyFromText(text) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  if (MAJORS[t]) return t;                                   // 本身就是 key
+  const rev = Object.entries(MAJORS).find(([, v]) => v === t);
+  if (rev) return rev[0];                                    // 精确匹配中文名
+  if (/社会人文/.test(t)) return 'shakai_group';
+  if (/经营|経営/.test(t)) return 'keiei';
+  if (/经济|経済/.test(t)) return 'keizai';
+  if (/社会学/.test(t)) return 'shakai';
+  if (/新闻|新传|新伝/.test(t)) return 'shinpan';
+  if (/福祉/.test(t)) return 'fukushi';
+  return '';
+}
+
 // 从数据库加载专业字典，合并进全局 MAJORS（不会清空/覆盖已有的核心专业）
 // 各页面应在初始化阶段调用一次：await loadMajorsFromDB();
 let majorsLoadedFromDB = false;
