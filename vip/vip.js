@@ -44,6 +44,7 @@ function clearVipLogin() {
 }
 
 async function initVip() {
+  if (typeof loadMajorsFromDB === 'function') await loadMajorsFromDB();
   const saved = loadVipLogin();
   if (saved) {
     const ok = await vipLogin(saved.name, saved.code, true);
