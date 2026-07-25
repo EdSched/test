@@ -42,7 +42,8 @@ function renderBookingPage(mc){
   <div id="studentLinksPanel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:12px 14px;margin-bottom:10px">
     <div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:8px">学生预约链接</div>
     <div style="display:flex;flex-direction:column;gap:5px">
-      ${[['keiei','経営学'],['keizai','経済学'],['shakai_group','社会人文（三专业）'],['shakai','社会学'],['shinpan','新闻传播学'],['fukushi','社会福祉学']].map(([key,label])=>{
+      ${majorFilterKeys().map(key=>{
+        const label=majorLabel(key);
         const url=`https://edsched.github.io/transform/student/?major=${key}`;
         return `<div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:11px;min-width:130px;white-space:nowrap">${label}</span>
@@ -53,7 +54,7 @@ function renderBookingPage(mc){
     </div>
   </div>
   <div class="filter-row" id="majorFilterRow">
-    ${['all','keiei','keizai','shakai_group','shakai','shinpan','fukushi'].map((m,i)=>`<div class="filter-chip${bkMajor===m?' active':''}" onclick="setBkMajor('${m}',this)">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
+    ${majorFilterKeys({includeAll:true}).map((m,i)=>`<div class="filter-chip${bkMajor===m?' active':''}" onclick="setBkMajor('${m}',this)">${i===0?'全部专业':majorLabel(m)}</div>`).join('')}
   </div>
   <div class="btn-group" style="margin-bottom:10px">
     ${['all','pending','confirmed','completed','cancelled'].map((t,i)=>`<button class="${bkTab===t?'active':''}" onclick="setBkTab('${t}',this)">${['全部','待确认','已确认','已完成','已取消'][i]}</button>`).join('')}
