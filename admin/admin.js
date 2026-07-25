@@ -173,12 +173,7 @@ function renderTeachersPage(mc){
       <div class="form-group">
         <label class="form-label">负责专业（可多选）</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px" id="new_teacher_majors">
-          <div class="filter-chip" data-value="keiei" onclick="toggleChip(this)" style="padding:4px 10px">経営学</div>
-          <div class="filter-chip" data-value="keizai" onclick="toggleChip(this)" style="padding:4px 10px">経済学</div>
-          <div class="filter-chip" data-value="shakai_group" onclick="toggleChip(this)" style="padding:4px 10px">社会人文</div>
-          <div class="filter-chip" data-value="shakai" onclick="toggleChip(this)" style="padding:4px 10px">社会学</div>
-          <div class="filter-chip" data-value="shinpan" onclick="toggleChip(this)" style="padding:4px 10px">新闻传播</div>
-          <div class="filter-chip" data-value="fukushi" onclick="toggleChip(this)" style="padding:4px 10px">社会福祉</div>
+          ${majorFilterKeys().map(m=>`<div class="filter-chip" data-value="${m}" onclick="toggleChip(this)" style="padding:4px 10px">${majorLabel(m)}</div>`).join('')}
         </div>
       </div>
       <div class="form-group">
@@ -244,12 +239,7 @@ function renderTeachersPage(mc){
             <div style="margin-left:20px">
               <div style="font-size:10px;color:var(--text-3);margin-bottom:4px">可见的专业（适用于全部三个子项；不选则默认按该老师自身的专业显示，老师档案无专业时全部可见）</div>
               <div style="display:flex;flex-wrap:wrap;gap:4px" id="perm_student_majors">
-                ${[
-              ['shakai','社会学'],['keiei','経営学'],['keizai','経済学'],
-              ['shinpan','新闻传播学'],['fukushi','社会福祉学'],['nihongo','日本语教育'],
-              ['hyosho','表象文化・文学・哲学'],['seiji','政治学'],['toyo','東洋史'],
-              ['bunka','文化人类学'],['mot','MOT'],['tokei','統計・計量'],
-            ].map(([k,v])=>`<div class="filter-chip" data-value="${k}" onclick="toggleChip(this)" style="padding:3px 9px;font-size:10px">${v}</div>`).join('')}
+                ${majorFilterKeys().map(m=>`<div class="filter-chip" data-value="${m}" onclick="toggleChip(this)" style="padding:3px 9px;font-size:10px">${majorLabel(m)}</div>`).join('')}
               </div>
             </div>
           </div>
