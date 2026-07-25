@@ -18,6 +18,7 @@ const studyMajor = studyParams.get('major') || '';
 
 // ── 初始化 ──
 async function initStudy() {
+  if (typeof loadMajorsFromDB === 'function') await loadMajorsFromDB();
   const wrap = document.getElementById('mainWrap');
   try {
     const raw = localStorage.getItem(STUDY_STORAGE_KEY);
