@@ -33,6 +33,7 @@ let curTab = 'todo';
 async function init() {
   const mc = document.getElementById('mainContent');
   if (!teacherName) { mc.innerHTML = '<div class="empty">无效链接，请联系学科负责人</div>'; return; }
+  if (typeof loadMajorsFromDB === 'function') await loadMajorsFromDB();
   document.getElementById('headerName').textContent = teacherName + ' 老师';
   try {
     const teachers = await sb(`/rest/v1/teachers?name=eq.${encodeURIComponent(teacherName)}&select=*`);
