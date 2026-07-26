@@ -11,6 +11,14 @@ let tvOpenCats = {};
 let tpPlanId = null;             // 当前打开的学生方案 id
 let tpPlanItems = [];            // 学生方案条目工作副本
 
+// 标准分类顺序（老师端也需完整显示，含空的专业课分类，便于老师补充专业知识）
+const VIP_CAT_ORDER = [
+  ['found', '升学基本指导'], ['base', '专业课基础知识'], ['adv', '专业课备考强化'],
+  ['method', '专业课基础方法论'], ['ext', '专业课拓展方法论'], ['past', '过去问对策'],
+  ['eng', '英翻日对策'], ['plan', '研究计划书'], ['apply', '出愿指导'],
+  ['inter', '面试对策'], ['ta', 'TA指导'],
+];
+
 // teacher.js 的 init 会调用它（若存在）
 async function loadTeacherVipFrameworks() {
   if (!teacherName) { teacherVipFrameworks = []; teacherVipPlans = []; return; }
@@ -92,16 +100,20 @@ function renderTvEditor(mc) {
   if (!fw) { renderTeacherVipFrameworks(mc); return; }
   const st = fw.status || 'shared';
 
-  // 按分类分组，分类顺序 = 各分类内最小 sort_order（无需依赖目录文件）
-  const catMap = {};
+  // 显示全部标准分类（含空的专业课分类），老师可在任意分类补充内容
+  const known = new Set(VIP_CAT_ORDER.map(c => c[0]));
+  const groups = VIP_CAT_ORDER.map(([key, label]) => ({
+    key, label,
+    items: tvItems.filter(i => i.category === key).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+  }));
+  // 追加非标准分类（若有）
+  const extraMap = {};
   tvItems.forEach(it => {
+    if (known.has(it.category)) return;
     const k = it.category || 'other';
-    if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], minOrder: it.sort_order || 0 };
-    catMap[k].items.push(it);
-    catMap[k].minOrder = Math.min(catMap[k].minOrder, it.sort_order || 0);
+    if (!extraMap[k]) { extraMap[k] = { key: k, label: it.category_label || k, items: [] }; groups.push(extraMap[k]); }
+    extraMap[k].items.push(it);
   });
-  const groups = Object.values(catMap).sort((a, b) => a.minOrder - b.minOrder);
-  groups.forEach(g => g.items.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
   const groupsHtml = groups.map(g => {
     const open = tvOpenCats[g.key] !== false;
@@ -117,7 +129,7 @@ function renderTvEditor(mc) {
     return `
     <div style="border:1px solid var(--border);border-radius:5px;overflow:hidden">
       <div onclick="tvToggleCat('${g.key}')" style="cursor:pointer;padding:9px 12px;background:var(--bg);display:flex;align-items:center;justify-content:space-between;user-select:none">
-        <div style="font-size:12px;font-weight:600">${tvEsc(g.label)}<span style="font-size:10px;color:var(--text-3);font-weight:400;margin-left:8px">${g.items.length} 条</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="border-radius:3px;padding:2px 10px;font-size:11px;font-weight:500;background:${(VIP_CAT_COLOR[g.key]||{}).bg||'#eee'};color:${(VIP_CAT_COLOR[g.key]||{}).color||'#333'}">${tvEsc(g.label)}</span><span style="font-size:10px;color:var(--text-3)">${g.items.length} 条</span></div>
         <span style="font-size:10px;color:var(--text-3)">${open ? '收起 ▾' : '展开 ▸'}</span>
       </div>
       <div style="display:${open ? 'block' : 'none'}">
@@ -542,13 +554,16 @@ function renderSvSelect(mc) {
     : '<span style="font-size:11px;color:#9a9590">尚未选择老师</span>';
   const sharePanel = svShareOpen ? `
     <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #e2ded6;border-radius:4px;background:#f7f5f0">
-      <div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#1a1814">发给专业课老师确认（场景2）</div>
-      <div style="font-size:10px;color:#9a9590;margin-bottom:8px">需老师补充/确认内容时用。选好课程与学生姓名后，发给老师；老师确认后此方案生效。</div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#1a1814">发给专业课老师</div>
+      <div style="font-size:10px;color:#9a9590;margin-bottom:8px">先选老师；「分享模板补内容」让老师补充专业课（无需选课）；「发学生方案确认」需先点选课程并填学生姓名。</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">${tagsHtml}</div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         <select id="sv_share_add" onchange="svAddShareTeacher(this.value);this.value=''" style="font-size:12px;min-width:150px"><option value="">＋ 添加老师…</option>${addOpts}</select>
         <input id="sv_share_note" value="" placeholder="给老师的提示（可选）" style="flex:1;min-width:200px;font-size:11px">
-        <button onclick="svSavePlan('pending')" style="font-size:11px;background:#1a1814;color:#fff;border:none;border-radius:3px;padding:6px 14px;cursor:pointer;font-family:inherit;white-space:nowrap">发给老师确认</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="svShareTemplateToTeacher()" style="font-size:11px;background:#fff;border:1px solid #1a1814;color:#1a1814;border-radius:3px;padding:6px 14px;cursor:pointer;font-family:inherit;white-space:nowrap">分享模板补内容</button>
+        <button onclick="svSavePlan('pending')" style="font-size:11px;background:#1a1814;color:#fff;border:none;border-radius:3px;padding:6px 14px;cursor:pointer;font-family:inherit;white-space:nowrap">发学生方案确认</button>
       </div>
     </div>` : '';
 
@@ -560,7 +575,7 @@ function renderSvSelect(mc) {
         <button onclick="backToSvList()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">← 返回</button>
         <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600;color:#1a1814">${tvEsc(fw.title)}</div>
       </div>
-      <button onclick="svToggleShare()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">发老师确认 ${svShareOpen ? '▾' : '▸'}</button>
+      <button onclick="svToggleShare()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">发给老师 ${svShareOpen ? '▾' : '▸'}</button>
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;border-bottom:1px solid #e2ded6;background:#fff;flex-wrap:wrap;position:sticky;top:0;z-index:10">
@@ -595,6 +610,23 @@ function svToggleShare() { svShareOpen = !svShareOpen; renderSvSelect(document.g
 function backToSvList() { renderVipSalesPlanning(document.getElementById('mainContent')); }
 function svAddShareTeacher(name) { if (!name || svShareTeachers.includes(name)) return; svShareTeachers.push(name); renderSvSelect(document.getElementById('mainContent')); }
 function svRemoveShareTeacher(name) { svShareTeachers = svShareTeachers.filter(n => n !== name); renderSvSelect(document.getElementById('mainContent')); }
+
+// 分享模板给老师补充专业课内容（不需选课/学生，把框架发给老师填）
+async function svShareTemplateToTeacher() {
+  if (!svShareTeachers.length) { alert('请先添加至少一位老师'); return; }
+  const nEl = document.getElementById('sv_share_note'); const note = nEl ? nEl.value.trim() : '';
+  if (!confirm(`确认把此模板分享给 ${svShareTeachers.join('、')} 补充内容？\n老师会在其「VIP框架」中看到并补充（尤其专业课部分）。`)) return;
+  try {
+    await sb(`/rest/v1/vip_frameworks?id=eq.${svCurrentId}`, 'PATCH', {
+      assigned_teachers: svShareTeachers, assigned_teacher: svShareTeachers[0] || '',
+      share_note: note, status: 'shared',
+    });
+    const fw = salesVipFrameworks.find(f => f.id === svCurrentId);
+    if (fw) { fw.assigned_teachers = [...svShareTeachers]; fw.share_note = note; fw.status = 'shared'; }
+    alert(`已分享模板给：${svShareTeachers.join('、')}，请老师补充内容`);
+    renderSvSelect(document.getElementById('mainContent'));
+  } catch (e) { alert('分享失败：' + e.message); }
+}
 
 // 保存学生方案：status='signed'(场景1 直接签约) 或 'pending'(场景2 发老师确认)
 async function svSavePlan(status) {
