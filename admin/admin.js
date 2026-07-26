@@ -138,6 +138,10 @@ async function renderPage(){
     } else if(curPage==='progress'){
       cachedStudents=await sb('/rest/v1/students?select=*&order=name.asc');
       renderProgressPage(mc);
+    } else if(curPage==='vipframework'){
+      cachedTeachers=await sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[]);
+      await loadVipFrameworks();
+      renderVipFrameworkPage(mc);
     }
   }catch(e){mc.innerHTML=`<div class="empty">加载失败：${e.message}</div>`}
 }
