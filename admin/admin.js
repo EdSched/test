@@ -254,6 +254,7 @@ function renderTeachersPage(mc){
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer"><input type="checkbox" id="perm_promo" style="accent-color:var(--accent);width:15px;height:15px">宣传相关<span style="font-size:9px;color:var(--text-3)">专业/讲师/课程介绍与当期课程表，含对外分享链接</span></label>
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer"><input type="checkbox" id="perm_progress_plan" style="accent-color:var(--accent);width:15px;height:15px">进度规划<span style="font-size:9px;color:var(--text-3)">咨询学生考学规划生成，可打印 PDF</span></label>
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer"><input type="checkbox" id="perm_lect_info" style="accent-color:var(--accent);width:15px;height:15px">讲师信息查询<span style="font-size:9px;color:var(--text-3)">内部检索讲师档案，可切换展示卡片给客户看/截图</span></label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer"><input type="checkbox" id="perm_vip_sales" style="accent-color:var(--accent);width:15px;height:15px">VIP营业规划<span style="font-size:9px;color:var(--text-3)">看到全部 VIP 框架模板，可转分享给上课老师（营业角色）</span></label>
             </div>
           </div>
           <!-- admission_query row -->
@@ -321,6 +322,7 @@ function cancelEditTeacher(){
     document.getElementById('perm_progress_plan').checked=false;
     document.getElementById('perm_promo').checked=false;
     document.getElementById('perm_lect_info').checked=false;
+    document.getElementById('perm_vip_sales').checked=false;
   document.getElementById('perm_homework').checked=false;
   document.getElementById('perm_admission_query').checked=false;
   document.querySelectorAll('#perm_admission_majors .filter-chip').forEach(c=>c.classList.remove('active'));
@@ -339,6 +341,7 @@ function openTeacherManager(){
     document.getElementById('perm_progress_plan').checked=false;
     document.getElementById('perm_promo').checked=false;
     document.getElementById('perm_lect_info').checked=false;
+    document.getElementById('perm_vip_sales').checked=false;
   document.getElementById('perm_homework').checked=false;
   document.getElementById('perm_admission_query').checked=false;
   document.querySelectorAll('#perm_admission_majors .filter-chip').forEach(c=>c.classList.remove('active'));
@@ -472,6 +475,7 @@ function getPermissionsFromForm(){
     promo:document.getElementById('perm_promo').checked,
     lect_info:document.getElementById('perm_lect_info').checked,
     progress_plan:document.getElementById('perm_progress_plan').checked,
+    vip_sales:document.getElementById('perm_vip_sales').checked,
     student_mgmt:document.getElementById('perm_student_mgmt').checked,
     student_mgmt_items:[...document.querySelectorAll('#perm_student_mgmt_items .filter-chip.active')].map(c=>c.dataset.value),
     student_majors:[...document.querySelectorAll('#perm_student_majors .filter-chip.active')].map(c=>c.dataset.value),
@@ -502,6 +506,7 @@ async function addTeacher(){
     document.getElementById('perm_progress_plan').checked=false;
     document.getElementById('perm_promo').checked=false;
     document.getElementById('perm_lect_info').checked=false;
+    document.getElementById('perm_vip_sales').checked=false;
     renderTeacherList();
   }catch(e){alert('添加失败：'+e.message)}
 }
@@ -523,6 +528,7 @@ function openEditTeacher(id){
   document.getElementById('perm_promo').checked=!!p.promo;
   document.getElementById('perm_lect_info').checked=!!p.lect_info;
   document.getElementById('perm_progress_plan').checked=!!p.progress_plan;
+  document.getElementById('perm_vip_sales').checked=!!p.vip_sales;
   document.getElementById('perm_student_mgmt').checked=!!p.student_mgmt;
   document.querySelectorAll('#perm_student_mgmt_items .filter-chip').forEach(c=>{c.classList.toggle('active',(p.student_mgmt_items||[]).includes(c.dataset.value));});
   document.querySelectorAll('#perm_student_majors .filter-chip').forEach(c=>{c.classList.toggle('active',(p.student_majors||[]).includes(c.dataset.value));});
