@@ -113,6 +113,7 @@ function buildTabs() {
   // 我的课表：有排班权限或有实际排到课才显示
   if (p.schedule || slots.length) tabs.push({ id: 'mycourses', label: '📚 我的课表' });
   if (typeof teacherVipFrameworks !== 'undefined' && teacherVipFrameworks.length) tabs.push({ id: 'vipframework', label: '⭐ VIP框架' });
+  if (p.vip_sales) tabs.push({ id: 'vipsales', label: '🗂 VIP规划' });
   // 工作记录：有实际教学相关权限才显示
   if (p.booking || p.slots || p.schedule || p.homework || slots.length) tabs.push({ id: 'workrecords', label: '📋 工作记录' });
   const tabBar = document.getElementById('tabBar');
@@ -145,6 +146,7 @@ function renderTab() {
     case 'studyprogress': renderTeacherStudyProgress(mc); break;
     case 'mycourses': renderMySchedule(mc); break;
     case 'vipframework': renderTeacherVipFrameworks(mc); break;
+    case 'vipsales': renderVipSalesPlanning(mc); break;
     case 'workrecords': renderWorkRecordsTeacher(mc); break;
   }
 }
