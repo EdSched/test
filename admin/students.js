@@ -165,6 +165,82 @@ function openStudentModal(id){
     else { e.value=''; }
   });
   document.getElementById('studentModal').classList.add('open');
+  renderStudentVipPlans(s);
+}
+
+// ── VIP 课程方案关联（在籍关联）──
+let stVipPlanList = [];   // 当前学生匹配到的方案
+async function renderStudentVipPlans(s) {
+  const box = document.getElementById('st_vip_plan_section');
+  const wrap = document.getElementById('st_vip_plan_wrap');
+  if (!box) return;
+  if (!s || !s.id) {   // 新增学生：先保存后才能关联
+    if (wrap) wrap.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  if (wrap) wrap.style.display = '';
+  box.innerHTML = '<span style="color:var(--text-3)">加载中…</span>';
+  const name = (s.name || '').trim();
+  // 按姓名取方案：已关联到本学生的 + 未关联的（可关联）
+  const plans = await sb(`/rest/v1/vip_student_plans?student_name=eq.${encodeURIComponent(name)}&select=*&order=created_at.desc`).catch(() => []);
+  stVipPlanList = plans;
+  const linked = plans.filter(p => p.student_id === s.id);
+  const avail = plans.filter(p => !p.student_id);
+
+  const stLabel = { signed: '已签约', pending: '待老师确认', confirmed: '老师已确认' };
+  const planLine = (p, mode) => {
+    const hoursTxt = `${p.total_sessions || 0}回/${p.total_hours || 0}课时${(p.subject_hours && p.subject_hours > 0) ? '（含专业知识' + p.subject_hours + '）' : ''}`;
+    const btn = mode === 'linked'
+      ? `<button type="button" onclick="unlinkVipPlan('${p.id}')" style="font-size:10px;background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;color:var(--text-3)">解除关联</button>`
+      : `<button type="button" onclick="linkVipPlan('${p.id}')" style="font-size:10px;background:var(--accent,#1a1814);color:#fff;border:none;border-radius:3px;padding:2px 10px;cursor:pointer">关联到该学生</button>`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface,#fff);margin-bottom:5px">
+      <div style="min-width:0"><span style="font-weight:600">${(typeof majorLabel === 'function' ? majorLabel(p.major) : p.major) || ''}</span>　<span style="color:var(--text-2)">${hoursTxt}</span>　<span style="color:var(--text-3);font-size:10px">${stLabel[p.status] || p.status}</span></div>
+      ${btn}
+    </div>`;
+  };
+
+  let html = '';
+  if (linked.length) html += '<div style="color:#1a4a28;margin-bottom:4px">已关联：</div>' + linked.map(p => planLine(p, 'linked')).join('');
+  if (avail.length) html += `<div style="color:var(--text-3);margin:6px 0 4px">可关联（同名方案）：</div>` + avail.map(p => planLine(p, 'avail')).join('');
+  if (!linked.length && !avail.length) html = '<span style="color:var(--text-3)">暂无匹配的 VIP 方案（营业保存方案时用的姓名需与此一致）</span>';
+  box.innerHTML = html;
+}
+
+async function linkVipPlan(planId) {
+  const sid = document.getElementById('studentId').value;
+  if (!sid) { alert('请先保存学生再关联'); return; }
+  const p = stVipPlanList.find(x => x.id === planId);
+  try {
+    await sb(`/rest/v1/vip_student_plans?id=eq.${planId}`, 'PATCH', { student_id: sid });
+    if (p) {
+      p.student_id = sid;
+      // 便捷回填：VIP总课时（若为空）+ 把方案里的老师加入 VIP 指导老师
+      const totalEl = document.getElementById('st_vip_total');
+      if (totalEl && (!parseFloat(totalEl.value) || parseFloat(totalEl.value) === 0) && p.total_hours) totalEl.value = p.total_hours;
+      const courseEl = document.getElementById('st_vip_course');
+      if (courseEl && courseEl.value === '大课') courseEl.value = '大课+VIP';
+      if (p.assigned_teachers && p.assigned_teachers.length) {
+        p.assigned_teachers.forEach(n => { if (!vipTeacherTags.includes(n)) vipTeacherTags.push(n); });
+        if (typeof renderVipTeacherTags === 'function') renderVipTeacherTags();
+      }
+    }
+    const s = cachedStudents.find(x => x.id === sid);
+    renderStudentVipPlans(s);
+    alert('已关联。记得点「保存」以确认课时/老师等回填。');
+  } catch (e) { alert('关联失败：' + e.message); }
+}
+
+async function unlinkVipPlan(planId) {
+  if (!confirm('确认解除该方案与此学生的关联？')) return;
+  try {
+    await sb(`/rest/v1/vip_student_plans?id=eq.${planId}`, 'PATCH', { student_id: null });
+    const p = stVipPlanList.find(x => x.id === planId);
+    if (p) p.student_id = null;
+    const sid = document.getElementById('studentId').value;
+    const s = cachedStudents.find(x => x.id === sid);
+    renderStudentVipPlans(s);
+  } catch (e) { alert('解除失败：' + e.message); }
 }
 
 // 用当前 MAJORS（核心专业 + 数据库已加载的专业）动态生成下拉选项，并选中指定值
