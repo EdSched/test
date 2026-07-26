@@ -13,6 +13,16 @@ const VIP_STATUS_LABEL = { draft: '编辑中', shared: '待老师补充', done: 
 const VIP_STATUS_COLOR = { draft: '#8a6d3b', shared: '#1a3a6a', done: '#1a4a28' };
 const VIP_STATUS_BG    = { draft: '#faf0dc', shared: '#ddeaf8', done: '#ddf0e0' };
 
+// 分类配色（还原独立 VIP 页面）
+const VF_CAT_COLOR = {
+  found:  { bg: '#f5f0e8', color: '#2a2820' }, base:   { bg: '#ddeaf8', color: '#1a3a6a' },
+  adv:    { bg: '#e8e4f8', color: '#3a2a7a' }, method: { bg: '#ddf0e0', color: '#1a4a28' },
+  ext:    { bg: '#f0f4e8', color: '#3a4a18' }, past:   { bg: '#f8e4dc', color: '#6a2818' },
+  eng:    { bg: '#ece8e0', color: '#3a3830' }, plan:   { bg: '#faecd8', color: '#5a3010' },
+  apply:  { bg: '#fbeaf0', color: '#6a1a3a' }, inter:  { bg: '#e1f0ea', color: '#0a4030' },
+  ta:     { bg: '#e8eaf8', color: '#1a2a6a' },
+};
+
 async function loadVipFrameworks() {
   vfFrameworks = await sb('/rest/v1/vip_frameworks?select=*&order=created_at.desc').catch(() => []);
 }
@@ -116,7 +126,7 @@ function renderVipFrameworkEditor(mc) {
     return `
     <div style="border:1px solid var(--border);border-radius:5px;overflow:hidden">
       <div onclick="vfToggleCat('${g.key}')" style="cursor:pointer;padding:9px 12px;background:var(--bg);display:flex;align-items:center;justify-content:space-between;user-select:none">
-        <div style="font-size:12px;font-weight:600">${g.label}<span style="font-size:10px;color:var(--text-3);font-weight:400;margin-left:8px">${g.items.length} 条</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="border-radius:3px;padding:2px 10px;font-size:11px;font-weight:500;background:${(VF_CAT_COLOR[g.key]||{}).bg||'#eee'};color:${(VF_CAT_COLOR[g.key]||{}).color||'#333'}">${g.label}</span><span style="font-size:10px;color:var(--text-3)">${g.items.length} 条</span></div>
         <span style="font-size:10px;color:var(--text-3)">${open ? '收起 ▾' : '展开 ▸'}</span>
       </div>
       <div style="display:${open ? 'block' : 'none'}">
