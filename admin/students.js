@@ -203,8 +203,11 @@ async function renderStudentVipPlans(s) {
   let html = '';
   if (linked.length) html += '<div style="color:#1a4a28;margin-bottom:4px">已关联：</div>' + linked.map(p => planLine(p, 'linked')).join('');
   if (avail.length) html += `<div style="color:var(--text-3);margin:6px 0 4px">可关联（同名方案）：</div>` + avail.map(p => planLine(p, 'avail')).join('');
-  if (!linked.length && !avail.length) html = '<span style="color:var(--text-3)">暂无匹配的 VIP 方案（营业保存方案时用的姓名需与此一致）</span>';
-  box.innerHTML = html;
+  if (!linked.length && !avail.length) html += '<span style="color:var(--text-3)">暂无匹配的 VIP 方案</span>';
+  const addBtn = (typeof openStudentPlanBuilder === 'function')
+    ? '<div style="margin-top:8px"><button type="button" onclick="openStudentPlanBuilder()" style="font-size:11px;background:var(--accent,#1a1814);color:#fff;border:none;border-radius:3px;padding:5px 12px;cursor:pointer">＋ 添加VIP方案（直接为该学生建）</button></div>'
+    : '';
+  box.innerHTML = html + addBtn;
 }
 
 async function linkVipPlan(planId) {
