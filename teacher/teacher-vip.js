@@ -3,17 +3,24 @@
 // 复用同一套 vip_frameworks / vip_framework_items 表；提交后 status → done。
 
 let teacherVipFrameworks = [];   // 分享给本老师的框架列表
+let teacherVipPlans = [];        // 待本老师确认的学生方案（场景2）
 let tvItems = [];                // 当前打开框架的条目（内存工作副本）
 let tvCurrentId = null;
 let tvOriginalItemIds = new Set();
 let tvOpenCats = {};
+let tpPlanId = null;             // 当前打开的学生方案 id
+let tpPlanItems = [];            // 学生方案条目工作副本
 
 // teacher.js 的 init 会调用它（若存在）
 async function loadTeacherVipFrameworks() {
-  if (!teacherName) { teacherVipFrameworks = []; return; }
+  if (!teacherName) { teacherVipFrameworks = []; teacherVipPlans = []; return; }
   // 数组包含查询：assigned_teachers 含本老师即可见（支持一个框架分享给多位老师）
   teacherVipFrameworks = await sb(
     `/rest/v1/vip_frameworks?assigned_teachers=cs.{"${teacherName}"}&status=in.("shared","done")&select=*&order=created_at.desc`
+  ).catch(() => []);
+  // 待本老师确认的学生方案（场景2）
+  teacherVipPlans = await sb(
+    `/rest/v1/vip_student_plans?assigned_teachers=cs.{"${teacherName}"}&status=eq.pending&select=*&order=created_at.desc`
   ).catch(() => []);
 }
 
@@ -23,11 +30,25 @@ const TV_STATUS_BG    = { shared: '#faf0dc', done: '#ddf0e0' };
 
 function renderTeacherVipFrameworks(mc) {
   tvCurrentId = null;
-  if (!teacherVipFrameworks.length) {
-    mc.innerHTML = '<div class="empty">暂无需要补充的 VIP 框架<br><span style="font-size:11px">当学科负责人分享 VIP 课程框架给您后，会在这里出现</span></div>';
+  const hasFw = teacherVipFrameworks.length;
+  const hasPlans = teacherVipPlans.length;
+  if (!hasFw && !hasPlans) {
+    mc.innerHTML = '<div class="empty">暂无需要处理的 VIP 事项<br><span style="font-size:11px">收到 VIP 框架或待确认的学生方案后，会在这里出现</span></div>';
     return;
   }
-  const cards = teacherVipFrameworks.map(f => {
+
+  // 待确认的学生方案（场景2）
+  const plansHtml = hasPlans ? `
+    <div style="margin-bottom:22px">
+      <div style="font-size:12px;font-weight:600;color:#8a6d3b;margin-bottom:8px">待确认学生方案 <span style="font-size:10px;color:var(--text-3);font-weight:400">营业发来、需你确认/补充后生效</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px">${teacherVipPlans.map(p => `
+        <div onclick="openTeacherVipPlan('${p.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:12px 14px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:12px" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="min-width:0"><div style="font-size:13px;font-weight:600">${tvEsc(p.student_name)}<span style="font-size:10px;color:var(--text-3);font-weight:400;margin-left:8px">${tvEsc(majorLabel(p.major))} · ${p.total_sessions || 0}回/${p.total_hours || 0}课时</span></div>${p.note ? `<div style="font-size:11px;color:var(--text-2);margin-top:3px">📌 ${tvEsc(p.note)}</div>` : ''}</div>
+          <span style="flex-shrink:0;font-size:10px;padding:2px 10px;border-radius:3px;background:#faf0dc;color:#8a6d3b">待确认</span>
+        </div>`).join('')}</div>
+    </div>` : '';
+
+  const fwHtml = hasFw ? teacherVipFrameworks.map(f => {
     const st = f.status || 'shared';
     return `
     <div onclick="openTvFramework('${f.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:12px 14px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:12px;transition:border-color .12s" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -37,15 +58,21 @@ function renderTeacherVipFrameworks(mc) {
       </div>
       <span style="flex-shrink:0;font-size:10px;padding:2px 10px;border-radius:3px;background:${TV_STATUS_BG[st]};color:${TV_STATUS_COLOR[st]}">${TV_STATUS_LABEL[st] || st}</span>
     </div>`;
-  }).join('');
+  }).join('') : '';
+  const fwSection = hasFw ? `
+    <div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px">课程框架 <span style="font-size:10px;color:var(--text-3);font-weight:400">补充每节课内容与作业</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px">${fwHtml}</div>
+    </div>` : '';
 
   mc.innerHTML = `
   <div class="page-section" style="max-width:900px">
-    <div style="margin-bottom:14px">
-      <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">VIP 课程框架</div>
-      <div style="font-size:11px;color:var(--text-3);margin-top:2px">补充每节课的具体内容与作业，完成后点「提交完成」</div>
+    <div style="margin-bottom:16px">
+      <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">VIP 框架</div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:2px">确认营业发来的学生方案，或补充课程框架内容</div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:8px">${cards}</div>
+    ${plansHtml}
+    ${fwSection}
   </div>`;
 }
 
@@ -208,6 +235,77 @@ function tvEsc(s) {
 }
 
 
+// ── 上课老师：确认学生方案（场景2）──
+function openTeacherVipPlan(id) {
+  const p = teacherVipPlans.find(x => x.id === id);
+  if (!p) return;
+  tpPlanId = id;
+  tpPlanItems = (Array.isArray(p.items) ? p.items : []).map(it => ({ ...it }));
+  renderTvPlanEditor(document.getElementById('mainContent'));
+}
+
+function renderTvPlanEditor(mc) {
+  const p = teacherVipPlans.find(x => x.id === tpPlanId);
+  if (!p) { renderTeacherVipFrameworks(mc); return; }
+
+  // 按分类分组（保持原顺序）
+  const catMap = {};
+  tpPlanItems.forEach((it, i) => {
+    const k = it.category || 'other';
+    if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, idxs: [], min: i };
+    catMap[k].idxs.push(i);
+  });
+  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+
+  const groupsHtml = groups.map(g => {
+    const rows = g.idxs.map(i => {
+      const it = tpPlanItems[i];
+      return `
+      <div style="border-top:1px solid var(--border-light);padding:8px 10px;display:grid;grid-template-columns:1.1fr 2fr 1.4fr 64px;gap:8px;align-items:start">
+        <input value="${tvEsc(it.name)}" onchange="tpPlanEdit(${i},'name',this.value)" style="font-size:11px;font-weight:500">
+        <textarea onchange="tpPlanEdit(${i},'content',this.value)" placeholder="内容说明" style="font-size:11px;resize:vertical;min-height:34px;line-height:1.5">${tvEsc(it.content)}</textarea>
+        <input value="${tvEsc(it.homework)}" onchange="tpPlanEdit(${i},'homework',this.value)" placeholder="课后作业" style="font-size:11px">
+        <input type="number" step="0.5" min="0" value="${it.hours != null ? it.hours : 2}" onchange="tpPlanEdit(${i},'hours',this.value)" style="font-size:11px;text-align:center">
+      </div>`;
+    }).join('');
+    return `<div style="border:1px solid var(--border);border-radius:5px;overflow:hidden;margin-bottom:10px"><div style="padding:8px 12px;background:var(--bg);font-size:12px;font-weight:600">${tvEsc(g.label)}</div>${rows}</div>`;
+  }).join('');
+
+  mc.innerHTML = `
+  <div class="page-section" style="max-width:1000px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap">
+      <button onclick="backToTvList()" style="font-size:11px;background:none;border:1px solid var(--border);border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:var(--text-2)">← 返回</button>
+      <button class="btn btn-primary" onclick="confirmTvPlan()">确认方案</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin:8px 0 6px">
+      <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">${tvEsc(p.student_name)} 的 VIP 方案</div>
+      <span style="font-size:11px;color:var(--text-3)">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时</span>
+    </div>
+    ${p.note ? `<div style="font-size:11px;color:var(--text-2);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-bottom:14px">📌 营业提示：${tvEsc(p.note)}</div>` : '<div style="margin-bottom:14px"></div>'}
+    ${groupsHtml}
+    <div style="font-size:11px;color:var(--text-3);margin-top:10px">可直接修改每节课内容/作业/课时，改完点「确认方案」，方案即生效。</div>
+  </div>`;
+}
+
+function tpPlanEdit(idx, field, value) {
+  const it = tpPlanItems[idx];
+  if (!it) return;
+  it[field] = field === 'hours' ? (parseFloat(value) || 0) : value;
+}
+
+async function confirmTvPlan() {
+  if (!confirm('确认此学生方案？确认后方案生效，可用于学生 VIP 课程安排。')) return;
+  try {
+    const totalHours = tpPlanItems.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0);
+    await sb(`/rest/v1/vip_student_plans?id=eq.${tpPlanId}`, 'PATCH', {
+      items: tpPlanItems, total_hours: +totalHours.toFixed(1), status: 'confirmed',
+    });
+    teacherVipPlans = teacherVipPlans.filter(x => x.id !== tpPlanId);
+    alert('已确认，方案生效');
+    renderTeacherVipFrameworks(document.getElementById('mainContent'));
+  } catch (e) { alert('确认失败：' + e.message); }
+}
+
 // ════════════════════════════════════════════════════════════════
 // 营业老师：VIP规划（p.vip_sales 权限开启后显示）
 // 还原独立 VIP 页面的点选体验：彩色分类 + 可点选课程 + 汇总(回/课时) + 生成PDF。
@@ -221,6 +319,8 @@ let svShareTeachers = [];
 let svSel = new Set();          // 已选条目 id
 let svHrs = {};                 // 条目 id → 自定义课时（仅可调课时的分类）
 let svShareOpen = false;
+let svTab = 'templates';        // 营业子视图：templates(课程模板) / plans(学生方案)
+let salesStudentPlans = [];     // 已保存的学生方案
 
 // 分类配色（还原 VIP.html）
 const VIP_CAT_COLOR = {
@@ -240,46 +340,118 @@ const VIP_SUBJECT_CATS = ['base', 'adv', 'method', 'ext']; // 按 课时/2 计�
 const VIP_HOURS_OPTIONS = [0.5, 1, 2, 3, 4];
 
 async function loadSalesVipData() {
-  const [fw, ts] = await Promise.all([
+  const [fw, ts, pl] = await Promise.all([
     sb('/rest/v1/vip_frameworks?select=*&order=major.asc,created_at.desc').catch(() => []),
     sb('/rest/v1/teachers?select=name&order=name.asc').catch(() => []),
+    sb('/rest/v1/vip_student_plans?select=*&order=created_at.desc').catch(() => []),
   ]);
-  salesVipFrameworks = fw; svAllTeachers = ts;
+  salesVipFrameworks = fw; svAllTeachers = ts; salesStudentPlans = pl;
 }
 
-// ── 框架列表（按专业分组）──
+// ── 营业首页：课程模板 / 学生方案 两个子视图 ──
 async function renderVipSalesPlanning(mc) {
   svCurrentId = null;
   mc.innerHTML = '<div class="loading">加载中…</div>';
   await loadSalesVipData();
+  renderSvHome(mc);
+}
 
-  const byMajor = {};
-  salesVipFrameworks.forEach(f => { (byMajor[f.major] = byMajor[f.major] || []).push(f); });
-  const majorKeys = Object.keys(byMajor).sort();
-  const stLabel = { draft: '编辑中', shared: '待补充', done: '已完成' };
-  const stColor = { draft: '#8a6d3b', shared: '#1a3a6a', done: '#1a4a28' };
-  const stBg = { draft: '#faf0dc', shared: '#ddeaf8', done: '#ddf0e0' };
+function svSetTab(t) { svTab = t; renderSvHome(document.getElementById('mainContent')); }
 
-  const groupsHtml = majorKeys.length ? majorKeys.map(mk => {
-    const cards = byMajor[mk].map(f => {
-      const st = f.status || 'draft';
-      return `
-      <div onclick="openSvFramework('${f.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:10px;transition:border-color .12s" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="min-width:0"><div style="font-size:12px;font-weight:600">${tvEsc(f.title || 'VIP框架')}</div></div>
-        <span style="flex-shrink:0;font-size:10px;padding:2px 9px;border-radius:3px;background:${stBg[st]};color:${stColor[st]}">${stLabel[st] || st}</span>
-      </div>`;
-    }).join('');
-    return `<div style="margin-bottom:16px"><div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);padding-bottom:6px;border-bottom:1px solid var(--border-light);margin-bottom:8px">${tvEsc(majorLabel(mk))}</div><div style="display:flex;flex-direction:column;gap:6px">${cards}</div></div>`;
-  }).join('') : '<div class="empty">暂无 VIP 框架模板<br><span style="font-size:11px">请学科负责人先在「VIP框架」建立模板</span></div>';
+function renderSvHome(mc) {
+  const tabBtn = (id, label, n) => `<button onclick="svSetTab('${id}')" style="font-size:12px;padding:6px 14px;border:none;border-bottom:2px solid ${svTab === id ? 'var(--text-1,#1a1814)' : 'transparent'};background:none;cursor:pointer;font-family:inherit;color:${svTab === id ? 'var(--text-1,#1a1814)' : 'var(--text-3)'};font-weight:${svTab === id ? '600' : '400'}">${label}${n ? ` <span style="font-size:10px;color:var(--text-3)">${n}</span>` : ''}</button>`;
 
-  mc.innerHTML = `
-  <div class="page-section" style="max-width:900px">
-    <div style="margin-bottom:14px">
+  const header = `
+    <div style="margin-bottom:10px">
       <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">VIP 规划</div>
-      <div style="font-size:11px;color:var(--text-3);margin-top:2px">选择专业模板，为学生点选课程、生成方案 PDF；也可转分享给上课老师补充</div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:2px">选择模板为学生点选课程、保存签约或发给老师确认；已保存的方案在「学生方案」查看</div>
     </div>
-    ${groupsHtml}
+    <div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px">
+      ${tabBtn('templates', '课程模板')}
+      ${tabBtn('plans', '学生方案', salesStudentPlans.length)}
+    </div>`;
+
+  let body;
+  if (svTab === 'plans') {
+    body = renderSvPlansBody();
+  } else {
+    const byMajor = {};
+    salesVipFrameworks.forEach(f => { (byMajor[f.major] = byMajor[f.major] || []).push(f); });
+    const majorKeys = Object.keys(byMajor).sort();
+    const stLabel = { draft: '编辑中', shared: '待补充', done: '已完成' };
+    const stColor = { draft: '#8a6d3b', shared: '#1a3a6a', done: '#1a4a28' };
+    const stBg = { draft: '#faf0dc', shared: '#ddeaf8', done: '#ddf0e0' };
+    body = majorKeys.length ? majorKeys.map(mk => {
+      const cards = byMajor[mk].map(f => {
+        const st = f.status || 'draft';
+        return `<div onclick="openSvFramework('${f.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:10px;transition:border-color .12s" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'"><div style="min-width:0"><div style="font-size:12px;font-weight:600">${tvEsc(f.title || 'VIP框架')}</div></div><span style="flex-shrink:0;font-size:10px;padding:2px 9px;border-radius:3px;background:${stBg[st]};color:${stColor[st]}">${stLabel[st] || st}</span></div>`;
+      }).join('');
+      return `<div style="margin-bottom:16px"><div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);padding-bottom:6px;border-bottom:1px solid var(--border-light);margin-bottom:8px">${tvEsc(majorLabel(mk))}</div><div style="display:flex;flex-direction:column;gap:6px">${cards}</div></div>`;
+    }).join('') : '<div class="empty">暂无 VIP 框架模板<br><span style="font-size:11px">请学科负责人先在「VIP框架」建立模板</span></div>';
+  }
+
+  mc.innerHTML = `<div class="page-section" style="max-width:900px">${header}${body}</div>`;
+}
+
+function renderSvPlansBody() {
+  if (!salesStudentPlans.length) return '<div class="empty">暂无已保存的学生方案<br><span style="font-size:11px">在「课程模板」里点选课程后，保存签约或发老师确认即会出现在这里</span></div>';
+  const stLabel = { signed: '已签约', pending: '待老师确认', confirmed: '老师已确认' };
+  const stColor = { signed: '#1a4a28', pending: '#8a6d3b', confirmed: '#1a3a6a' };
+  const stBg = { signed: '#ddf0e0', pending: '#faf0dc', confirmed: '#ddeaf8' };
+  return '<div style="display:flex;flex-direction:column;gap:8px">' + salesStudentPlans.map(p => {
+    const st = p.status || 'signed';
+    const linked = p.student_id ? '　·　已在籍' : '';
+    return `
+    <div style="border:1px solid var(--border);border-radius:5px;padding:11px 13px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div onclick="openSvPlan('${p.id}')" style="cursor:pointer;min-width:0;flex:1">
+        <div style="font-size:13px;font-weight:600">${tvEsc(p.student_name)}<span style="font-size:10px;color:var(--text-3);font-weight:400;margin-left:8px">${tvEsc(majorLabel(p.major))} · ${p.total_sessions || 0}回/${p.total_hours || 0}课时${linked}</span></div>
+        <div style="font-size:10px;color:var(--text-3);margin-top:2px">${tvEsc(p.framework_title || '')}${(p.assigned_teachers && p.assigned_teachers.length) ? '　·　老师：' + p.assigned_teachers.join('、') : ''}</div>
+      </div>
+      <span style="flex-shrink:0;font-size:10px;padding:2px 9px;border-radius:3px;background:${stBg[st]};color:${stColor[st]}">${stLabel[st] || st}</span>
+      <button onclick="svDeletePlan('${p.id}')" title="删除方案" style="flex-shrink:0;background:none;border:1px solid var(--border);border-radius:3px;color:var(--text-3);cursor:pointer;font-size:12px;width:26px;height:26px">×</button>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+// 查看已保存方案（只读预览 + 生成PDF）
+function openSvPlan(id) {
+  const p = salesStudentPlans.find(x => x.id === id);
+  if (!p) return;
+  const mc = document.getElementById('mainContent');
+  const items = Array.isArray(p.items) ? p.items : [];
+  // 按分类分组
+  const catMap = {};
+  items.forEach((it, i) => {
+    const k = it.category || 'other';
+    if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], min: i };
+    catMap[k].items.push(it);
+  });
+  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  const groupsHtml = groups.map(g => {
+    const col = VIP_CAT_COLOR[g.key] || { bg: '#eee', color: '#333' };
+    const rows = g.items.map(it => `<div style="border-top:1px solid #ede9e2;padding:7px 12px;display:grid;grid-template-columns:1fr 2fr 60px;gap:8px;font-size:11px"><div style="font-weight:500">${tvEsc(it.name)}</div><div style="color:#5a5650">${tvEsc(it.content)}</div><div style="text-align:right;color:#5a5650">${it.hours != null ? it.hours + 'H' : ''}</div></div>`).join('');
+    return `<div style="margin-bottom:14px"><div style="margin-bottom:6px"><span style="border-radius:3px;padding:2px 10px;font-size:11px;font-weight:500;background:${col.bg};color:${col.color}">${tvEsc(g.label)}</span></div><div style="background:#fff;border:1px solid #e2ded6;border-radius:4px;overflow:hidden">${rows}</div></div>`;
+  }).join('');
+  mc.innerHTML = `
+  <div style="max-width:1000px;margin:0 auto;background:#f7f5f0;border:1px solid #e2ded6;border-radius:6px;padding:16px 20px 20px;font-family:'DM Mono','Noto Serif SC',monospace">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px"><button onclick="svBackToPlans()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">← 返回</button><div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600;color:#1a1814">${tvEsc(p.student_name)} 的 VIP 方案</div></div>
+      <div style="font-size:12px;color:#5a5650">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时</div>
+    </div>
+    ${groupsHtml || '<div style="font-size:12px;color:#9a9590">此方案暂无课程</div>'}
   </div>`;
+}
+function svBackToPlans() { svTab = 'plans'; renderSvHome(document.getElementById('mainContent')); }
+
+async function svDeletePlan(id) {
+  const p = salesStudentPlans.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`确认删除「${p.student_name}」的 VIP 方案？此操作不可撤销。`)) return;
+  try {
+    await sb(`/rest/v1/vip_student_plans?id=eq.${id}`, 'DELETE');
+    salesStudentPlans = salesStudentPlans.filter(x => x.id !== id);
+    renderSvHome(document.getElementById('mainContent'));
+  } catch (e) { alert('删除失败：' + e.message); }
 }
 
 async function openSvFramework(id) {
@@ -370,12 +542,13 @@ function renderSvSelect(mc) {
     : '<span style="font-size:11px;color:#9a9590">尚未选择老师</span>';
   const sharePanel = svShareOpen ? `
     <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #e2ded6;border-radius:4px;background:#f7f5f0">
-      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:#1a1814">转分享给上课老师补充（可多位）</div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#1a1814">发给专业课老师确认（场景2）</div>
+      <div style="font-size:10px;color:#9a9590;margin-bottom:8px">需老师补充/确认内容时用。选好课程与学生姓名后，发给老师；老师确认后此方案生效。</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">${tagsHtml}</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <select id="sv_share_add" onchange="svAddShareTeacher(this.value);this.value=''" style="font-size:12px;min-width:150px"><option value="">＋ 添加老师…</option>${addOpts}</select>
-        <input id="sv_share_note" value="${tvEsc(fw.share_note || '')}" placeholder="给老师的提示（可选）" style="flex:1;min-width:200px;font-size:11px">
-        <button onclick="svShareToTeacher()" style="font-size:11px;background:#1a1814;color:#fff;border:none;border-radius:3px;padding:6px 14px;cursor:pointer;font-family:inherit;white-space:nowrap">分享给老师</button>
+        <input id="sv_share_note" value="" placeholder="给老师的提示（可选）" style="flex:1;min-width:200px;font-size:11px">
+        <button onclick="svSavePlan('pending')" style="font-size:11px;background:#1a1814;color:#fff;border:none;border-radius:3px;padding:6px 14px;cursor:pointer;font-family:inherit;white-space:nowrap">发给老师确认</button>
       </div>
     </div>` : '';
 
@@ -387,7 +560,7 @@ function renderSvSelect(mc) {
         <button onclick="backToSvList()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">← 返回</button>
         <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600;color:#1a1814">${tvEsc(fw.title)}</div>
       </div>
-      <button onclick="svToggleShare()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">转分享给老师 ${svShareOpen ? '▾' : '▸'}</button>
+      <button onclick="svToggleShare()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">发老师确认 ${svShareOpen ? '▾' : '▸'}</button>
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;border-bottom:1px solid #e2ded6;background:#fff;flex-wrap:wrap;position:sticky;top:0;z-index:10">
@@ -400,7 +573,8 @@ function renderSvSelect(mc) {
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="svClearSel()" style="font-size:11px;background:transparent;border:1px solid #e2ded6;border-radius:3px;padding:5px 14px;cursor:pointer;font-family:inherit;color:#9a9590">清空</button>
-        <button onclick="svGenerateReport()" style="font-size:11px;background:#1a1814;color:#f7f5f0;border:1px solid #1a1814;border-radius:3px;padding:5px 16px;cursor:pointer;font-family:inherit;font-weight:500">生成 PDF →</button>
+        <button onclick="svGenerateReport()" style="font-size:11px;background:#fff;border:1px solid #1a1814;border-radius:3px;padding:5px 14px;cursor:pointer;font-family:inherit;color:#1a1814">生成 PDF</button>
+        <button onclick="svSavePlan('signed')" style="font-size:11px;background:#1a1814;color:#f7f5f0;border:1px solid #1a1814;border-radius:3px;padding:5px 16px;cursor:pointer;font-family:inherit;font-weight:500">保存签约 →</button>
       </div>
     </div>
 
@@ -422,19 +596,41 @@ function backToSvList() { renderVipSalesPlanning(document.getElementById('mainCo
 function svAddShareTeacher(name) { if (!name || svShareTeachers.includes(name)) return; svShareTeachers.push(name); renderSvSelect(document.getElementById('mainContent')); }
 function svRemoveShareTeacher(name) { svShareTeachers = svShareTeachers.filter(n => n !== name); renderSvSelect(document.getElementById('mainContent')); }
 
-async function svShareToTeacher() {
-  const note = document.getElementById('sv_share_note').value.trim();
-  if (!svShareTeachers.length) { alert('请至少添加一位老师'); return; }
-  if (!confirm(`确认分享给：${svShareTeachers.join('、')}？`)) return;
+// 保存学生方案：status='signed'(场景1 直接签约) 或 'pending'(场景2 发老师确认)
+async function svSavePlan(status) {
+  const fw = salesVipFrameworks.find(f => f.id === svCurrentId);
+  if (!fw) return;
+  if (!svSel.size) { alert('请先点选课程'); return; }
+  const student = (document.getElementById('sv_student').value || '').trim();
+  if (!student) { alert('请填写学生姓名'); return; }
+  let teachers = [], note = '';
+  if (status === 'pending') {
+    teachers = [...svShareTeachers];
+    if (!teachers.length) { alert('发给老师确认需先添加至少一位老师'); return; }
+    const nEl = document.getElementById('sv_share_note'); note = nEl ? nEl.value.trim() : '';
+  }
+  const items = svItems.filter(it => svSel.has(it.id)).map(it => ({
+    category: it.category, category_label: it.category_label, name: it.name,
+    content: it.content, homework: it.homework, hours: svHoursOf(it),
+  }));
+  const c = svCalc();
+  const msg = status === 'signed'
+    ? `确认为「${student}」保存并签约此方案？\n${c.sessions} 回 · ${c.hours} 课时`
+    : `确认把「${student}」的方案发给 ${teachers.join('、')} 确认？`;
+  if (!confirm(msg)) return;
+  const rec = {
+    id: 'vsp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+    student_name: student, major: fw.major, framework_id: fw.id, framework_title: fw.title,
+    items, total_sessions: c.sessions, total_hours: c.hours,
+    status, assigned_teachers: teachers, note,
+    created_by: (typeof teacherName !== 'undefined' ? teacherName : ''),
+  };
   try {
-    await sb(`/rest/v1/vip_frameworks?id=eq.${svCurrentId}`, 'PATCH', {
-      assigned_teachers: svShareTeachers, assigned_teacher: svShareTeachers[0] || '', share_note: note, status: 'shared',
-    });
-    const fw = salesVipFrameworks.find(f => f.id === svCurrentId);
-    if (fw) { fw.assigned_teachers = [...svShareTeachers]; fw.share_note = note; fw.status = 'shared'; }
-    alert(`已分享给：${svShareTeachers.join('、')}`);
-    renderSvSelect(document.getElementById('mainContent'));
-  } catch (e) { alert('分享失败：' + e.message); }
+    await sb('/rest/v1/vip_student_plans', 'POST', [rec]);
+    alert(status === 'signed' ? `已保存并签约：${student}` : `已发给老师确认：${student}`);
+    svTab = 'plans';
+    renderVipSalesPlanning(document.getElementById('mainContent'));
+  } catch (e) { alert('保存失败：' + e.message); }
 }
 
 // ── 生成 PDF 报告（打印窗口，还原 VIP.html 报告样式）──
