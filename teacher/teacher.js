@@ -670,9 +670,11 @@ function renderSlotManagement(mc) {
         </div>
         <div id="ts_vip_content_panel" style="display:none;margin-top:8px">
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:10px;padding:7px 9px;border:1px solid var(--border);border-radius:4px;background:var(--bg)">
-            <input type="checkbox" id="ts_vip_exclusive" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            <input type="checkbox" id="ts_vip_exclusive" onchange="tsToggleExclusive(this)" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
             <span>仅限「只有VIP」的学生<span style="font-size:10px;color:var(--text-3)">（区别大课+VIP；勾选后此时间槽只对应纯VIP学生）</span></span>
           </label>
+          <div id="ts_vip_exclusive_note" style="display:none;font-size:11px;color:var(--text-3);padding:8px 10px;border:1px dashed var(--border);border-radius:4px;background:var(--bg)">上课内容将按该学生的 VIP 规划自动带出，预约后由老师修改确认，无需在此勾选。</div>
+          <div id="ts_vip_content_wrap">
           <label class="form-label">VIP内容（本次时间槽提供的指导内容，可多选）</label>
           <div style="display:flex;flex-wrap:wrap;gap:6px" id="ts_vip_content_group">
             ${(teacherData?.permissions?.vip_content||[]).length
@@ -680,6 +682,7 @@ function renderSlotManagement(mc) {
                   <input type="checkbox" value="${c}" style="accent-color:var(--accent);width:14px;height:14px">${c}
                 </label>`).join('')
               : '<div style="font-size:11px;color:var(--text-3)">尚未被分配可指导的VIP内容，请联系管理员设置</div>'}
+          </div>
           </div>
         </div>
         <div class="form-group" style="margin-bottom:0"><label class="form-label">专业</label>
@@ -746,6 +749,14 @@ function tsToggleVipPanel(checkbox) {
   const panel = document.getElementById('ts_vip_content_panel');
   if (panel) panel.style.display = checkbox.checked ? 'block' : 'none';
 }
+
+// 勾「仅VIP」时：隐藏 VIP内容勾选（内容跟随学生 VIP 规划），显示提示
+function tsToggleExclusive(checkbox) {
+  const wrap = document.getElementById('ts_vip_content_wrap');
+  const note = document.getElementById('ts_vip_exclusive_note');
+  if (wrap) wrap.style.display = checkbox.checked ? 'none' : 'block';
+  if (note) note.style.display = checkbox.checked ? 'block' : 'none';
+}
 function tsToggleWd(btn) {
   btn.classList.toggle('active');
   btn.style.background = btn.classList.contains('active') ? 'var(--accent)' : 'var(--bg)';
@@ -763,14 +774,14 @@ async function addTeacherSlot() {
   const end = document.getElementById('ts_end').value;
   const types = [...document.querySelectorAll('#ts_type_group input:checked')].map(c => c.value);
   if (!types.length) { alert('请至少选择一个类型'); return; }
+  const vipExclusive = types.includes('vip') && !!document.getElementById('ts_vip_exclusive')?.checked;
   let vipContent = [];
-  if (types.includes('vip')) {
+  if (types.includes('vip') && !vipExclusive) {
     vipContent = [...document.querySelectorAll('#ts_vip_content_group input:checked')].map(c => c.value);
     if (!vipContent.length) { alert('已选择VIP类型，请至少勾选一项本次提供的VIP指导内容'); return; }
   }
   const major = document.getElementById('ts_major')?.value || (teacherData?.majors?.[0] || '');
   const location = document.getElementById('ts_location')?.value || 'online';
-  const vipExclusive = types.includes('vip') && !!document.getElementById('ts_vip_exclusive')?.checked;
   if (!start || !end) { alert('请填写时间段'); return; }
   if (start >= end) { alert('结束时间需晚于开始时间'); return; }
   const timeRange = `${start}\u2013${end}`;
