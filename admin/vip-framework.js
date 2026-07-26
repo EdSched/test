@@ -7,6 +7,7 @@ let vfItems = [];             // 当前打开框架的条目（内存工作副�
 let vfCurrentId = null;       // 当前打开的框架 id
 let vfOriginalItemIds = new Set();  // 打开时的原始条目 id（用于保存时算删除）
 let vfOpenCats = {};          // 分类折叠状态
+let vfShareTeachers = [];     // 当前框架已选的分享老师（多选，内存副本）
 
 const VIP_STATUS_LABEL = { draft: '编辑中', shared: '待老师补充', done: '已完成' };
 const VIP_STATUS_COLOR = { draft: '#8a6d3b', shared: '#1a3a6a', done: '#1a4a28' };
@@ -27,7 +28,7 @@ function renderVipFrameworkPage(mc) {
     <div onclick="openVipFramework('${f.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:12px 14px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:12px;transition:border-color .12s" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
       <div style="min-width:0">
         <div style="font-size:13px;font-weight:600">${f.title || (majorLabel(f.major) + ' VIP框架')}</div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:2px">专业：${majorLabel(f.major)}${f.assigned_teacher ? '　·　分享给：' + f.assigned_teacher : ''}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:2px">专业：${majorLabel(f.major)}${(f.assigned_teachers && f.assigned_teachers.length) ? '　·　分享给：' + f.assigned_teachers.join('、') : (f.assigned_teacher ? '　·　分享给：' + f.assigned_teacher : '')}</div>
       </div>
       <span style="flex-shrink:0;font-size:10px;padding:2px 10px;border-radius:3px;background:${VIP_STATUS_BG[st]};color:${VIP_STATUS_COLOR[st]}">${VIP_STATUS_LABEL[st]}</span>
     </div>`;
@@ -83,6 +84,10 @@ async function openVipFramework(id) {
   vfItems = items;
   vfOriginalItemIds = new Set(items.map(i => i.id));
   vfOpenCats = {};
+  const fw = vfFrameworks.find(f => f.id === id);
+  vfShareTeachers = (fw && fw.assigned_teachers && fw.assigned_teachers.length)
+    ? [...fw.assigned_teachers]
+    : (fw && fw.assigned_teacher ? [fw.assigned_teacher] : []);
   renderVipFrameworkEditor(mc);
 }
 
@@ -123,9 +128,14 @@ function renderVipFrameworkEditor(mc) {
     </div>`;
   }).join('');
 
-  // 分享给老师：老师下拉（优先可做 VIP 的老师，其次全部）
+  // 分享给老师：多选（标签 + 下拉添加）
   const teachers = (typeof cachedTeachers !== 'undefined' ? cachedTeachers : []) || [];
-  const teacherOpts = teachers.map(t => `<option value="${vfEsc(t.name)}"${fw.assigned_teacher === t.name ? ' selected' : ''}>${vfEsc(t.name)}</option>`).join('');
+  const addOpts = teachers
+    .filter(t => !vfShareTeachers.includes(t.name))
+    .map(t => `<option value="${vfEsc(t.name)}">${vfEsc(t.name)}</option>`).join('');
+  const tagsHtml = vfShareTeachers.length
+    ? vfShareTeachers.map(n => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:2px 6px 2px 9px">${vfEsc(n)}<button onclick="vfRemoveShareTeacher('${vfEsc(n)}')" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:13px;line-height:1;padding:0">×</button></span>`).join('')
+    : '<span style="font-size:11px;color:var(--text-3)">尚未选择老师</span>';
 
   mc.innerHTML = `
   <div class="page-section" style="max-width:1000px">
@@ -145,13 +155,14 @@ function renderVipFrameworkEditor(mc) {
     <div style="display:flex;flex-direction:column;gap:10px">${groupsHtml}</div>
 
     <div style="margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:5px;background:var(--bg)">
-      <div style="font-size:12px;font-weight:600;margin-bottom:8px">分享给老师补充</div>
-      <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
-        <select id="vf_share_teacher" style="font-size:12px;min-width:140px"><option value="">选择老师…</option>${teacherOpts}</select>
-        <input id="vf_share_note" value="${vfEsc(fw.share_note || '')}" placeholder="给老师的提示（可选，如：请按你实际授课补充内容与作业）" style="flex:1;min-width:220px;font-size:11px">
-        <button class="btn btn-primary" onclick="shareVipToTeacher()" style="white-space:nowrap">分享给老师</button>
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px">分享给老师补充（可多位）</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px" id="vf_share_tags">${tagsHtml}</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="vf_share_add" onchange="vfAddShareTeacher(this.value);this.value=''" style="font-size:12px;min-width:150px"><option value="">＋ 添加老师…</option>${addOpts}</select>
+        <input id="vf_share_note" value="${vfEsc(fw.share_note || '')}" placeholder="给老师的提示（可选）" style="flex:1;min-width:200px;font-size:11px">
+        <button class="btn btn-primary" onclick="shareVipToTeacher()" style="white-space:nowrap">保存并分享</button>
       </div>
-      <div style="font-size:10px;color:var(--text-3);margin-top:6px">分享后状态变为「待老师补充」，老师在其页面可看到并填写；老师提交后变「已完成」。</div>
+      <div style="font-size:10px;color:var(--text-3);margin-top:6px">分享后状态变为「待老师补充」，所选老师在各自页面都能看到并填写；任一老师提交后变「已完成」。</div>
     </div>
   </div>`;
 }
@@ -222,18 +233,28 @@ async function saveVipFramework() {
   }
 }
 
+function vfAddShareTeacher(name) {
+  if (!name || vfShareTeachers.includes(name)) return;
+  vfShareTeachers.push(name);
+  renderVipFrameworkEditor(document.getElementById('mainContent'));
+}
+function vfRemoveShareTeacher(name) {
+  vfShareTeachers = vfShareTeachers.filter(n => n !== name);
+  renderVipFrameworkEditor(document.getElementById('mainContent'));
+}
+
 async function shareVipToTeacher() {
-  const teacher = document.getElementById('vf_share_teacher').value;
   const note = document.getElementById('vf_share_note').value.trim();
-  if (!teacher) { alert('请选择要分享给的老师'); return; }
-  if (!confirm(`确认将本框架分享给「${teacher}」补充内容？\n分享前请先「保存框架」，否则未保存的修改不会带过去。`)) return;
+  if (!vfShareTeachers.length) { alert('请至少添加一位老师'); return; }
+  if (!confirm(`确认分享给：${vfShareTeachers.join('、')}？\n分享前请先「保存框架」，否则未保存的内容修改不会带过去。`)) return;
   try {
     await sb(`/rest/v1/vip_frameworks?id=eq.${vfCurrentId}`, 'PATCH', {
-      assigned_teacher: teacher, share_note: note, status: 'shared',
+      assigned_teachers: vfShareTeachers, assigned_teacher: vfShareTeachers[0] || '',
+      share_note: note, status: 'shared',
     });
     const fw = vfFrameworks.find(f => f.id === vfCurrentId);
-    if (fw) { fw.assigned_teacher = teacher; fw.share_note = note; fw.status = 'shared'; }
-    alert(`已分享给 ${teacher}`);
+    if (fw) { fw.assigned_teachers = [...vfShareTeachers]; fw.assigned_teacher = vfShareTeachers[0] || ''; fw.share_note = note; fw.status = 'shared'; }
+    alert(`已分享给：${vfShareTeachers.join('、')}`);
     renderVipFrameworkEditor(document.getElementById('mainContent'));
   } catch (e) {
     alert('分享失败：' + e.message);
