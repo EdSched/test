@@ -1105,32 +1105,67 @@ function shiftMyCalMonth(delta) {
 // ── VIP 上课记录填写 ──
 const VIP_CONTENT_OPTIONS = ['专业课指导', '过去问对策', '研究计划书', '出愿指导', '面试对策', 'TA指导'];
 
-function openVipSessionRecord(bookingId) {
+let vipRecordPlanItems = [];  // 当前打开记录的学生 VIP 规划课程
+function vipRecEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+async function openVipSessionRecord(bookingId) {
   const b = cachedTeacherBookings.find(x => x.id === bookingId);
   if (!b) return;
   const slot = cachedTeacherSlots.find(x => x.id === b.slot_id);
+  // 查该学生的 VIP 规划（签约/已确认），把规划课程带出来供点选
+  vipRecordPlanItems = [];
+  try {
+    const plans = await sb(`/rest/v1/vip_student_plans?student_name=eq.${encodeURIComponent(b.name)}&status=in.("signed","confirmed")&select=*&order=created_at.desc`);
+    if (plans && plans.length && Array.isArray(plans[0].items)) vipRecordPlanItems = plans[0].items;
+  } catch (e) {}
+  const hasPlan = vipRecordPlanItems.length > 0;
   const availableContent = slot?.vip_content || VIP_CONTENT_OPTIONS;
-  const existing = document.getElementById('vipRecordModal');
-  if (existing) existing.remove();
-  const modal = document.createElement('div');
-  modal.id = 'vipRecordModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-  modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:6px;padding:20px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto">
-      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${b.name} 的VIP上课记录</div>
-      <div style="font-size:11px;color:var(--text-3);margin-bottom:14px">${b.slot_date} ${b.slot_time_range || ''}</div>
+
+  let contentSection;
+  if (hasPlan) {
+    const offReason = b.vip_offplan_reason || '';
+    const isOff = !!offReason && !(b.vip_content && vipRecordPlanItems.some(it => it.name === b.vip_content));
+    contentSection = `
+      <div class="form-group"><label class="form-label">本次授课内容（来自该学生 VIP 规划，点选本次所上）</label>
+        <div id="vip_plan_pick" style="display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:6px">
+          ${vipRecordPlanItems.map((it, i) => `<label style="display:flex;align-items:flex-start;gap:6px;font-size:11px;cursor:pointer;padding:5px 6px;border-radius:3px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
+            <input type="radio" name="vipPlanPick" value="${i}" ${b.vip_content === it.name ? 'checked' : ''} onchange="vipPickPlanItem(${i})" style="margin-top:2px;accent-color:var(--accent);flex-shrink:0">
+            <span><span style="font-weight:600">${vipRecEsc(it.category_label ? it.category_label + '·' : '')}${vipRecEsc(it.name)}</span>${it.content ? `<br><span style="color:var(--text-3)">${vipRecEsc(it.content)}</span>` : ''}${(it.hours != null) ? ` <span style="color:var(--text-3)">(${it.hours}H)</span>` : ''}</span>
+          </label>`).join('')}
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;margin-top:8px;color:var(--danger,#a33)">
+          <input type="checkbox" id="vip_offplan" ${isOff ? 'checked' : ''} onchange="vipToggleOffplan(this)" style="accent-color:var(--accent)">未按规划上课（手动输入内容）
+        </label>
+        <div id="vip_offplan_wrap" style="display:${isOff ? 'block' : 'none'};margin-top:6px">
+          <textarea id="vip_offplan_reason" rows="2" placeholder="请填写未按课程规划上课的理由…" style="font-size:11px;width:100%">${vipRecEsc(offReason)}</textarea>
+        </div>
+      </div>`;
+  } else {
+    contentSection = `
       <div class="form-group"><label class="form-label">本次实际授课内容（可多选）</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px" id="vip_content_select">
           ${availableContent.map(c => `<label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;border:1px solid var(--border);border-radius:3px;padding:4px 10px">
             <input type="checkbox" value="${c}" ${b.vip_content && b.vip_content.includes(c) ? 'checked' : ''} style="accent-color:var(--accent);width:14px;height:14px">${c}
           </label>`).join('')}
         </div>
-      </div>
+      </div>`;
+  }
+
+  const existing = document.getElementById('vipRecordModal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'vipRecordModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:6px;padding:20px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${b.name} 的VIP上课记录</div>
+      <div style="font-size:11px;color:var(--text-3);margin-bottom:14px">${b.slot_date} ${b.slot_time_range || ''}${hasPlan ? '　·　已关联 VIP 规划' : ''}</div>
+      ${contentSection}
       <div class="form-group"><label class="form-label">上课内容 / 学生状态</label>
-        <textarea id="vip_notes" rows="4" placeholder="本次课讲了什么、学生当前状态如何…">${b.vip_session_notes || ''}</textarea>
+        <textarea id="vip_notes" rows="4" placeholder="本次课讲了什么、学生当前状态如何…">${vipRecEsc(b.vip_session_notes || '')}</textarea>
       </div>
       <div class="form-group"><label class="form-label">布置作业（学生将在VIP页面看到并提交）</label>
-        <textarea id="vip_homework" rows="3" placeholder="下节课前请完成…">${b.vip_homework || ''}</textarea>
+        <textarea id="vip_homework" rows="3" placeholder="下节课前请完成…">${vipRecEsc(b.vip_homework || '')}</textarea>
       </div>
       <div class="form-group"><label class="form-label">本次耗时（小时，保存后将自动从学生VIP总课时中扣除）</label>
         <input type="number" id="vip_hours" step="0.5" min="0" value="${b.vip_hours_used || ''}" placeholder="例：1.5"></div>
@@ -1140,7 +1175,7 @@ function openVipSessionRecord(bookingId) {
         <a href="${b.vip_homework_file_url}" target="_blank" style="font-size:12px;color:var(--accent)">下载学生提交文件</a>
         <div style="margin-top:8px">
           <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">批改反馈（文字）</div>
-          <textarea id="vip_hw_feedback" rows="2" placeholder="批改意见…">${b.vip_homework_feedback || ''}</textarea>
+          <textarea id="vip_hw_feedback" rows="2" placeholder="批改意见…">${vipRecEsc(b.vip_homework_feedback || '')}</textarea>
           <div style="font-size:11px;color:var(--text-3);margin:6px 0 4px">上传批改文件（可选）</div>
           <input type="file" id="vip_hw_feedback_file" accept=".doc,.docx,.pdf,image/*" style="font-size:11px">
         </div>
@@ -1153,13 +1188,44 @@ function openVipSessionRecord(bookingId) {
   document.body.appendChild(modal);
 }
 
+// 点选规划课程 → 把内容带入备注（老师可再改）
+function vipPickPlanItem(i) {
+  const it = vipRecordPlanItems[i];
+  if (!it) return;
+  const off = document.getElementById('vip_offplan');
+  if (off && off.checked) { off.checked = false; vipToggleOffplan(off); }
+  const notes = document.getElementById('vip_notes');
+  if (notes && !notes.value.trim() && it.content) notes.value = it.content;
+}
+// 切换"未按规划"：显示理由框，并清除规划课程选择
+function vipToggleOffplan(cb) {
+  const wrap = document.getElementById('vip_offplan_wrap');
+  if (wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+  if (cb.checked) { document.querySelectorAll('#vip_plan_pick input:checked').forEach(r => r.checked = false); }
+}
+
 async function saveVipSessionRecord(bookingId) {
   const b = cachedTeacherBookings.find(x => x.id === bookingId);
   if (!b) return;
-  const content = [...document.querySelectorAll('#vip_content_select input:checked')].map(c => c.value);
+  let content = '', offplanReason = '';
+  if (document.getElementById('vip_plan_pick')) {
+    // 规划模式：点选规划课程 或 未按规划(手动+理由)
+    const off = document.getElementById('vip_offplan')?.checked;
+    if (off) {
+      offplanReason = (document.getElementById('vip_offplan_reason')?.value || '').trim();
+      if (!offplanReason) { alert('未按规划上课，请填写理由'); return; }
+      content = '';
+    } else {
+      const pick = document.querySelector('#vip_plan_pick input:checked');
+      if (!pick) { alert('请点选本次所上的规划课程，或勾选「未按规划上课」'); return; }
+      content = vipRecordPlanItems[parseInt(pick.value)]?.name || '';
+    }
+  } else {
+    content = [...document.querySelectorAll('#vip_content_select input:checked')].map(c => c.value).join('・');
+    if (!content) { alert('请至少勾选一项本次授课内容'); return; }
+  }
   const notes = document.getElementById('vip_notes').value.trim();
   const newHours = parseFloat(document.getElementById('vip_hours').value) || 0;
-  if (!content.length) { alert('请至少勾选一项本次授课内容'); return; }
   if (!notes) { alert('请填写上课内容/学生状态/作业安排'); return; }
   if (newHours <= 0) { alert('请填写本次耗时'); return; }
 
@@ -1186,7 +1252,8 @@ async function saveVipSessionRecord(bookingId) {
     }
 
     await sb(`/rest/v1/bookings?id=eq.${bookingId}`, 'PATCH', {
-      vip_content: content.join('・'),
+      vip_content: content,
+      vip_offplan_reason: offplanReason || null,
       vip_session_notes: notes,
       vip_hours_used: newHours,
       vip_homework: homework,
@@ -1195,7 +1262,7 @@ async function saveVipSessionRecord(bookingId) {
       student_confirmed: false,
       status: 'completed',
     });
-    Object.assign(b, { vip_content: content.join('・'), vip_session_notes: notes, vip_hours_used: newHours, vip_homework: homework, vip_homework_feedback: hwFeedback, vip_homework_feedback_file_url: hwFeedbackFileUrl, student_confirmed: false, status: 'completed' });
+    Object.assign(b, { vip_content: content, vip_offplan_reason: offplanReason || null, vip_session_notes: notes, vip_hours_used: newHours, vip_homework: homework, vip_homework_feedback: hwFeedback, vip_homework_feedback_file_url: hwFeedbackFileUrl, student_confirmed: false, status: 'completed' });
     document.getElementById('vipRecordModal').remove();
     renderMySchedule(document.getElementById('mainContent'));
     alert('上课记录已保存，课时已扣除。建议点击「生成确认链接文案」发给学生确认。');
