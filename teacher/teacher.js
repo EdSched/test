@@ -86,6 +86,7 @@ async function init() {
     // 主容器统一加宽：所有功能页至少两列宽
     const mainWideEl = document.querySelector('.main');
     if (mainWideEl) mainWideEl.style.maxWidth = '1400px';
+    if (typeof loadTeacherVipFrameworks === 'function') await loadTeacherVipFrameworks();
     buildTabs();
     checkTeacherProfile();
     switchTab('todo');
@@ -111,6 +112,7 @@ function buildTabs() {
   if (p.lect_info) tabs.push({ id: 'lectinfo', label: '👤 讲师信息' });
   // 我的课表：有排班权限或有实际排到课才显示
   if (p.schedule || slots.length) tabs.push({ id: 'mycourses', label: '📚 我的课表' });
+  if (typeof teacherVipFrameworks !== 'undefined' && teacherVipFrameworks.length) tabs.push({ id: 'vipframework', label: '⭐ VIP框架' });
   // 工作记录：有实际教学相关权限才显示
   if (p.booking || p.slots || p.schedule || p.homework || slots.length) tabs.push({ id: 'workrecords', label: '📋 工作记录' });
   const tabBar = document.getElementById('tabBar');
@@ -142,6 +144,7 @@ function renderTab() {
     case 'lectinfo': renderLectInfo(mc); break;
     case 'studyprogress': renderTeacherStudyProgress(mc); break;
     case 'mycourses': renderMySchedule(mc); break;
+    case 'vipframework': renderTeacherVipFrameworks(mc); break;
     case 'workrecords': renderWorkRecordsTeacher(mc); break;
   }
 }
