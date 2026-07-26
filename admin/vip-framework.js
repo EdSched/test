@@ -304,3 +304,151 @@ async function deleteVipFramework() {
 function vfEsc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+
+// ════════════════════════════════════════════════════════════════
+// 学生档案里直接为学生建 VIP 方案（admin 数据中心）
+// 选模板 → 勾课程/设课时 → 保存，方案直接绑定该学生 + 关联其 VIP 指导老师
+// ════════════════════════════════════════════════════════════════
+let spbFrameworks = [];
+let spbItems = [];
+let spbSel = new Set();
+let spbHrs = {};
+let spbSubjectHours = 0;
+let spbCtx = { sid: '', name: '', major: '' };
+const SPB_SUBJECT_CATS = ['base', 'adv', 'method', 'ext'];
+const SPB_HOURS_OPTS = [0.5, 1, 2, 3, 4];
+
+async function openStudentPlanBuilder() {
+  const sid = document.getElementById('studentId')?.value;
+  const name = (document.getElementById('st_name')?.value || '').trim();
+  const major = document.getElementById('st_major')?.value || '';
+  if (!sid) { alert('请先保存学生，再为其添加 VIP 方案'); return; }
+  if (!name) { alert('请先填写学生姓名'); return; }
+  spbCtx = { sid, name, major };
+  spbItems = []; spbSel = new Set(); spbHrs = {}; spbSubjectHours = 0;
+  // 载入框架：优先该专业，没有则全部
+  let fws = await sb(`/rest/v1/vip_frameworks?major=eq.${encodeURIComponent(major)}&select=*&order=created_at.desc`).catch(() => []);
+  if (!fws.length) fws = await sb('/rest/v1/vip_frameworks?select=*&order=major.asc,created_at.desc').catch(() => []);
+  spbFrameworks = fws;
+  renderSpbModal();
+  if (fws.length) spbSelectFramework(fws[0].id);
+}
+
+function renderSpbModal() {
+  const existing = document.getElementById('spbModal');
+  if (existing) existing.remove();
+  const fwOpts = spbFrameworks.map(f => `<option value="${f.id}">${vfEsc(f.title || majorLabel(f.major))}</option>`).join('');
+  const m = document.createElement('div');
+  m.id = 'spbModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML = `
+    <div style="background:var(--surface);border-radius:6px;padding:18px;max-width:720px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:600">为「${vfEsc(spbCtx.name)}」添加 VIP 方案</div>
+        <button onclick="document.getElementById('spbModal').remove()" style="background:none;border:1px solid var(--border);border-radius:3px;padding:3px 10px;cursor:pointer;font-size:12px">关闭</button>
+      </div>
+      ${spbFrameworks.length ? `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <span style="font-size:11px;color:var(--text-3)">选择模板</span>
+        <select id="spb_fw" onchange="spbSelectFramework(this.value)" style="font-size:12px">${fwOpts}</select>
+        <span style="font-size:11px;color:var(--text-3)">专业知识总课时</span>
+        <input type="number" id="spb_subject_hours" step="0.5" min="0" value="" placeholder="0" onchange="spbSetSubjectHours(this.value)" style="width:64px;font-size:12px;text-align:center">
+        <span id="spb_totals" style="font-size:12px;color:var(--text-2);margin-left:auto">0 回 · 0 课时</span>
+      </div>
+      <div id="spb_body" style="max-height:52vh;overflow-y:auto"><div style="color:var(--text-3);font-size:12px">加载中…</div></div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button onclick="document.getElementById('spbModal').remove()" style="font-size:12px;background:none;border:1px solid var(--border);border-radius:3px;padding:6px 14px;cursor:pointer">取消</button>
+        <button onclick="spbSavePlan()" style="font-size:12px;background:var(--accent,#1a1814);color:#fff;border:none;border-radius:3px;padding:6px 16px;cursor:pointer;font-weight:500">保存方案并绑定该学生</button>
+      </div>` : '<div style="font-size:12px;color:var(--text-3);padding:20px 0">暂无可用框架模板，请先在「VIP框架」建立模板。</div>'}
+    </div>`;
+  document.body.appendChild(m);
+}
+
+async function spbSelectFramework(fwId) {
+  spbItems = await sb(`/rest/v1/vip_framework_items?framework_id=eq.${fwId}&select=*&order=sort_order.asc`).catch(() => []);
+  spbSel = new Set(); spbHrs = {};
+  renderSpbBody();
+}
+
+function spbHoursOf(it) {
+  if (SPB_SUBJECT_CATS.includes(it.category) || it.category === 'ta') return it.default_hours != null ? it.default_hours : 2;
+  return spbHrs[it.id] != null ? spbHrs[it.id] : (it.default_hours != null ? it.default_hours : 2);
+}
+function spbCalc() {
+  let sessions = 0, hours = 0;
+  spbItems.forEach(it => {
+    if (!spbSel.has(it.id)) return;
+    const isSub = SPB_SUBJECT_CATS.includes(it.category);
+    if (isSub && spbSubjectHours > 0) return;
+    const h = spbHoursOf(it);
+    hours += h;
+    if (isSub) sessions += h / 2; else if (it.category === 'ta') sessions += 0; else sessions += 1;
+  });
+  if (spbSubjectHours > 0) { hours += spbSubjectHours; sessions += spbSubjectHours / 2; }
+  return { sessions: +sessions.toFixed(1), hours: +hours.toFixed(1) };
+}
+function spbUpdateTotals() { const c = spbCalc(); const el = document.getElementById('spb_totals'); if (el) el.textContent = `${c.sessions} 回 · ${c.hours} 课时`; }
+
+function renderSpbBody() {
+  const body = document.getElementById('spb_body');
+  if (!body) return;
+  if (!spbItems.length) { body.innerHTML = '<div style="color:var(--text-3);font-size:12px">该模板暂无课程</div>'; spbUpdateTotals(); return; }
+  const catMap = {};
+  spbItems.forEach(it => {
+    const k = it.category || 'other';
+    if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], min: it.sort_order || 0 };
+    catMap[k].items.push(it); catMap[k].min = Math.min(catMap[k].min, it.sort_order || 0);
+  });
+  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  body.innerHTML = groups.map(g => {
+    const col = VF_CAT_COLOR[g.key] || { bg: '#eee', color: '#333' };
+    const rows = g.items.map(it => {
+      const sel = spbSel.has(it.id);
+      const editable = !SPB_SUBJECT_CATS.includes(it.category) && it.category !== 'ta';
+      const h = spbHoursOf(it);
+      const hCtl = editable
+        ? `<select onclick="event.stopPropagation()" onchange="spbSetHours('${it.id}',this.value)" ${sel ? '' : 'disabled'} style="font-size:11px;width:54px;text-align:center">${SPB_HOURS_OPTS.map(o => `<option value="${o}"${o === h ? ' selected' : ''}>${o}H</option>`).join('')}</select>`
+        : `<span style="font-size:11px;font-weight:500">${h}H</span>`;
+      return `<div onclick="spbToggle('${it.id}')" style="display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:8px;padding:6px 8px;border-top:1px solid var(--border-light);cursor:pointer;background:${sel ? 'var(--bg)' : 'transparent'}">
+        <div style="display:flex;justify-content:center"><div style="width:13px;height:13px;border:1px solid ${sel ? 'var(--accent,#1a1814)' : 'var(--border)'};border-radius:2px;background:${sel ? 'var(--accent,#1a1814)' : 'transparent'};color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center">${sel ? '✓' : ''}</div></div>
+        <div style="min-width:0"><div style="font-size:11px;font-weight:500">${vfEsc(it.name)}</div><div style="font-size:10px;color:var(--text-3)">${vfEsc(it.content) || ''}</div></div>
+        <div style="text-align:right">${hCtl}</div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:12px"><div style="margin-bottom:4px"><span style="border-radius:3px;padding:2px 9px;font-size:11px;font-weight:500;background:${col.bg};color:${col.color}">${vfEsc(g.label)}</span></div><div style="border:1px solid var(--border);border-radius:4px;overflow:hidden">${rows}</div></div>`;
+  }).join('');
+  spbUpdateTotals();
+}
+
+function spbToggle(id) { if (spbSel.has(id)) spbSel.delete(id); else spbSel.add(id); renderSpbBody(); }
+function spbSetHours(id, v) { spbHrs[id] = parseFloat(v); spbUpdateTotals(); }
+function spbSetSubjectHours(v) { spbSubjectHours = parseFloat(v) || 0; renderSpbBody(); }
+
+async function spbSavePlan() {
+  if (!spbSel.size && !(spbSubjectHours > 0)) { alert('请至少点选一门课程，或设置专业知识总课时'); return; }
+  const fwId = document.getElementById('spb_fw').value;
+  const fw = spbFrameworks.find(f => f.id === fwId);
+  const items = spbItems.filter(it => spbSel.has(it.id)).map(it => ({
+    category: it.category, category_label: it.category_label, name: it.name,
+    content: it.content, homework: it.homework, hours: spbHoursOf(it),
+  }));
+  const c = spbCalc();
+  // 关联该学生当前的 VIP 指导老师（students.js 的 vipTeacherTags）
+  const teachers = (typeof vipTeacherTags !== 'undefined' && Array.isArray(vipTeacherTags)) ? [...vipTeacherTags] : [];
+  const rec = {
+    id: 'vsp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+    student_name: spbCtx.name, student_id: spbCtx.sid, major: spbCtx.major || (fw ? fw.major : ''),
+    framework_id: fwId, framework_title: fw ? fw.title : '',
+    items, total_sessions: c.sessions, total_hours: c.hours, subject_hours: spbSubjectHours || 0,
+    status: 'confirmed', assigned_teachers: teachers, created_by: 'admin',
+  };
+  try {
+    await sb('/rest/v1/vip_student_plans', 'POST', [rec]);
+    document.getElementById('spbModal').remove();
+    // 刷新学生弹窗里的方案区
+    const s = (typeof cachedStudents !== 'undefined') ? cachedStudents.find(x => x.id === spbCtx.sid) : null;
+    if (typeof renderStudentVipPlans === 'function') renderStudentVipPlans(s || { id: spbCtx.sid, name: spbCtx.name });
+    alert(`已为「${spbCtx.name}」创建 VIP 方案（${c.sessions}回/${c.hours}课时）并绑定。`);
+  } catch (e) { alert('保存失败：' + e.message); }
+}
