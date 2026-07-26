@@ -1429,7 +1429,8 @@ async function confirmCopyPeriod(){
     closeModal('copyPeriodModal');
     renderCoursesPage(document.getElementById('mainContent'));
     alert(`已复制到${newPeriod}，生成 ${sessions.length} 次课`);
-  }catch(e){alert('操作失败：'+e.message);btn.textContent='复制并生成';btn.disabled=false}
+  }catch(e){alert('操作失败：'+e.message)}
+  finally{btn.textContent='复制并生成';btn.disabled=false}
 }
 
 // ── 休讲调整（标记休讲 + 内容顺延 + 末尾补课）──
