@@ -108,8 +108,12 @@ async function loadVipData() {
     sb(`/rest/v1/slots?teacher_name=in.(${teacherFilter})&type=cs.{vip}&date=gte.${today}&or=(locked.is.null,locked.is.false)&select=*&order=date.asc,time_range.asc`).catch(() => []),
     sb(`/rest/v1/bookings?name=eq.${encodeURIComponent(vipStudent.name)}&type=eq.vip&select=*&order=slot_date.desc`).catch(() => [])
   ]);
-  // 「仅VIP」时间槽只对纯VIP学生（is_vip_course==='VIP'）开放；大课+VIP 学生看不到
-  vipSlots = slots.filter(s => !(s.vip_exclusive && vipStudent.is_vip_course !== 'VIP'));
+  // VIP 时间槽按学生类型两向区分：
+  //   「仅VIP」槽 → 只给纯VIP学生（is_vip_course==='VIP'）
+  //   普通VIP槽   → 只给大课+VIP学生（is_vip_course==='大课+VIP'）
+  vipSlots = slots.filter(s => s.vip_exclusive
+    ? vipStudent.is_vip_course === 'VIP'
+    : vipStudent.is_vip_course === '大课+VIP');
   vipBookings = bookings;
 }
 
