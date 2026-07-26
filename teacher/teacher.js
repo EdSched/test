@@ -112,7 +112,7 @@ function buildTabs() {
   if (p.lect_info) tabs.push({ id: 'lectinfo', label: '👤 讲师信息' });
   // 我的课表：有排班权限或有实际排到课才显示
   if (p.schedule || slots.length) tabs.push({ id: 'mycourses', label: '📚 我的课表' });
-  if (typeof teacherVipFrameworks !== 'undefined' && teacherVipFrameworks.length) tabs.push({ id: 'vipframework', label: '⭐ VIP框架' });
+  if ((typeof teacherVipFrameworks !== 'undefined' && teacherVipFrameworks.length) || (typeof teacherVipPlans !== 'undefined' && teacherVipPlans.length)) tabs.push({ id: 'vipframework', label: '⭐ VIP框架' });
   if (p.vip_sales) tabs.push({ id: 'vipsales', label: '🗂 VIP规划' });
   // 工作记录：有实际教学相关权限才显示
   if (p.booking || p.slots || p.schedule || p.homework || slots.length) tabs.push({ id: 'workrecords', label: '📋 工作记录' });
