@@ -293,7 +293,8 @@ function renderTvPlanEditor(mc) {
       <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">${tvEsc(p.student_name)} 的 VIP 方案</div>
       <span style="font-size:11px;color:var(--text-3)">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时</span>
     </div>
-    ${p.note ? `<div style="font-size:11px;color:var(--text-2);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-bottom:14px">📌 营业提示：${tvEsc(p.note)}</div>` : '<div style="margin-bottom:14px"></div>'}
+    ${p.note ? `<div style="font-size:11px;color:var(--text-2);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-bottom:8px">📌 营业提示：${tvEsc(p.note)}</div>` : ''}
+    ${(p.subject_hours && p.subject_hours > 0) ? `<div style="font-size:12px;color:#5a3010;background:#faf0dc;border:1px solid #e8d9b8;border-radius:4px;padding:8px 12px;margin-bottom:14px;font-weight:500">📚 专业知识要求总课时：${p.subject_hours} 课时　<span style="font-size:10px;font-weight:400;color:#8a6d3b">请按此小时数安排专业课（基础/备考/方法论/拓展）</span></div>` : '<div style="margin-bottom:14px"></div>'}
     ${groupsHtml}
     <div style="font-size:11px;color:var(--text-3);margin-top:10px">可直接修改每节课内容/作业/课时，改完点「确认方案」，方案即生效。</div>
   </div>`;
@@ -330,6 +331,7 @@ let svItems = [];
 let svShareTeachers = [];
 let svSel = new Set();          // 已选条目 id
 let svHrs = {};                 // 条目 id → 自定义课时（仅可调课时的分类）
+let svSubjectHours = 0;         // 专业知识四部分总课时（老师按此安排）
 let svShareOpen = false;
 let svTab = 'templates';        // 营业子视图：templates(课程模板) / plans(学生方案)
 let salesStudentPlans = [];     // 已保存的学生方案
@@ -448,7 +450,7 @@ function openSvPlan(id) {
   <div style="max-width:1000px;margin:0 auto;background:#f7f5f0;border:1px solid #e2ded6;border-radius:6px;padding:16px 20px 20px;font-family:'DM Mono','Noto Serif SC',monospace">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:12px"><button onclick="svBackToPlans()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">← 返回</button><div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600;color:#1a1814">${tvEsc(p.student_name)} 的 VIP 方案</div></div>
-      <div style="font-size:12px;color:#5a5650">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时</div>
+      <div style="font-size:12px;color:#5a5650">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时${(p.subject_hours && p.subject_hours > 0) ? '　·　专业知识 ' + p.subject_hours + ' 课时' : ''}</div>
     </div>
     ${groupsHtml || '<div style="font-size:12px;color:#9a9590">此方案暂无课程</div>'}
   </div>`;
@@ -473,7 +475,7 @@ async function openSvFramework(id) {
   svItems = await sb(`/rest/v1/vip_framework_items?framework_id=eq.${id}&select=*&order=sort_order.asc`).catch(() => []);
   const fw = salesVipFrameworks.find(f => f.id === id);
   svShareTeachers = (fw && fw.assigned_teachers && fw.assigned_teachers.length) ? [...fw.assigned_teachers] : [];
-  svSel = new Set(); svHrs = {}; svShareOpen = false;
+  svSel = new Set(); svHrs = {}; svSubjectHours = 0; svShareOpen = false;
   renderSvSelect(mc);
 }
 
@@ -485,13 +487,20 @@ function svCalc() {
   let sessions = 0, hours = 0;
   svItems.forEach(it => {
     if (!svSel.has(it.id)) return;
+    const isSubject = VIP_SUBJECT_CATS.includes(it.category);
+    if (isSubject && svSubjectHours > 0) return; // 专业知识由总课时统一计，避免重复
     const h = svHoursOf(it);
     hours += h;
-    if (VIP_SUBJECT_CATS.includes(it.category)) sessions += h / 2;
+    if (isSubject) sessions += h / 2;
     else if (it.category === 'ta') sessions += 0;
     else sessions += 1;
   });
+  if (svSubjectHours > 0) { hours += svSubjectHours; sessions += svSubjectHours / 2; }
   return { sessions: +sessions.toFixed(1), hours: +hours.toFixed(1) };
+}
+function svSetSubjectHours(v) {
+  svSubjectHours = parseFloat(v) || 0;
+  renderSvSelect(document.getElementById('mainContent'));
 }
 
 function renderSvSelect(mc) {
@@ -593,6 +602,13 @@ function renderSvSelect(mc) {
       </div>
     </div>
 
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 20px;border-bottom:1px solid #e2ded6;background:#fbf7ee;flex-wrap:wrap">
+      <span style="font-size:11px;color:#5a5650;font-weight:500">专业知识总课时</span>
+      <span style="font-size:10px;color:#9a9590">（基础知识+备考强化+基础方法论+拓展方法论，老师按此小时数安排具体课程）</span>
+      <input type="number" step="0.5" min="0" value="${svSubjectHours || ''}" onchange="svSetSubjectHours(this.value)" placeholder="0" style="font-family:'DM Mono',monospace;font-size:12px;border:1px solid #e2ded6;border-radius:3px;padding:2px 8px;background:#fff;color:#1a1814;outline:none;width:70px;text-align:center">
+      <span style="font-size:11px;color:#5a5650">课时</span>
+    </div>
+
     <div style="padding:16px 20px">
       ${sharePanel}
       ${groupsHtml}
@@ -653,7 +669,7 @@ async function svSavePlan(status) {
   const rec = {
     id: 'vsp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
     student_name: student, major: fw.major, framework_id: fw.id, framework_title: fw.title,
-    items, total_sessions: c.sessions, total_hours: c.hours,
+    items, total_sessions: c.sessions, total_hours: c.hours, subject_hours: svSubjectHours || 0,
     status, assigned_teachers: teachers, note,
     created_by: (typeof teacherName !== 'undefined' ? teacherName : ''),
   };
