@@ -669,6 +669,10 @@ function renderSlotManagement(mc) {
           </div>
         </div>
         <div id="ts_vip_content_panel" style="display:none;margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:10px;padding:7px 9px;border:1px solid var(--border);border-radius:4px;background:var(--bg)">
+            <input type="checkbox" id="ts_vip_exclusive" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+            <span>仅限「只有VIP」的学生<span style="font-size:10px;color:var(--text-3)">（区别大课+VIP；勾选后此时间槽只对应纯VIP学生）</span></span>
+          </label>
           <label class="form-label">VIP内容（本次时间槽提供的指导内容，可多选）</label>
           <div style="display:flex;flex-wrap:wrap;gap:6px" id="ts_vip_content_group">
             ${(teacherData?.permissions?.vip_content||[]).length
@@ -717,6 +721,7 @@ function renderSlotManagement(mc) {
                 <span style="color:${dowColor}">${dow}</span>
                 <span style="color:var(--text-3)">${s.time_range}</span>
                 ${locationShort(s.location)?`<span style="font-size:10px;color:${locationColor(s.location)}">${locationShort(s.location)}</span>`:''}
+                ${s.vip_exclusive?`<span style="font-size:9px;background:#5a3a9a;color:#fff;border-radius:2px;padding:1px 6px">仅VIP</span>`:''}
                 ${(s.vip_content&&s.vip_content.length)?`<span style="font-size:10px;color:var(--text-3)">[${s.vip_content.join('・')}]</span>`:''}
                 <span style="color:${isLocked?'var(--danger)':booked>=cap?'var(--danger)':'var(--ok)'}">${isLocked?'🔒':booked+'/'+cap}</span>
               </div>
@@ -765,6 +770,7 @@ async function addTeacherSlot() {
   }
   const major = document.getElementById('ts_major')?.value || (teacherData?.majors?.[0] || '');
   const location = document.getElementById('ts_location')?.value || 'online';
+  const vipExclusive = types.includes('vip') && !!document.getElementById('ts_vip_exclusive')?.checked;
   if (!start || !end) { alert('请填写时间段'); return; }
   if (start >= end) { alert('结束时间需晚于开始时间'); return; }
   const timeRange = `${start}\u2013${end}`;
@@ -788,7 +794,7 @@ async function addTeacherSlot() {
     if (!confirm(`将添加 ${dates.length} 个时间槽，确认？`)) return;
   }
   try {
-    const newSlots = dates.map(date => ({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, date, time_range: timeRange, type: types, major, location, teacher_name: teacherName, vip_content: vipContent.length ? vipContent : null }));
+    const newSlots = dates.map(date => ({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, date, time_range: timeRange, type: types, major, location, teacher_name: teacherName, vip_content: vipContent.length ? vipContent : null, vip_exclusive: vipExclusive }));
     for (let i = 0; i < newSlots.length; i += 10) {
       const chunk = newSlots.slice(i, i + 10);
       const res = await sb('/rest/v1/slots', 'POST', chunk);
