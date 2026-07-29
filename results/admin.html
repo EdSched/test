@@ -1905,7 +1905,10 @@ function ugRenderList() {
       <td><span class="tier-tag" style="background:${tbg};color:${tfg}">T${tier}${r.tier==null?'(自動)':''}</span></td>
       <td><span class="type-tag" style="background:${stype==='public'?'#e0eef8':'#f4ece0'};color:${stype==='public'?'#1a3a6a':'#5a3010'}">${stype==='public'?'国公立':'私立'}</span></td>
       <td>${r.eju_total||'—'}</td><td>${r.jlpt||'—'}</td><td>${r.toefl||'—'}</td><td>${r.toeic||'—'}</td><td>${r.student||'—'}</td>
-      <td><button class="btn btn-danger" style="padding:3px 8px;font-size:10px" onclick="ugConfirmDelete('${r.id}','${(r.univ||'').replace(/'/g,"\\'")}')">削除</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary" style="padding:3px 8px;font-size:10px;margin-right:3px" onclick="ugOpenEditModal(this)">編集</button>
+        <button class="btn btn-danger" style="padding:3px 8px;font-size:10px" onclick="ugDoDelete(this)">削除</button>
+      </td>
     </tr>`;
   }
   html += '</tbody></table></div>';
