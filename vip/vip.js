@@ -291,6 +291,11 @@ async function saveVipProgress() {
 }
 
 function renderVipMain() {
+  // VIP 学生页由 study.js 主体驱动：任何调用 renderVipMain 的操作都改为重渲染 study 主页
+  if (window.__VIP_PAGE__ && typeof renderStudyMain === 'function' && typeof studyStudent !== 'undefined' && studyStudent) {
+    renderStudyMain();
+    return;
+  }
   const totalH = vipStudent.vip_hours_total || 0;
   const usedH = vipStudent.vip_hours_used || 0;
   const remainH = Math.round((totalH - usedH) * 100) / 100;
@@ -785,4 +790,143 @@ async function confirmVipSession(bookingId, rating) {
   } catch (e) { alert('提交失败：' + e.message); }
 }
 
-initVip();
+// 在 VIP 学生页由 study.js 作为主体驱动；此处仅在独立使用时自启动
+if (!window.__VIP_PAGE__) initVip();
+
+
+// ════════════════════════════════════════════════════════════════
+// 供 study.js 复用：VIP 预约区 + VIP 课程安排区（VIP 学生页两个新 tab）
+// ════════════════════════════════════════════════════════════════
+let vipStudentPlan = null;
+
+async function loadStudentVipPlan() {
+  vipStudentPlan = null;
+  if (!vipStudent) return;
+  let plans = await sb(`/rest/v1/vip_student_plans?student_id=eq.${vipStudent.id}&status=in.("signed","confirmed")&select=*&order=created_at.desc`).catch(() => []);
+  if (!plans.length) plans = await sb(`/rest/v1/vip_student_plans?student_name=eq.${encodeURIComponent(vipStudent.name)}&status=in.("signed","confirmed")&select=*&order=created_at.desc`).catch(() => []);
+  vipStudentPlan = plans[0] || null;
+}
+
+// VIP 预约区（活动预约 或 时间槽点选 + 历史课程）
+function renderVipBookingSection() {
+  const activeBooking = vipBookings.find(b => b.status === 'pending' || b.status === 'confirmed');
+  const bookedSlotIds = new Set(vipBookings.filter(b => b.status !== 'cancelled').map(b => b.slot_id));
+  const availableSlots = vipSlots.filter(s => !bookedSlotIds.has(s.id));
+  const byDate = {};
+  availableSlots.forEach(s => { (byDate[s.date] = byDate[s.date] || []).push(s); });
+  const dateKeys = Object.keys(byDate).sort();
+
+  return `
+  ${activeBooking ? renderVipActiveBooking(activeBooking) : `
+  <div class="card">
+    <div class="card-title">预约VIP课程时间</div>
+    ${!(vipStudent.vip_teachers || []).length
+      ? '<div class="no-slots">尚未分配指导老师，请联系管理员</div>'
+      : (dateKeys.length ? `
+        <div class="slot-grid" style="grid-template-columns:1fr">
+          ${dateKeys.map(date => {
+            const d = new Date(date + 'T12:00:00');
+            const dow = DAYS_CN[d.getDay()];
+            return byDate[date].map(s => {
+              const needsLocationChoice = s.location === 'both_takadanobaba' || s.location === 'both_ichigaya';
+              const campusLabel = s.location === 'both_takadanobaba' ? '高田马场' : s.location === 'both_ichigaya' ? '市谷' : '';
+              return `
+              <div class="slot-option">
+                <input type="radio" name="vipSlotPick" id="vipslot-${s.id}" value="${s.id}" onchange="vipSelectedSlotId='${s.id}';vipRenderLocationChoice('${s.id}')">
+                <label for="vipslot-${s.id}">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span class="slot-date-r">${d.getMonth() + 1}/${d.getDate()}</span>
+                    <span class="slot-dow-r">${dow}</span>
+                    <span class="slot-time-r">${s.time_range}</span>
+                    <span style="font-size:10px;color:var(--text-muted);margin-left:auto">👤 ${s.teacher_name}</span>
+                  </div>
+                  ${s.vip_content && s.vip_content.length ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:3px">可指导：${s.vip_content.join('・')}</div>` : ''}
+                  ${needsLocationChoice
+                    ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px">📍 线上 / 线下均可・${campusLabel}（需选择）</div>`
+                    : (locationLong(s.location) ? `<div style="font-size:10px;color:${locationColor(s.location)};margin-top:2px">📍 ${locationLong(s.location)}</div>` : '')}
+                </label>
+              </div>
+              ${needsLocationChoice ? `
+              <div id="vip_location_choice_${s.id}" style="display:none;padding:8px 10px 4px;margin-top:-2px">
+                <div class="radio-group">
+                  <div class="radio-option"><input type="radio" name="vipLocationChoice" id="vloc_online_${s.id}" value="online" checked><label for="vloc_online_${s.id}">线上</label></div>
+                  <div class="radio-option"><input type="radio" name="vipLocationChoice" id="vloc_offline_${s.id}" value="offline"><label for="vloc_offline_${s.id}">线下・${campusLabel}</label></div>
+                </div>
+              </div>` : ''}`;
+            }).join('');
+          }).join('')}
+        </div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-light)">
+          <div class="sub-label" style="margin-bottom:6px">提交内容（可选，老师课前可参考）</div>
+          <textarea id="vipStudentContent" rows="4" placeholder="计划书草稿、需要讨论的问题等文字内容…" style="margin-bottom:8px"></textarea>
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">或上传文件（Word / PDF / 图片，最大50MB）</div>
+          <input type="file" id="vipStudentFileUpload" accept=".doc,.docx,.pdf,image/*">
+        </div>
+        <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="submitVipBooking()">提交预约申请 →</button>
+      ` : '<div class="no-slots">暂无可预约的时间，请稍后再来查看</div>')
+    }
+  </div>`}
+  <div class="card">
+    <div class="card-title">历史课程</div>
+    ${renderVipHistory()}
+  </div>`;
+}
+
+// VIP 课程安排区（绑定的规划 + 课时进度）
+function renderVipPlanSection() {
+  const totalH = vipStudent.vip_hours_total || 0;
+  const usedH = vipStudent.vip_hours_used || 0;
+  const remainH = Math.round((totalH - usedH) * 100) / 100;
+  const weeksLeft = remainH > 0 ? Math.ceil(remainH / 2) : 0;  // 按每周1回、每回2小时估算
+
+  const hoursCard = `
+  <div class="card">
+    <div class="card-title">VIP课时</div>
+    <div style="display:flex;gap:18px;margin-top:6px">
+      <div><div class="sub-label">总课时</div><div style="font-size:18px;font-weight:600;font-family:'DM Mono',monospace">${totalH}</div></div>
+      <div><div class="sub-label">已用</div><div style="font-size:18px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text-muted)">${usedH}</div></div>
+      <div><div class="sub-label">剩余</div><div style="font-size:18px;font-weight:600;font-family:'DM Mono',monospace;color:var(--accent)">${remainH}</div></div>
+      <div><div class="sub-label">约可上（周）</div><div style="font-size:18px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text-muted)">${weeksLeft}</div></div>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">按每周 1 回、每回 2 小时估算剩余周数</div>
+  </div>`;
+
+  if (!vipStudentPlan) {
+    return hoursCard + '<div class="card"><div class="card-title">VIP课程安排</div><div class="no-slots">尚未绑定 VIP 课程规划，请联系顾问老师</div></div>';
+  }
+
+  const items = Array.isArray(vipStudentPlan.items) ? vipStudentPlan.items : [];
+  const catColor = {
+    found: { bg: '#f5f0e8', color: '#2a2820' }, base: { bg: '#ddeaf8', color: '#1a3a6a' },
+    adv: { bg: '#e8e4f8', color: '#3a2a7a' }, method: { bg: '#ddf0e0', color: '#1a4a28' },
+    ext: { bg: '#f0f4e8', color: '#3a4a18' }, past: { bg: '#f8e4dc', color: '#6a2818' },
+    eng: { bg: '#ece8e0', color: '#3a3830' }, plan: { bg: '#faecd8', color: '#5a3010' },
+    apply: { bg: '#fbeaf0', color: '#6a1a3a' }, inter: { bg: '#e1f0ea', color: '#0a4030' },
+    ta: { bg: '#e8eaf8', color: '#1a2a6a' },
+  };
+  const catMap = {};
+  items.forEach((it, i) => {
+    const k = it.category || 'other';
+    if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], min: i };
+    catMap[k].items.push(it);
+  });
+  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  const groupsHtml = groups.map(g => {
+    const col = catColor[g.key] || { bg: '#eee', color: '#333' };
+    const rows = g.items.map(it => `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:7px 10px;border-top:1px solid var(--border-light);font-size:12px"><div><div style="font-weight:500">${it.name || ''}</div>${it.content ? `<div style="font-size:11px;color:var(--text-muted);margin-top:1px">${it.content}</div>` : ''}</div><div style="color:var(--text-muted);white-space:nowrap">${it.hours != null ? it.hours + 'H' : ''}</div></div>`).join('');
+    return `<div style="margin-bottom:12px"><div style="margin-bottom:4px"><span style="border-radius:3px;padding:2px 10px;font-size:11px;font-weight:500;background:${col.bg};color:${col.color}">${g.label}</span></div><div style="border:1px solid var(--border);border-radius:4px;overflow:hidden">${rows}</div></div>`;
+  }).join('');
+
+  const subj = (vipStudentPlan.subject_hours && vipStudentPlan.subject_hours > 0)
+    ? `<div style="font-size:12px;color:#5a3010;background:#faf0dc;border:1px solid #e8d9b8;border-radius:4px;padding:8px 12px;margin-bottom:12px">📚 专业知识总课时：${vipStudentPlan.subject_hours} 课时（由老师按此安排具体专业课）</div>` : '';
+
+  return hoursCard + `
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="card-title" style="margin:0">VIP课程安排</div>
+      <span style="font-size:11px;color:var(--text-muted)">${vipStudentPlan.total_sessions || 0} 回 · ${vipStudentPlan.total_hours || 0} 课时</span>
+    </div>
+    ${subj}
+    ${groupsHtml || '<div class="no-slots">此方案暂无课程</div>'}
+  </div>`;
+}
