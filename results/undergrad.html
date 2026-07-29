@@ -190,7 +190,7 @@ main{padding:1.5rem 3rem 4rem}
     <span class="flbl">年份</span>
     <div class="seg" id="era-seg">
       <button class="active" onclick="setEra('all')">全部</button>
-      <button onclick="setEra('new')">2025–2026</button>
+      <button onclick="setEra('new')">2026–2027</button>
       <button onclick="setEra('hist')">2022–2024</button>
     </div>
     <span class="flbl" style="margin-left:6px">层次</span>
@@ -582,7 +582,7 @@ function renderEraView(data) {
         <tbody>${sorted.map(r=>buildTableRow(r,true)).join('')}</tbody>
       </table></div></div>`;
   }
-  const out = eraBlock(newRows,'era-new','2025–2026 入学','#2c4a8a') + eraBlock(histRows,'era-hist','2022–2024 実绩','#9a9590');
+  const out = eraBlock(newRows,'era-new','2026–2027 入学','#2c4a8a') + eraBlock(histRows,'era-hist','2022–2024 実绩','#9a9590');
   return out || '<div class="no-data">条件に該当するデータがありません</div>';
 }
 
@@ -591,7 +591,7 @@ function buildTableRow(r, showDept=false) {
   const ejuHi = r.eju_total && r.eju_total>=700;
   const toeflHi = r.toefl && r.toefl>=90;
   const toeicHi = r.toeic && r.toeic>=800;
-  const eraTag = `<span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'25–26':'22–24'}</span>`;
+  const eraTag = `<span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'2026–':'往年'}</span>`;
   return `<tr>
     <td style="font-weight:500">${r.univ||'—'}</td>
     ${showDept?`<td style="color:var(--text-secondary)">${r.dept||'—'}</td>`:''}
@@ -675,7 +675,7 @@ function buildDetailPanelHTML(univ, rows, tier) {
       <td>${r.jlpt?`<span class="sbadge jlpt">${r.jlpt}</span>`:'<span style="color:var(--text-muted)">—</span>'}</td>
       <td>${r.toefl?`<span class="sbadge toefl${toeflHi?' hi':''}">${r.toefl}</span>`:'<span style="color:var(--text-muted)">—</span>'}</td>
       <td>${r.toeic?`<span class="sbadge toeic${toeicHi?' hi':''}">${r.toeic}</span>`:'<span style="color:var(--text-muted)">—</span>'}</td>
-      <td><span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'25–26':'22–24'}</span></td>
+      <td><span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'2026–':'往年'}</span></td>
     </tr>`;
   }).join('');
 
