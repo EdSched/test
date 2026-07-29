@@ -335,6 +335,7 @@ let svSubjectHours = 0;         // 专业知识四部分总课时（老师按此
 let svShareOpen = false;
 let svTab = 'templates';        // 营业子视图：templates(课程模板) / plans(学生方案)
 let salesStudentPlans = [];     // 已保存的学生方案
+let svTemplates = [];           // 当前框架下的命名套餐
 
 // 分类配色（还原 VIP.html）
 const VIP_CAT_COLOR = {
@@ -473,6 +474,7 @@ async function openSvFramework(id) {
   mc.innerHTML = '<div class="loading">加载中…</div>';
   svCurrentId = id;
   svItems = await sb(`/rest/v1/vip_framework_items?framework_id=eq.${id}&select=*&order=sort_order.asc`).catch(() => []);
+  svTemplates = await sb(`/rest/v1/vip_plan_templates?framework_id=eq.${id}&select=*&order=created_at.desc`).catch(() => []);
   const fw = salesVipFrameworks.find(f => f.id === id);
   svShareTeachers = (fw && fw.assigned_teachers && fw.assigned_teachers.length) ? [...fw.assigned_teachers] : [];
   svSel = new Set(); svHrs = {}; svSubjectHours = 0; svShareOpen = false;
@@ -610,10 +612,33 @@ function renderSvSelect(mc) {
     </div>
 
     <div style="padding:16px 20px">
+      ${svTemplates.length ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;border:1px solid #e2ded6;border-radius:5px;background:#f0ede8">
+        <span style="font-size:11px;color:#5a5650;font-weight:500">套餐快选</span>
+        ${svTemplates.map(t => `<button onclick="applySvTemplate('${t.id}')" style="font-size:11px;background:#fff;border:1px solid #c9b896;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a3010">${tvEsc(t.name || '套餐')} <span style="color:#9a9590">${t.total_hours || 0}H</span></button>`).join('')}
+        <span style="font-size:10px;color:#9a9590">点一下自动勾好课程与课时，再填姓名保存即可</span>
+      </div>` : ''}
       ${sharePanel}
       ${groupsHtml}
     </div>
   </div>`;
+}
+
+// 套餐快选：按名称把套餐里的课程映射回框架条目，自动勾选 + 设置课时/专业知识课时
+function applySvTemplate(tid) {
+  const t = svTemplates.find(x => x.id === tid);
+  if (!t) return;
+  const tItems = Array.isArray(t.items) ? t.items : [];
+  svSel = new Set(); svHrs = {};
+  tItems.forEach(ti => {
+    const match = svItems.find(fi => fi.name === ti.name && fi.category === ti.category);
+    if (match) {
+      svSel.add(match.id);
+      const editable = !VIP_SUBJECT_CATS.includes(match.category) && match.category !== 'ta';
+      if (editable && ti.hours != null) svHrs[match.id] = ti.hours;
+    }
+  });
+  svSubjectHours = t.subject_hours || 0;
+  renderSvSelect(document.getElementById('mainContent'));
 }
 
 function svToggle(id) {
