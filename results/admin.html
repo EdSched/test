@@ -273,7 +273,7 @@ main { padding: 2rem 1.5rem 4rem; max-width: none; }
       <div class="field">
         <label>入学年度 *</label>
         <select id="f-era">
-          <option value="new">2025–2026 入学</option>
+          <option value="new">2026–2027 入学</option>
           <option value="hist">2022–2024 実绩</option>
         </select>
       </div>
@@ -468,7 +468,7 @@ CREATE POLICY "anon update" ON admission_results FOR UPDATE USING (true);</pre>
     </select>
     <select id="filter-era" onchange="renderList()">
       <option value="">全年度</option>
-      <option value="new">2025–2026</option>
+      <option value="new">2026–2027</option>
       <option value="hist">2022–2024</option>
     </select>
     <span class="result-count" id="result-count"></span>
@@ -578,7 +578,7 @@ CREATE POLICY "anon update" ON admission_results FOR UPDATE USING (true);</pre>
       <div class="field">
         <label>入学年度 *</label>
         <select id="ug-f-era">
-          <option value="new">2025–2026 入学</option>
+          <option value="new">2026–2027 入学</option>
           <option value="hist">2022–2024 実绩</option>
         </select>
       </div>
@@ -712,7 +712,7 @@ CREATE POLICY "anon update" ON undergrad_results FOR UPDATE USING (true);</pre>
     </select>
     <select id="ug-filter-era" onchange="ugRenderList()">
       <option value="">全年度</option>
-      <option value="new">2025–2026</option>
+      <option value="new">2026–2027</option>
       <option value="hist">2022–2024</option>
     </select>
     <select id="ug-filter-tier" onchange="ugRenderList()">
@@ -754,7 +754,7 @@ CREATE POLICY "anon update" ON undergrad_results FOR UPDATE USING (true);</pre>
         <select id="ug-em-track"><option value="bunka">文科</option><option value="rika">理科</option><option value="bijutsu">美術</option></select>
       </div>
       <div class="field"><label>年度</label>
-        <select id="ug-em-era"><option value="new">2025–2026</option><option value="hist">2022–2024</option></select>
+        <select id="ug-em-era"><option value="new">2026–2027</option><option value="hist">2022–2024</option></select>
       </div>
       <div class="field"><label>Tier</label>
         <select id="ug-em-tier"><option value="">自動</option><option value="0">T0</option><option value="1">T1</option><option value="2">T2</option><option value="3">T3</option><option value="4">T4</option></select>
@@ -831,7 +831,7 @@ CREATE POLICY "anon update" ON undergrad_results FOR UPDATE USING (true);</pre>
       </div>
       <div class="field"><label>年度</label>
         <select id="em-era">
-          <option value="new">2025–2026</option>
+          <option value="new">2026–2027</option>
           <option value="hist">2022–2024</option>
         </select>
       </div>
@@ -1901,7 +1901,7 @@ function ugRenderList() {
     html += `<tr data-id="${r.id}" data-univ="${(r.univ||'').replace(/"/g,'&quot;')}">
       <td style="max-width:100px">${r.univ||''}</td><td style="max-width:100px">${r.dept||''}</td><td style="max-width:80px">${r.spec||''}</td>
       <td><span class="track-tag" style="background:#eef0e8;color:#3a3830">${TRACK_LABEL[r.track]||'文科'}</span></td>
-      <td>${r.era==='new'?'25–26':'22–24'}</td>
+      <td>${r.era==='new'?'2026–':'往年'}</td>
       <td><span class="tier-tag" style="background:${tbg};color:${tfg}">T${tier}${r.tier==null?'(自動)':''}</span></td>
       <td><span class="type-tag" style="background:${stype==='public'?'#e0eef8':'#f4ece0'};color:${stype==='public'?'#1a3a6a':'#5a3010'}">${stype==='public'?'国公立':'私立'}</span></td>
       <td>${r.eju_total||'—'}</td><td>${r.jlpt||'—'}</td><td>${r.toefl||'—'}</td><td>${r.toeic||'—'}</td><td>${r.student||'—'}</td>
