@@ -514,6 +514,7 @@ CREATE POLICY "anon update" ON admission_results FOR UPDATE USING (true);</pre>
   <button class="tab-btn active" onclick="switchUgTab('add')">手动添加</button>
   <button class="tab-btn" onclick="switchUgTab('excel')">Excel 批量导入</button>
   <button class="tab-btn" onclick="switchUgTab('list')">数据管理</button>
+  <button class="tab-btn" onclick="switchUgTab('tier')">Tier 管理</button>
 </div>
 
 <main>
@@ -708,6 +709,59 @@ CREATE POLICY "anon update" ON undergrad_results FOR UPDATE USING (true);</pre>
 
 </main>
 </div>
+<div id="ugtab-tier" style="display:none">
+  <div class="info-box" style="margin-bottom:1rem">学部データの大学別Tier設定。</div>
+  <div style="display:flex;gap:10px;margin-bottom:1rem;align-items:center">
+    <button class="btn btn-secondary" onclick="ugLoadTierTab()">↺ 再読み込み</button>
+    <button class="btn btn-primary" onclick="ugSaveTierChanges()" id="ug-tier-save-btn" disabled>変更を保存（0件）</button>
+    <span style="font-size:11px;color:var(--text-muted)" id="ug-tier-status"></span>
+  </div>
+  <div id="ug-tier-area" class="load-state">読み込み中...</div>
+</div>
+
+<!-- 学部編集モーダル -->
+<div class="edit-modal-overlay" id="ug-edit-modal">
+  <div class="edit-modal-box">
+    <div class="edit-modal-title" id="ug-edit-modal-title">学部 編集</div>
+    <div class="edit-grid">
+      <div class="field"><label>大学名</label><input id="ug-em-univ" type="text"></div>
+      <div class="field"><label>学部名</label><input id="ug-em-dept" type="text"></div>
+      <div class="field"><label>学科名</label><input id="ug-em-spec" type="text"></div>
+      <div class="field"><label>学生名</label><input id="ug-em-student" type="text"></div>
+      <div class="field"><label>系統</label>
+        <select id="ug-em-track"><option value="bunka">文科</option><option value="rika">理科</option><option value="bijutsu">美術</option></select>
+      </div>
+      <div class="field"><label>年度</label>
+        <select id="ug-em-era"><option value="new">2025–2026</option><option value="hist">2022–2024</option></select>
+      </div>
+      <div class="field"><label>Tier</label>
+        <select id="ug-em-tier"><option value="">自動</option><option value="0">T0</option><option value="1">T1</option><option value="2">T2</option><option value="3">T3</option><option value="4">T4</option></select>
+      </div>
+    </div>
+    <div class="edit-grid edit-grid-3">
+      <div class="field"><label>EJU日本語</label><input id="ug-em-eju-jp" type="number"></div>
+      <div class="field"><label>EJU記述</label><input id="ug-em-eju-kijutsu" type="number"></div>
+      <div class="field"><label>EJU文系総合</label><input id="ug-em-eju-bunsou" type="number"></div>
+      <div class="field"><label>EJU数学</label><input id="ug-em-eju-math" type="number"></div>
+      <div class="field"><label>EJU物理</label><input id="ug-em-eju-phys" type="number"></div>
+      <div class="field"><label>EJU化学</label><input id="ug-em-eju-chem" type="number"></div>
+      <div class="field"><label>EJU生物</label><input id="ug-em-eju-bio" type="number"></div>
+      <div class="field"><label>EJU総分</label><input id="ug-em-eju-total" type="number"></div>
+      <div class="field"><label>JLPT</label>
+        <select id="ug-em-jlpt"><option value="">—</option><option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option></select>
+      </div>
+      <div class="field"><label>TOEFL</label><input id="ug-em-toefl" type="number"></div>
+      <div class="field"><label>TOEIC</label><input id="ug-em-toeic" type="number"></div>
+      <div class="field"><label>備考</label><input id="ug-em-note" type="text"></div>
+    </div>
+    <input type="hidden" id="ug-em-id">
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('ug-edit-modal').classList.remove('show')">キャンセル</button>
+      <button class="btn btn-primary" onclick="ugSaveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ /学部セクション ═══ -->
 
 <div class="toast" id="toast"></div>
@@ -1576,9 +1630,10 @@ function ugTierOf(univ) { return UG_SCHOOL_DB[normUnivUG(univ)]?.tier ?? 4; }
 function ugSchoolType(univ) { return UG_SCHOOL_DB[normUnivUG(univ)]?.type ?? 'private'; }
 
 function switchUgTab(t) {
-  ['add','excel','list'].forEach(id => document.getElementById(`ugtab-${id}`).style.display = id===t?'':'none');
-  document.querySelectorAll('#major-ug .tab-btn').forEach((b,i) => b.classList.toggle('active', ['add','excel','list'][i]===t));
+  ['add','excel','list','tier'].forEach(id => { const el=document.getElementById(`ugtab-${id}`); if(el) el.style.display = id===t?'':'none'; });
+  document.querySelectorAll('#major-ug .tab-btn').forEach((b,i) => b.classList.toggle('active', ['add','excel','list','tier'][i]===t));
   if (t === 'list') ugLoadList();
+  if (t === 'tier') ugLoadTierTab();
 }
 
 function ugResetForm() {
@@ -1923,6 +1978,146 @@ function doDelete(btn) {
   const id = tr.dataset.id;
   const univ = tr.dataset.univ;
   confirmDelete(id, univ);
+}
+
+
+function ugDoDelete(btn) {
+  const tr = btn.closest('tr');
+  ugConfirmDelete(tr.dataset.id, tr.dataset.univ);
+}
+
+function ugOpenEditModal(el) {
+  const id = el.closest('tr').dataset.id;
+  const r = ugAllData.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('ug-em-id').value = id;
+  document.getElementById('ug-em-univ').value = r.univ||'';
+  document.getElementById('ug-em-dept').value = r.dept||'';
+  document.getElementById('ug-em-spec').value = r.spec||'';
+  document.getElementById('ug-em-student').value = r.student||'';
+  document.getElementById('ug-em-track').value = r.track||'bunka';
+  document.getElementById('ug-em-era').value = r.era||'new';
+  document.getElementById('ug-em-tier').value = r.tier!=null?r.tier:'';
+  document.getElementById('ug-em-eju-jp').value = r.eju_japanese||'';
+  document.getElementById('ug-em-eju-kijutsu').value = r.eju_kijutsu||'';
+  document.getElementById('ug-em-eju-bunsou').value = r.eju_bunsou||'';
+  document.getElementById('ug-em-eju-math').value = r.eju_math||'';
+  document.getElementById('ug-em-eju-phys').value = r.eju_physics||'';
+  document.getElementById('ug-em-eju-chem').value = r.eju_chemistry||'';
+  document.getElementById('ug-em-eju-bio').value = r.eju_biology||'';
+  document.getElementById('ug-em-eju-total').value = r.eju_total||'';
+  document.getElementById('ug-em-jlpt').value = r.jlpt||'';
+  document.getElementById('ug-em-toefl').value = r.toefl||'';
+  document.getElementById('ug-em-toeic').value = r.toeic||'';
+  document.getElementById('ug-em-note').value = r.note||'';
+  document.getElementById('ug-edit-modal-title').textContent = '編集: '+r.univ;
+  document.getElementById('ug-edit-modal').classList.add('show');
+}
+
+async function ugSaveEdit() {
+  const id = document.getElementById('ug-em-id').value;
+  const n = id2 => { const v=document.getElementById(id2).value; return v!==''?parseInt(v):null; };
+  const updates = {
+    univ: document.getElementById('ug-em-univ').value.trim()||null,
+    dept: document.getElementById('ug-em-dept').value.trim()||null,
+    spec: document.getElementById('ug-em-spec').value.trim()||null,
+    student: document.getElementById('ug-em-student').value.trim()||null,
+    track: document.getElementById('ug-em-track').value||'bunka',
+    era: document.getElementById('ug-em-era').value,
+    tier: document.getElementById('ug-em-tier').value!==''?parseInt(document.getElementById('ug-em-tier').value):null,
+    eju_japanese:n('ug-em-eju-jp'), eju_kijutsu:n('ug-em-eju-kijutsu'), eju_bunsou:n('ug-em-eju-bunsou'),
+    eju_math:n('ug-em-eju-math'), eju_physics:n('ug-em-eju-phys'), eju_chemistry:n('ug-em-eju-chem'),
+    eju_biology:n('ug-em-eju-bio'), eju_total:n('ug-em-eju-total'),
+    jlpt:document.getElementById('ug-em-jlpt').value||null,
+    toefl:n('ug-em-toefl'), toeic:n('ug-em-toeic'),
+    note:document.getElementById('ug-em-note').value.trim()||null,
+  };
+  try {
+    await sbFetch(`undergrad_results?id=eq.${id}`,{method:'PATCH',body:updates,prefer:'return=minimal',headers:{}});
+    const idx2=ugAllData.findIndex(x=>x.id===id);
+    if(idx2>=0) ugAllData[idx2]={...ugAllData[idx2],...updates};
+    document.getElementById('ug-edit-modal').classList.remove('show');
+    ugRenderList();
+    toast('保存しました ✓');
+  } catch(e){toast('エラー: '+e.message,false);}
+}
+
+let ugTierUnivData2=[], ugTierChanges2={};
+
+async function ugLoadTierTab() {
+  document.getElementById('ug-tier-area').innerHTML='<div class="load-state">読み込み中...</div>';
+  ugTierChanges2={};
+  ugUpdateTierSaveBtn2();
+  try {
+    const all = await ugFetchAll();
+    const univMap={};
+    for(const r of all){
+      if(!univMap[r.univ]) univMap[r.univ]={count:0,dbTier:r.tier!=null?r.tier:null};
+      univMap[r.univ].count++;
+    }
+    ugTierUnivData2=Object.entries(univMap).map(([u,d])=>({univ:u,count:d.count,autoTier:ugTierOf(u),dbTier:d.dbTier}))
+      .sort((a,b)=>a.autoTier-b.autoTier||a.univ.localeCompare(b.univ));
+    ugRenderTierTable2();
+  } catch(e){document.getElementById('ug-tier-area').innerHTML=`<div class="load-state" style="color:var(--red)">エラー: ${e.message}</div>`;}
+}
+
+function ugRenderTierTable2() {
+  const TC={0:['#dce4f4','#1a3070'],1:['#e8edf8','#2c4a8a'],2:['#e8f0e4','#3a6630'],3:['#f4ece0','#7a4a20'],4:['#f4e0e0','#7a2020']};
+  let h2=`<div style="overflow-x:auto"><table class="data-table"><thead><tr>
+    <th>大学名</th><th style="width:60px;text-align:center">件数</th>
+    <th style="width:90px;text-align:center">自動</th><th style="width:90px;text-align:center">設定済</th>
+    <th style="width:260px">Tier変更</th></tr></thead><tbody>`;
+  for(const d of ugTierUnivData2){
+    const p=ugTierChanges2[d.univ];
+    const eff=p!==undefined?p:(d.dbTier!=null?d.dbTier:d.autoTier);
+    const [abg,afg]=TC[d.autoTier]||['#eee','#666'];
+    const [dbg,dfg]=d.dbTier!=null?(TC[d.dbTier]||['#eee','#666']):['#f0ede6','#9a9590'];
+    h2+=`<tr style="${p!==undefined?'background:#fffbe8':''}">
+      <td>${d.univ}</td><td style="text-align:center;color:var(--text-muted)">${d.count}</td>
+      <td style="text-align:center"><span style="font-size:10px;padding:2px 8px;border-radius:2px;background:${abg};color:${afg};font-weight:500">T${d.autoTier}</span></td>
+      <td style="text-align:center">${d.dbTier!=null?`<span style="font-size:10px;padding:2px 8px;border-radius:2px;background:${dbg};color:${dfg};font-weight:500">T${d.dbTier}</span>`:'<span style="font-size:10px;color:var(--text-muted)">—</span>'}</td>
+      <td><div style="display:flex;gap:4px">${[0,1,2,3,4].map(t=>{const a=eff===t;const [bg,fg]=TC[t];return `<button onclick="ugSetTC('${d.univ.replace(/'/g,"\'")}',${t})" style="padding:3px 7px;border-radius:2px;border:1px solid ${a?fg:bg};background:${a?fg:'transparent'};color:${a?'#fff':fg};font-family:inherit;font-size:10px;cursor:pointer">T${t}</button>`;}).join('')}
+      <button onclick="ugSetTC('${d.univ.replace(/'/g,"\'")}',null)" style="padding:3px 7px;border-radius:2px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-family:inherit;font-size:10px;cursor:pointer">自動</button></div></td>
+    </tr>`;
+  }
+  h2+='</tbody></table></div>';
+  document.getElementById('ug-tier-area').innerHTML=h2;
+}
+
+function ugSetTC(univ,tier){
+  const d=ugTierUnivData2.find(x=>x.univ===univ);
+  if(!d)return;
+  if(tier===d.dbTier||(tier===null&&d.dbTier===null))delete ugTierChanges2[univ];
+  else ugTierChanges2[univ]=tier;
+  ugUpdateTierSaveBtn2();
+  ugRenderTierTable2();
+}
+
+function ugUpdateTierSaveBtn2(){
+  const n2=Object.keys(ugTierChanges2).length;
+  const btn=document.getElementById('ug-tier-save-btn');
+  if(!btn)return;
+  btn.disabled=n2===0;
+  btn.textContent=`変更を保存（${n2}件）`;
+}
+
+async function ugSaveTierChanges(){
+  const entries=Object.entries(ugTierChanges2);
+  if(!entries.length)return;
+  const btn=document.getElementById('ug-tier-save-btn');
+  btn.disabled=true;btn.textContent='保存中...';
+  const status=document.getElementById('ug-tier-status');
+  let done2=0;
+  try{
+    for(const [u,t] of entries){
+      await sbFetch(`undergrad_results?univ=eq.${encodeURIComponent(u)}`,{method:'PATCH',body:{tier:t},prefer:'return=minimal',headers:{}});
+      done2++;
+      status.textContent=`${done2}/${entries.length}件処理中...`;
+    }
+    toast(`${done2}大学のTierを更新しました ✓`);
+    ugTierChanges2={};
+    await ugLoadTierTab();
+  }catch(e){toast('エラー: '+e.message,false);btn.disabled=false;ugUpdateTierSaveBtn2();}
 }
 
 </script>
