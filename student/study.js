@@ -94,6 +94,11 @@ async function loadStudyData() {
     }
   }
   studyData = { timeline, schoolPlans, planDraft: planDraftArr[0]||null, sharedLists, sharedSchools, bookings, sessionRecs };
+  // VIP 学生页：额外加载 VIP 预约数据与绑定的课程规划
+  if (window.__VIP_PAGE__ && studyStudent && (studyStudent.is_vip_course === 'VIP' || studyStudent.is_vip_course === '大课+VIP')) {
+    if (typeof loadVipData === 'function') { vipStudent = studyStudent; await loadVipData(); }
+    if (typeof loadStudentVipPlan === 'function') await loadStudentVipPlan();
+  }
 }
 
 // ══════════════════════════════════
@@ -110,6 +115,11 @@ function renderStudyMain() {
     { id:'homework', label:'📝 作业' },
     { id:'schedule', label:'🗓 课程表' },
   ];
+  // VIP 学生：额外两个 tab（预约 + 课程安排）
+  if (window.__VIP_PAGE__ && (s.is_vip_course === 'VIP' || s.is_vip_course === '大课+VIP')) {
+    tabs.push({ id:'vipbook', label:'⭐ VIP预约' });
+    tabs.push({ id:'vipplan', label:'📋 VIP课程安排' });
+  }
 
   // 进度概览 badges
   const badges = Object.entries(PROGRESS_LABELS).map(([k]) => {
@@ -150,6 +160,8 @@ function renderStudyTab() {
   else if (studyTab === 'records') el.innerHTML = renderRecordsTab();
   else if (studyTab === 'homework') { el.innerHTML = renderHomeworkTab(); setTimeout(() => loadStudyHwSessions(0), 50); }
   else if (studyTab === 'schedule') { el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:12px">课程表加载中…</div>'; loadStudySchedule(); }
+  else if (studyTab === 'vipbook') el.innerHTML = (typeof renderVipBookingSection === 'function') ? renderVipBookingSection() : '<div class="no-slots">VIP预约模块未加载</div>';
+  else if (studyTab === 'vipplan') el.innerHTML = (typeof renderVipPlanSection === 'function') ? renderVipPlanSection() : '<div class="no-slots">VIP课程安排未加载</div>';
 }
 
 // ══════════════════════════════════
