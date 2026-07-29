@@ -7,265 +7,252 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg:#f7f5f0;--surface:#fff;--border:#e2ded6;--border-light:#ede9e2;
-  --text-primary:#1a1814;--text-secondary:#5a5650;--text-muted:#9a9590;--accent:#2c4a8a;
-  --green:#2a5a30;--green-bg:#e8f4ea;--red:#7a2010;--red-bg:#faeae8;
-}
+:root{--bg:#f7f5f0;--surface:#fff;--border:#e2ded6;--text-primary:#1a1814;--text-secondary:#5a5650;--text-muted:#9a9590;--accent:#2c4a8a;--green:#2a5a30;--green-bg:#e8f4ea;--red:#7a2010;--red-bg:#faeae8;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text-primary);font-size:13px;line-height:1.6}
-
-header{background:var(--surface);border-bottom:3px solid var(--accent);padding:2rem 2rem 1.5rem;text-align:center}
-.h-title{font-family:'Noto Serif SC',serif;font-size:1.6rem;font-weight:600;color:var(--accent);letter-spacing:.04em}
-.h-sub{font-size:11px;color:var(--text-muted);margin-top:6px;letter-spacing:.06em}
-
-main{max-width:680px;margin:2rem auto;padding:0 1.5rem 4rem}
-
-.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1.5rem;margin-bottom:1.2rem}
-.card-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border-light)}
-
+header{background:var(--accent);padding:2rem 2rem 1.8rem;text-align:center}
+.h-logo{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+.h-title{font-family:'Noto Serif SC',serif;font-size:1.7rem;font-weight:600;color:#fff;letter-spacing:.04em}
+.h-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:6px}
+main{max-width:640px;margin:2rem auto;padding:0 1.2rem 4rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin-bottom:1rem}
+.card-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #ede9e2;display:flex;align-items:center;gap:6px}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
-.field label{font-size:11px;color:var(--text-secondary);letter-spacing:.04em}
-.field label .req{color:var(--accent);margin-left:3px}
-.field input,.field select,.field textarea{
-  padding:9px 12px;border:1px solid var(--border);border-radius:4px;
-  background:var(--bg);font-family:inherit;font-size:13px;color:var(--text-primary);
-  transition:border-color .12s;
-}
+.field:last-child{margin-bottom:0}
+.field label{font-size:11px;color:var(--text-secondary)}
+.req{color:var(--accent);margin-left:2px}
+.field input,.field select,.field textarea{padding:10px 12px;border:1px solid var(--border);border-radius:5px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--text-primary);transition:border-color .12s;}
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);background:var(--surface)}
-.field textarea{resize:vertical;min-height:80px}
-
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-
-.hint{font-size:10px;color:var(--text-muted);margin-top:3px}
-
-.submit-btn{
-  width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:5px;
-  font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.06em;
-  transition:opacity .15s;
-}
+.field textarea{resize:vertical;min-height:70px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.photo-upload{border:2px dashed var(--border);border-radius:8px;padding:1.5rem;text-align:center;cursor:pointer;transition:all .15s}
+.photo-upload:hover{border-color:var(--accent);background:#f0f4fc}
+.photo-upload input{display:none}
+.pu-icon{font-size:2rem;margin-bottom:8px;opacity:.5}
+.pu-text{font-size:12px;color:var(--text-secondary)}
+.pu-hint{font-size:10px;color:var(--text-muted);margin-top:4px}
+.photo-preview{width:100%;max-height:200px;object-fit:contain;border-radius:5px;margin-top:10px;display:none}
+.submit-btn{width:100%;padding:15px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.06em;transition:all .15s;margin-top:.5rem}
 .submit-btn:hover{opacity:.88}
 .submit-btn:disabled{opacity:.5;cursor:not-allowed}
-
-.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:5px;font-size:13px;display:none;z-index:999;text-align:center;min-width:260px}
+.success-screen{display:none;text-align:center;padding:2rem 1rem}
+.confetti-area{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:100;overflow:hidden}
+.confetti{position:absolute;width:8px;height:8px;border-radius:2px;animation:fall linear forwards}
+@keyframes fall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+.success-badge{display:inline-flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:var(--green-bg);margin-bottom:1.2rem}
+.success-badge-icon{font-size:2.5rem}
+.success-title{font-family:'Noto Serif SC',serif;font-size:1.8rem;color:var(--green);margin-bottom:.5rem;font-weight:600}
+.success-msg{font-size:13px;color:var(--text-secondary);line-height:1.8;margin-bottom:1.5rem}
+.success-photo{max-width:300px;border-radius:8px;margin:1rem auto;display:none;border:3px solid var(--green-bg)}
+.success-actions{display:flex;flex-direction:column;gap:8px;max-width:300px;margin:0 auto}
+.btn-another{padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-family:inherit;font-size:13px;cursor:pointer}
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:6px;font-size:13px;display:none;z-index:999;min-width:240px;text-align:center}
 .toast.show{display:block}
 .toast-ok{background:var(--green-bg);color:var(--green);border:1px solid #b8d8bc}
 .toast-err{background:var(--red-bg);color:var(--red);border:1px solid #e8c0b8}
-
-.success-screen{display:none;text-align:center;padding:3rem 1rem}
-.success-icon{font-size:3rem;margin-bottom:1rem}
-.success-title{font-family:'Noto Serif SC',serif;font-size:1.4rem;color:var(--green);margin-bottom:.5rem}
-.success-sub{font-size:12px;color:var(--text-muted)}
-.success-btn{margin-top:1.5rem;padding:10px 24px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:12px;cursor:pointer}
 </style>
 </head>
 <body>
-
 <header>
-  <div class="h-title">合格实绩录入 · 大学院</div>
-  <div class="h-sub">唯新教育 · 请填写您的合格信息</div>
+  <div class="h-logo">唯新教育 · Transform</div>
+  <div class="h-title">大学院 合格实绩录入</div>
+  <div class="h-sub">请填写您的合格信息，感谢您的分享！</div>
 </header>
-
 <main>
-  <div id="form-area">
-    <div class="card">
-      <div class="card-title">院校信息</div>
-      <div class="field">
-        <label>大学名<span class="req">*</span></label>
-        <input id="f-univ" type="text" placeholder="例：東京大学">
-      </div>
-      <div class="grid-2">
-        <div class="field">
-          <label>研究科<span class="req">*</span></label>
-          <input id="f-dept" type="text" placeholder="例：工学系研究科">
-        </div>
-        <div class="field">
-          <label>専攻</label>
-          <input id="f-spec" type="text" placeholder="例：機械工学専攻">
-        </div>
-      </div>
+<div id="form-area">
+  <div class="card">
+    <div class="card-title">🎓 院校信息</div>
+    <div class="field"><label>合格大学<span class="req">*</span></label><input id="f-univ" type="text" placeholder="例：東京大学"></div>
+    <div class="grid-2">
+      <div class="field"><label>研究科<span class="req">*</span></label><input id="f-dept" type="text" placeholder="例：工学系研究科"></div>
+      <div class="field"><label>専攻</label><input id="f-spec" type="text" placeholder="例：機械工学専攻"></div>
     </div>
-
-    <div class="card">
-      <div class="card-title">在籍学科（所属方向）</div>
-      <div class="field">
-        <label>在籍学科<span class="req">*</span></label>
-        <select id="f-subject">
-          <option value="">-- 请选择 --</option>
-          <optgroup label="文科">
-            <option value="shakai">社会学</option>
-            <option value="fukushi">社会福祉</option>
-            <option value="shinpan">新聞伝播</option>
-            <option value="keizai">経済学</option>
-            <option value="keiei">経営学</option>
-            <option value="kyoiku">教育学</option>
-            <option value="hougaku">法学</option>
-            <option value="seiji">政治学/国際関係</option>
-            <option value="bungaku">文学</option>
-            <option value="rekishi">歴史学</option>
-            <option value="hyosho">表象文化</option>
-            <option value="nihongo">日本語教育</option>
-            <option value="shinri">心理学</option>
-            <option value="other">その他（文科）</option>
-          </optgroup>
-          <optgroup label="理科">
-            <option value="rika_kikai">機械工学</option>
-            <option value="rika_denki">電気電子工学</option>
-            <option value="rika_kagaku">化学・化学工学</option>
-            <option value="rika_joho">情報工学</option>
-            <option value="rika_kenchiku">建築・土木工学</option>
-            <option value="rika_bio">生命科学・医学</option>
-            <option value="rika_keiei">経営工学</option>
-            <option value="rika_other">その他（理科）</option>
-          </optgroup>
-        </select>
-      </div>
-      <div class="field">
-        <label>入学年度<span class="req">*</span></label>
-        <select id="f-era">
-          <option value="new">2025–2026 入学</option>
-          <option value="hist">2022–2024 実绩</option>
-        </select>
-      </div>
+    <div class="field">
+      <label>在籍学科（所属方向）<span class="req">*</span></label>
+      <select id="f-subject">
+        <option value="">-- 请选择 --</option>
+        <optgroup label="── 文科 ──">
+          <option value="shakai">社会学</option><option value="fukushi">社会福祉</option>
+          <option value="shinpan">新聞伝播</option><option value="keizai">経済学</option>
+          <option value="keiei">経営学</option><option value="kyoiku">教育学</option>
+          <option value="hougaku">法学</option><option value="seiji">政治学/国際関係</option>
+          <option value="bungaku">文学</option><option value="rekishi">歴史学</option>
+          <option value="hyosho">表象文化</option><option value="nihongo">日本語教育</option>
+          <option value="shinri">心理学</option><option value="other">その他（文科）</option>
+        </optgroup>
+        <optgroup label="── 理科 ──">
+          <option value="rika_kikai">機械工学</option><option value="rika_denki">電気電子工学</option>
+          <option value="rika_kagaku">化学・化学工学</option><option value="rika_joho">情報工学</option>
+          <option value="rika_kenchiku">建築・土木工学</option><option value="rika_bio">生命科学・医学</option>
+          <option value="rika_keiei">経営工学</option><option value="rika_other">その他（理科）</option>
+        </optgroup>
+      </select>
     </div>
-
-    <div class="card">
-      <div class="card-title">语言成绩</div>
-      <div class="grid-2">
-        <div class="field">
-          <label>JLPT 级别</label>
-          <select id="f-jlpt">
-            <option value="">—</option>
-            <option value="N1">N1</option>
-            <option value="N2">N2</option>
-            <option value="N3">N3</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>JLPT 分数</label>
-          <input id="f-jlpt-score" type="number" placeholder="例：145" min="0" max="180">
-        </div>
-      </div>
-      <div class="grid-3">
-        <div class="field">
-          <label>英语类型</label>
-          <select id="f-eng-type">
-            <option value="">—</option>
-            <option value="TOEIC">TOEIC</option>
-            <option value="TOEFL">TOEFL</option>
-            <option value="IELTS">IELTS</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>英语分数</label>
-          <input id="f-eng-score" type="number" placeholder="例：820" min="0">
-        </div>
-        <div class="field">
-          <label>学生名（可用代号）</label>
-          <input id="f-student" type="text" placeholder="例：A同学">
-        </div>
-      </div>
+    <div class="field">
+      <label>入学年度</label>
+      <div style="padding:10px 12px;border:1px solid var(--border);border-radius:5px;background:var(--bg);font-size:13px;color:var(--text-muted)">2027年入学</div>
+      <input type="hidden" id="f-era" value="new">
     </div>
-
-    <div class="card">
-      <div class="card-title">备注</div>
-      <div class="field">
-        <textarea id="f-note" placeholder="其他想补充的信息（选填）"></textarea>
-      </div>
-    </div>
-
-    <button class="submit-btn" onclick="submitForm()">提交合格信息</button>
   </div>
 
-  <div class="success-screen" id="success-screen">
-    <div class="success-icon">✓</div>
-    <div class="success-title">提交成功！</div>
-    <div class="success-sub">感谢您的录入，数据已保存。</div>
-    <button class="success-btn" onclick="resetForm()">继续录入</button>
+  <div class="card">
+    <div class="card-title">📊 语言成绩</div>
+    <div class="grid-2">
+      <div class="field"><label>JLPT 级别</label>
+        <select id="f-jlpt"><option value="">—</option><option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option></select>
+      </div>
+      <div class="field"><label>JLPT 分数</label><input id="f-jlpt-score" type="number" placeholder="例：145" min="0" max="180"></div>
+    </div>
+    <div class="grid-3">
+      <div class="field"><label>英语类型</label>
+        <select id="f-eng-type"><option value="">—</option><option value="TOEIC">TOEIC</option><option value="TOEFL">TOEFL</option><option value="IELTS">IELTS</option></select>
+      </div>
+      <div class="field"><label>英语分数</label><input id="f-eng-score" type="number" placeholder="例：820" min="0"></div>
+      <div class="field"><label>姓名（可用代号）</label><input id="f-student" type="text" placeholder="例：A同学"></div>
+    </div>
   </div>
+
+  <div class="card">
+    <div class="card-title">📷 合格通知书照片（选填）</div>
+    <div class="photo-upload" onclick="document.getElementById('f-photo').click()">
+      <input type="file" id="f-photo" accept="image/*" onchange="previewPhoto(this)">
+      <div class="pu-icon">🖼</div>
+      <div class="pu-text">点击上传合格通知书照片</div>
+      <div class="pu-hint">支持 JPG / PNG，最大 5MB</div>
+    </div>
+    <img id="photo-preview" class="photo-preview" alt="预览">
+  </div>
+
+  <div class="card">
+    <div class="card-title">✏️ 备注</div>
+    <div class="field"><textarea id="f-note" placeholder="其他想补充的信息（选填）"></textarea></div>
+  </div>
+
+  <button class="submit-btn" id="submit-btn" onclick="submitForm()">提交合格信息</button>
+</div>
+
+<div class="success-screen" id="success-screen">
+  <div class="confetti-area" id="confetti-area"></div>
+  <div class="success-badge"><span class="success-badge-icon">🎉</span></div>
+  <div class="success-title">恭喜合格！</div>
+  <div class="success-msg" id="success-msg">感谢您的录入！<br>您的合格信息已成功保存。</div>
+  <img id="success-photo" class="success-photo" alt="合格通知书">
+  <div class="success-actions"><button class="btn-another" onclick="resetForm()">继续录入</button></div>
+</div>
 </main>
-
 <div class="toast" id="toast"></div>
 
 <script>
-const SUPABASE_URL = 'https://vwntezfvqbrkeovnseku.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_cUnCkti5qv1_G4N6Ho5tpw_9pr7pSas';
+const SUPABASE_URL='https://vwntezfvqbrkeovnseku.supabase.co';
+const SUPABASE_KEY='sb_publishable_cUnCkti5qv1_G4N6Ho5tpw_9pr7pSas';
+const BUCKET='admission-photos';
 
-async function submitForm() {
-  const univ = document.getElementById('f-univ').value.trim();
-  const dept = document.getElementById('f-dept').value.trim();
-  const subject = document.getElementById('f-subject').value;
+function previewPhoto(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{const img=document.getElementById('photo-preview');img.src=e.target.result;img.style.display='block';};
+  reader.readAsDataURL(file);
+}
 
-  if (!univ) { showToast('请填写大学名', false); return; }
-  if (!dept) { showToast('请填写研究科', false); return; }
-  if (!subject) { showToast('请选择在籍学科', false); return; }
+async function uploadPhoto(file,univ,student){
+  if(!file)return null;
+  const ext=file.name.split('.').pop();
+  const safeName=(univ+'_'+(student||'student')+'_'+Date.now()+'.'+ext).replace(/[^\w.\u3040-\u9fff-]/g,'_');
+  const path='grad/'+safeName;
+  const res=await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`,{
+    method:'POST',
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':file.type},
+    body:file,
+  });
+  if(!res.ok)throw new Error('图片上传失败');
+  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+}
 
-  const track = subject.startsWith('rika_') ? 'rika' : 'bunka';
-  const jlptScore = document.getElementById('f-jlpt-score').value;
-  const engScore = document.getElementById('f-eng-score').value;
+async function submitForm(){
+  const univ=document.getElementById('f-univ').value.trim();
+  const dept=document.getElementById('f-dept').value.trim();
+  const subject=document.getElementById('f-subject').value;
+  if(!univ){showToast('请填写合格大学',false);return;}
+  if(!dept){showToast('请填写研究科',false);return;}
+  if(!subject){showToast('请选择在籍学科',false);return;}
 
-  const row = {
-    univ,
-    dept,
-    spec: document.getElementById('f-spec').value.trim() || null,
-    student: document.getElementById('f-student').value.trim() || null,
-    subject,
-    track,
-    era: document.getElementById('f-era').value,
-    jlpt: document.getElementById('f-jlpt').value || null,
-    jlpt_score: jlptScore ? parseInt(jlptScore) : null,
-    eng_type: document.getElementById('f-eng-type').value || null,
-    eng_score: engScore ? parseInt(engScore) : null,
-    note: document.getElementById('f-note').value.trim() || null,
-  };
+  const btn=document.getElementById('submit-btn');
+  btn.disabled=true;btn.textContent='提交中...';
 
-  const btn = document.querySelector('.submit-btn');
-  btn.disabled = true;
-  btn.textContent = '提交中...';
+  try{
+    const track=subject.startsWith('rika_')?'rika':'bunka';
+    const student=document.getElementById('f-student').value.trim()||null;
+    const jlptScore=document.getElementById('f-jlpt-score').value;
+    const engScore=document.getElementById('f-eng-score').value;
+    const photoFile=document.getElementById('f-photo').files[0];
 
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/admission_results`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify(row),
+    let photoUrl=null;
+    if(photoFile){btn.textContent='上传图片中...';photoUrl=await uploadPhoto(photoFile,univ,student);}
+
+    const noteText=document.getElementById('f-note').value.trim();
+    const row={
+      univ,dept,
+      spec:document.getElementById('f-spec').value.trim()||null,
+      student,subject,track,
+      era:document.getElementById('f-era').value,
+      jlpt:document.getElementById('f-jlpt').value||null,
+      jlpt_score:jlptScore?parseInt(jlptScore):null,
+      eng_type:document.getElementById('f-eng-type').value||null,
+      eng_score:engScore?parseInt(engScore):null,
+      note:[noteText,photoUrl?'[photo]'+photoUrl:''].filter(Boolean).join(' | ')||null,
+    };
+
+    btn.textContent='保存中...';
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/admission_results`,{
+      method:'POST',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(row),
     });
-    if (!res.ok) throw new Error(await res.text());
-    document.getElementById('form-area').style.display = 'none';
-    document.getElementById('success-screen').style.display = 'block';
-  } catch(e) {
-    showToast('提交失败：' + e.message, false);
-    btn.disabled = false;
-    btn.textContent = '提交合格信息';
+    if(!res.ok)throw new Error(await res.text());
+
+    document.getElementById('success-msg').innerHTML=`<strong>${univ}</strong> 合格おめでとうございます！<br>情報を正常に保存しました。`;
+    if(photoUrl){const sp=document.getElementById('success-photo');sp.src=photoUrl;sp.style.display='block';}
+    document.getElementById('form-area').style.display='none';
+    document.getElementById('success-screen').style.display='block';
+    launchConfetti();
+  }catch(e){
+    showToast('提交失败：'+e.message,false);
+    btn.disabled=false;btn.textContent='提交合格信息';
   }
 }
 
-function resetForm() {
-  ['f-univ','f-dept','f-spec','f-student','f-jlpt-score','f-eng-score','f-note'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  ['f-subject','f-era','f-jlpt','f-eng-type'].forEach(id => {
-    document.getElementById(id).selectedIndex = 0;
-  });
-  document.getElementById('form-area').style.display = '';
-  document.getElementById('success-screen').style.display = 'none';
-  const btn = document.querySelector('.submit-btn');
-  btn.disabled = false;
-  btn.textContent = '提交合格信息';
+function launchConfetti(){
+  const colors=['#2c4a8a','#e8b0c0','#f4d060','#3a6630','#e8edf8','#fce8ef'];
+  const area=document.getElementById('confetti-area');area.innerHTML='';
+  for(let i=0;i<80;i++){
+    const el=document.createElement('div');el.className='confetti';
+    el.style.left=Math.random()*100+'vw';
+    el.style.background=colors[Math.floor(Math.random()*colors.length)];
+    el.style.width=(6+Math.random()*8)+'px';el.style.height=(6+Math.random()*8)+'px';
+    el.style.animationDuration=(2+Math.random()*3)+'s';el.style.animationDelay=Math.random()*1.5+'s';
+    area.appendChild(el);
+  }
+  setTimeout(()=>{area.innerHTML='';},7000);
+}
+
+function resetForm(){
+  ['f-univ','f-dept','f-spec','f-student','f-jlpt-score','f-eng-score','f-note'].forEach(id=>document.getElementById(id).value='');
+  ['f-subject','f-era','f-jlpt','f-eng-type'].forEach(id=>document.getElementById(id).selectedIndex=0);
+  document.getElementById('f-photo').value='';
+  document.getElementById('photo-preview').style.display='none';
+  document.getElementById('success-photo').style.display='none';
+  document.getElementById('form-area').style.display='';
+  document.getElementById('success-screen').style.display='none';
+  document.getElementById('confetti-area').innerHTML='';
+  const btn=document.getElementById('submit-btn');btn.disabled=false;btn.textContent='提交合格信息';
 }
 
 let toastTimer;
-function showToast(msg, ok = true) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = `toast show ${ok ? 'toast-ok' : 'toast-err'}`;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+function showToast(msg,ok=true){
+  const el=document.getElementById('toast');el.textContent=msg;
+  el.className=`toast show ${ok?'toast-ok':'toast-err'}`;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3000);
 }
 </script>
 </body>
