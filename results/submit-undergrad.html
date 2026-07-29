@@ -25,6 +25,14 @@ main{max-width:640px;margin:2rem auto;padding:0 1.2rem 4rem}
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);background:var(--surface)}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media(max-width:500px){
+  .grid-2{grid-template-columns:1fr}
+  .grid-3{grid-template-columns:1fr}
+  main{padding:0 .8rem 3rem}
+  .card{padding:1.2rem}
+  header{padding:1.5rem 1rem 1.2rem}
+  .h-title{font-size:1.3rem}
+}
 .track-btns{display:flex;gap:8px;margin-bottom:0}
 .track-btn{flex:1;padding:12px;border:2px solid var(--border);border-radius:6px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--text-secondary);cursor:pointer;text-align:center;transition:all .12s;font-weight:500;}
 .track-btn.active-bunka{border-color:#2c4a8a;background:#e8edf8;color:#2c4a8a}
@@ -144,7 +152,7 @@ main{max-width:640px;margin:2rem auto;padding:0 1.2rem 4rem}
 
   <div class="card">
     <div class="card-title">✏️ 其他</div>
-    <div class="field"><label>姓名</label><input id="f-student" type="text" placeholder="例：真实姓名"></div>
+    <div class="field"><label>姓名（可用代号）</label><input id="f-student" type="text" placeholder="例：A同学"></div>
     <div class="field"><textarea id="f-note" placeholder="其他想补充的信息（选填）"></textarea></div>
   </div>
 
