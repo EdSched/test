@@ -495,8 +495,8 @@ async function spbSelectFramework(fwId) {
 }
 
 function spbHoursOf(it) {
-  if (SPB_SUBJECT_CATS.includes(it.category) || it.category === 'ta') return it.default_hours != null ? it.default_hours : 2;
-  return spbHrs[it.id] != null ? spbHrs[it.id] : (it.default_hours != null ? it.default_hours : 2);
+  if (spbHrs[it.id] != null) return spbHrs[it.id];
+  return it.default_hours != null ? it.default_hours : (it.category === 'ta' ? 20 : 2);
 }
 function spbCalc() {
   let sessions = 0, hours = 0;
@@ -528,11 +528,9 @@ function renderSpbBody() {
     const col = VF_CAT_COLOR[g.key] || { bg: '#eee', color: '#333' };
     const rows = g.items.map(it => {
       const sel = spbSel.has(it.id);
-      const editable = !SPB_SUBJECT_CATS.includes(it.category) && it.category !== 'ta';
       const h = spbHoursOf(it);
-      const hCtl = editable
-        ? `<select onclick="event.stopPropagation()" onchange="spbSetHours('${it.id}',this.value)" ${sel ? '' : 'disabled'} style="font-size:11px;width:54px;text-align:center">${SPB_HOURS_OPTS.map(o => `<option value="${o}"${o === h ? ' selected' : ''}>${o}H</option>`).join('')}</select>`
-        : `<span style="font-size:11px;font-weight:500">${h}H</span>`;
+      const spbOpts = (it.category === 'ta' ? [10, 20] : SPB_HOURS_OPTS);
+      const hCtl = `<select onclick="event.stopPropagation()" onchange="spbSetHours('${it.id}',this.value)" ${sel ? '' : 'disabled'} style="font-size:11px;width:54px;text-align:center">${spbOpts.map(o => `<option value="${o}"${o === h ? ' selected' : ''}>${o}H</option>`).join('')}</select>`;
       return `<div onclick="spbToggle('${it.id}')" style="display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:8px;padding:6px 8px;border-top:1px solid var(--border-light);cursor:pointer;background:${sel ? 'var(--bg)' : 'transparent'}">
         <div style="display:flex;justify-content:center"><div style="width:13px;height:13px;border:1px solid ${sel ? 'var(--accent,#1a1814)' : 'var(--border)'};border-radius:2px;background:${sel ? 'var(--accent,#1a1814)' : 'transparent'};color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center">${sel ? '✓' : ''}</div></div>
         <div style="min-width:0"><div style="font-size:11px;font-weight:500">${vfEsc(it.name)}</div><div style="font-size:10px;color:var(--text-3)">${vfEsc(it.content) || ''}</div></div>
