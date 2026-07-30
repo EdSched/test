@@ -627,6 +627,7 @@ function renderSvSelect(mc) {
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="svClearSel()" style="font-size:11px;background:transparent;border:1px solid #e2ded6;border-radius:3px;padding:5px 14px;cursor:pointer;font-family:inherit;color:#9a9590">清空</button>
+        <button onclick="svSaveAsTemplate()" style="font-size:11px;background:#fff;border:1px solid #c9b896;border-radius:3px;padding:5px 14px;cursor:pointer;font-family:inherit;color:#5a3010">保存为套餐</button>
         <button onclick="svGenerateReport()" style="font-size:11px;background:#fff;border:1px solid #1a1814;border-radius:3px;padding:5px 14px;cursor:pointer;font-family:inherit;color:#1a1814">生成 PDF</button>
         <button onclick="svSavePlan('signed')" style="font-size:11px;background:#1a1814;color:#f7f5f0;border:1px solid #1a1814;border-radius:3px;padding:5px 16px;cursor:pointer;font-family:inherit;font-weight:500">保存签约 →</button>
       </div>
@@ -675,6 +676,31 @@ function svToggle(id) {
 }
 function svSetHours(id, v) { svHrs[id] = parseFloat(v); const c = svCalc(); document.getElementById('sv_sessions').textContent = c.sessions; document.getElementById('sv_hours').textContent = c.hours; }
 function svClearSel() { svSel = new Set(); svHrs = {}; renderSvSelect(document.getElementById('mainContent')); }
+
+// 营业把当前点选保存为可复用套餐（admin 可在框架里查看/修改）
+async function svSaveAsTemplate() {
+  if (!svSel.size && !(svSubjectHours > 0)) { alert('请先点选课程'); return; }
+  const name = (prompt('套餐名称（如 20H / 30小时）：') || '').trim();
+  if (!name) return;
+  const fw = salesVipFrameworks.find(f => f.id === svCurrentId);
+  const items = svItems.filter(it => svSel.has(it.id)).map(it => ({
+    category: it.category, category_label: it.category_label, name: it.name,
+    content: it.content, homework: it.homework, hours: svHoursOf(it),
+  }));
+  const c = svCalc();
+  const rec = {
+    id: 'vtpl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+    framework_id: svCurrentId, major: fw ? fw.major : '', name,
+    items, total_sessions: c.sessions, total_hours: c.hours, subject_hours: svSubjectHours || 0,
+  };
+  try {
+    await sb('/rest/v1/vip_plan_templates', 'POST', [rec]);
+    svTemplates.unshift(rec);
+    salesTemplates.unshift(rec);
+    alert(`已保存套餐「${name}」，之后在「套餐」里可直接套用。`);
+    renderSvSelect(document.getElementById('mainContent'));
+  } catch (e) { alert('保存失败：' + e.message); }
+}
 function svToggleShare() { svShareOpen = !svShareOpen; renderSvSelect(document.getElementById('mainContent')); }
 function backToSvList() { renderVipSalesPlanning(document.getElementById('mainContent')); }
 function svAddShareTeacher(name) { if (!name || svShareTeachers.includes(name)) return; svShareTeachers.push(name); renderSvSelect(document.getElementById('mainContent')); }
