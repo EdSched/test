@@ -18,6 +18,8 @@ const VIP_CAT_ORDER = [
   ['eng', '英翻日对策'], ['plan', '研究计划书'], ['apply', '出愿指导'],
   ['inter', '面试对策'], ['ta', 'TA指导'],
 ];
+const VIP_CAT_RANK = {}; VIP_CAT_ORDER.forEach(([k], i) => { VIP_CAT_RANK[k] = i; });
+function vipCatRank(key) { return VIP_CAT_RANK[key] != null ? VIP_CAT_RANK[key] : 99; }
 
 // teacher.js 的 init 会调用它（若存在）
 async function loadTeacherVipFrameworks() {
@@ -267,7 +269,7 @@ function renderTvPlanEditor(mc) {
     if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, idxs: [], min: i };
     catMap[k].idxs.push(i);
   });
-  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  const groups = Object.values(catMap).sort((a, b) => vipCatRank(a.key) - vipCatRank(b.key));
 
   const groupsHtml = groups.map(g => {
     const rows = g.idxs.map(i => {
@@ -441,7 +443,7 @@ function openSvPlan(id) {
     if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], min: i };
     catMap[k].items.push(it);
   });
-  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  const groups = Object.values(catMap).sort((a, b) => vipCatRank(a.key) - vipCatRank(b.key));
   const groupsHtml = groups.map(g => {
     const col = VIP_CAT_COLOR[g.key] || { bg: '#eee', color: '#333' };
     const rows = g.items.map(it => `<div style="border-top:1px solid #ede9e2;padding:7px 12px;display:grid;grid-template-columns:1fr 2fr 60px;gap:8px;font-size:11px"><div style="font-weight:500">${tvEsc(it.name)}</div><div style="color:#5a5650">${tvEsc(it.content)}</div><div style="text-align:right;color:#5a5650">${it.hours != null ? it.hours + 'H' : ''}</div></div>`).join('');
@@ -517,7 +519,7 @@ function renderSvSelect(mc) {
     catMap[k].items.push(it);
     catMap[k].minOrder = Math.min(catMap[k].minOrder, it.sort_order || 0);
   });
-  const groups = Object.values(catMap).sort((a, b) => a.minOrder - b.minOrder);
+  const groups = Object.values(catMap).sort((a, b) => vipCatRank(a.key) - vipCatRank(b.key));
   groups.forEach(g => g.items.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
   const groupsHtml = groups.map(g => {
@@ -716,7 +718,7 @@ function svGenerateReport() {
     catMap[k].items.push(it);
     catMap[k].minOrder = Math.min(catMap[k].minOrder, it.sort_order || 0);
   });
-  const groups = Object.values(catMap).sort((a, b) => a.minOrder - b.minOrder);
+  const groups = Object.values(catMap).sort((a, b) => vipCatRank(a.key) - vipCatRank(b.key));
   groups.forEach(g => g.items.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
   const c = svCalc();
