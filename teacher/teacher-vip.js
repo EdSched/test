@@ -484,12 +484,35 @@ function openSvPlan(id) {
   <div style="max-width:1000px;margin:0 auto;background:#f7f5f0;border:1px solid #e2ded6;border-radius:6px;padding:16px 20px 20px;font-family:'DM Mono','Noto Serif SC',monospace">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:12px"><button onclick="svBackToPlans()" style="font-size:11px;background:#fff;border:1px solid #e2ded6;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a5650">← 返回</button><div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600;color:#1a1814">${tvEsc(p.student_name)} 的 VIP 方案</div></div>
-      <div style="font-size:12px;color:#5a5650">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时${(p.subject_hours && p.subject_hours > 0) ? '　·　专业知识 ' + p.subject_hours + ' 课时' : ''}</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;color:#5a5650">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时${(p.subject_hours && p.subject_hours > 0) ? '　·　专业知识 ' + p.subject_hours + ' 课时' : ''}</div>
+        <button onclick="svPlanToTemplate('${p.id}')" style="font-size:11px;background:#fff;border:1px solid #c9b896;border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:#5a3010">保存成套餐</button>
+      </div>
     </div>
     ${groupsHtml || '<div style="font-size:12px;color:#9a9590">此方案暂无课程</div>'}
   </div>`;
 }
 function svBackToPlans() { svTab = 'plans'; renderSvHome(document.getElementById('mainContent')); }
+
+// 把某学生方案原样保存成可复用套餐
+async function svPlanToTemplate(planId) {
+  const p = salesStudentPlans.find(x => x.id === planId);
+  if (!p) return;
+  const items = Array.isArray(p.items) ? p.items : [];
+  if (!items.length && !(p.subject_hours > 0)) { alert('此方案暂无课程，无法存为套餐'); return; }
+  const name = (prompt('套餐名称（如 20H / 30小时）：', (p.total_hours || '') + 'H') || '').trim();
+  if (!name) return;
+  const rec = {
+    id: 'vtpl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+    framework_id: p.framework_id || '', major: p.major || '', name,
+    items, total_sessions: p.total_sessions || 0, total_hours: p.total_hours || 0, subject_hours: p.subject_hours || 0,
+  };
+  try {
+    await sb('/rest/v1/vip_plan_templates', 'POST', [rec]);
+    salesTemplates.unshift(rec);
+    alert(`已把「${p.student_name}」的方案保存成套餐「${name}」，在「套餐」里可直接套用给其他学生。`);
+  } catch (e) { alert('保存失败：' + e.message); }
+}
 
 async function svDeletePlan(id) {
   const p = salesStudentPlans.find(x => x.id === id);
