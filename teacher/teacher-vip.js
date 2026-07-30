@@ -335,9 +335,10 @@ let svSel = new Set();          // 已选条目 id
 let svHrs = {};                 // 条目 id → 自定义课时（仅可调课时的分类）
 let svSubjectHours = 0;         // 专业知识四部分总课时（老师按此安排）
 let svShareOpen = false;
-let svTab = 'templates';        // 营业子视图：templates(课程模板) / plans(学生方案)
+let svTab = 'presets';          // 营业子视图：presets(套餐) / templates(从框架规划) / plans(学生方案)
 let salesStudentPlans = [];     // 已保存的学生方案
 let svTemplates = [];           // 当前框架下的命名套餐
+let salesTemplates = [];        // 全部套餐（营业首页「套餐」用）
 
 // 分类配色（还原 VIP.html）
 const VIP_CAT_COLOR = {
@@ -357,12 +358,13 @@ const VIP_SUBJECT_CATS = ['base', 'adv', 'method', 'ext']; // 按 课时/2 计�
 const VIP_HOURS_OPTIONS = [0.5, 1, 2, 3, 4];
 
 async function loadSalesVipData() {
-  const [fw, ts, pl] = await Promise.all([
+  const [fw, ts, pl, tpl] = await Promise.all([
     sb('/rest/v1/vip_frameworks?select=*&order=major.asc,created_at.desc').catch(() => []),
     sb('/rest/v1/teachers?select=name&order=name.asc').catch(() => []),
     sb('/rest/v1/vip_student_plans?select=*&order=created_at.desc').catch(() => []),
+    sb('/rest/v1/vip_plan_templates?select=*&order=major.asc,created_at.desc').catch(() => []),
   ]);
-  salesVipFrameworks = fw; svAllTeachers = ts; salesStudentPlans = pl;
+  salesVipFrameworks = fw; svAllTeachers = ts; salesStudentPlans = pl; salesTemplates = tpl;
 }
 
 // ── 营业首页：课程模板 / 学生方案 两个子视图 ──
@@ -381,16 +383,19 @@ function renderSvHome(mc) {
   const header = `
     <div style="margin-bottom:10px">
       <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">VIP 规划</div>
-      <div style="font-size:11px;color:var(--text-3);margin-top:2px">选择模板为学生点选课程、保存签约或发给老师确认；已保存的方案在「学生方案」查看</div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:2px">「套餐」= 直接选现成的方案套用给学生；「从框架规划」= 从头点选课程；已保存的在「学生方案」查看</div>
     </div>
     <div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px">
-      ${tabBtn('templates', '课程模板')}
+      ${tabBtn('presets', '套餐', salesTemplates.length)}
+      ${tabBtn('templates', '从框架规划')}
       ${tabBtn('plans', '学生方案', salesStudentPlans.length)}
     </div>`;
 
   let body;
   if (svTab === 'plans') {
     body = renderSvPlansBody();
+  } else if (svTab === 'presets') {
+    body = renderSvPresetsBody();
   } else {
     const byMajor = {};
     salesVipFrameworks.forEach(f => { (byMajor[f.major] = byMajor[f.major] || []).push(f); });
@@ -410,8 +415,34 @@ function renderSvHome(mc) {
   mc.innerHTML = `<div class="page-section" style="max-width:900px">${header}${body}</div>`;
 }
 
+// 套餐视图：全部套餐按专业分组，点一个直接进对应框架并预填
+function renderSvPresetsBody() {
+  if (!salesTemplates.length) return '<div class="empty">暂无套餐<br><span style="font-size:11px">请学科负责人在「VIP框架」里点开框架、在「课程套餐」新建（如 20H / 30小时）</span></div>';
+  const byMajor = {};
+  salesTemplates.forEach(t => { (byMajor[t.major] = byMajor[t.major] || []).push(t); });
+  const majorKeys = Object.keys(byMajor).sort();
+  return majorKeys.map(mk => {
+    const cards = byMajor[mk].map(t => {
+      const items = Array.isArray(t.items) ? t.items : [];
+      return `<div onclick="openSvPreset('${t.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:12px 14px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:10px" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div><div style="font-size:14px;font-weight:600">${tvEsc(t.name || '套餐')}</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">${t.total_sessions || 0} 回 · ${t.total_hours || 0} 课时${(t.subject_hours && t.subject_hours > 0) ? '（含专业知识' + t.subject_hours + '）' : ''} · ${items.length} 门课</div></div>
+        <span style="font-size:11px;color:var(--accent,#1a3a6a)">套用 ›</span>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:16px"><div style="font-size:11px;letter-spacing:.06em;color:var(--text-3);padding-bottom:6px;border-bottom:1px solid var(--border-light);margin-bottom:8px">${tvEsc(majorLabel(mk))}</div><div style="display:flex;flex-direction:column;gap:6px">${cards}</div></div>`;
+  }).join('');
+}
+
+// 点套餐 → 进入对应框架点选页并自动预填该套餐
+async function openSvPreset(tid) {
+  const t = salesTemplates.find(x => x.id === tid);
+  if (!t) return;
+  await openSvFramework(t.framework_id);
+  applySvTemplate(tid);
+}
+
 function renderSvPlansBody() {
-  if (!salesStudentPlans.length) return '<div class="empty">暂无已保存的学生方案<br><span style="font-size:11px">在「课程模板」里点选课程后，保存签约或发老师确认即会出现在这里</span></div>';
+  if (!salesStudentPlans.length) return '<div class="empty">暂无已保存的学生方案<br><span style="font-size:11px">在「套餐」或「从框架规划」里操作后，保存签约或发老师确认即会出现在这里</span></div>';
   const stLabel = { signed: '已签约', pending: '待老师确认', confirmed: '老师已确认' };
   const stColor = { signed: '#1a4a28', pending: '#8a6d3b', confirmed: '#1a3a6a' };
   const stBg = { signed: '#ddf0e0', pending: '#faf0dc', confirmed: '#ddeaf8' };
