@@ -16,6 +16,8 @@ const VIP_STATUS_COLOR = { draft: '#8a6d3b', shared: '#1a3a6a', done: '#1a4a28' 
 const VIP_STATUS_BG    = { draft: '#faf0dc', shared: '#ddeaf8', done: '#ddf0e0' };
 
 // 分类配色（还原独立 VIP 页面）
+// 固定分类顺序（升学基本指导→专业知识→…→TA），用于分组排序
+function vfCatRank(key){ const i = (typeof VIP_CATEGORIES!=='undefined'?VIP_CATEGORIES:[]).findIndex(c=>c.key===key); return i<0?99:i; }
 const VF_CAT_COLOR = {
   found:  { bg: '#f5f0e8', color: '#2a2820' }, base:   { bg: '#ddeaf8', color: '#1a3a6a' },
   adv:    { bg: '#e8e4f8', color: '#3a2a7a' }, method: { bg: '#ddf0e0', color: '#1a4a28' },
@@ -231,7 +233,7 @@ async function openVfTemplate(tid) {
   const items = Array.isArray(t.items) ? t.items : [];
   const catMap = {};
   items.forEach((it, i) => { const k = it.category || 'other'; if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], min: i }; catMap[k].items.push(it); });
-  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  const groups = Object.values(catMap).sort((a, b) => vfCatRank(a.key) - vfCatRank(b.key));
   const groupsHtml = groups.map(g => {
     const col = VF_CAT_COLOR[g.key] || { bg: '#eee', color: '#333' };
     const rows = g.items.map(it => `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:6px 10px;border-top:1px solid var(--border-light);font-size:11px"><div><div style="font-weight:500">${vfEsc(it.name)}</div><div style="color:var(--text-3)">${vfEsc(it.content) || ''}</div></div><div style="color:var(--text-3)">${it.hours != null ? it.hours + 'H' : ''}</div></div>`).join('');
@@ -523,7 +525,7 @@ function renderSpbBody() {
     if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], min: it.sort_order || 0 };
     catMap[k].items.push(it); catMap[k].min = Math.min(catMap[k].min, it.sort_order || 0);
   });
-  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  const groups = Object.values(catMap).sort((a, b) => vfCatRank(a.key) - vfCatRank(b.key));
   body.innerHTML = groups.map(g => {
     const col = VF_CAT_COLOR[g.key] || { bg: '#eee', color: '#333' };
     const rows = g.items.map(it => {
