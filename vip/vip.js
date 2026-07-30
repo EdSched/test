@@ -904,13 +904,15 @@ function renderVipPlanSection() {
     apply: { bg: '#fbeaf0', color: '#6a1a3a' }, inter: { bg: '#e1f0ea', color: '#0a4030' },
     ta: { bg: '#e8eaf8', color: '#1a2a6a' },
   };
+  const VIP_PLAN_CAT_ORDER = ['found','base','adv','method','ext','past','eng','plan','apply','inter','ta'];
+  const catRank = k => { const i = VIP_PLAN_CAT_ORDER.indexOf(k); return i < 0 ? 99 : i; };
   const catMap = {};
   items.forEach((it, i) => {
     const k = it.category || 'other';
     if (!catMap[k]) catMap[k] = { key: k, label: it.category_label || k, items: [], min: i };
     catMap[k].items.push(it);
   });
-  const groups = Object.values(catMap).sort((a, b) => a.min - b.min);
+  const groups = Object.values(catMap).sort((a, b) => catRank(a.key) - catRank(b.key));
   const groupsHtml = groups.map(g => {
     const col = catColor[g.key] || { bg: '#eee', color: '#333' };
     const rows = g.items.map(it => `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:7px 10px;border-top:1px solid var(--border-light);font-size:12px"><div><div style="font-weight:500">${it.name || ''}</div>${it.content ? `<div style="font-size:11px;color:var(--text-muted);margin-top:1px">${it.content}</div>` : ''}</div><div style="color:var(--text-muted);white-space:nowrap">${it.hours != null ? it.hours + 'H' : ''}</div></div>`).join('');
