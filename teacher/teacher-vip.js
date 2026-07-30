@@ -482,8 +482,8 @@ async function openSvFramework(id) {
 }
 
 function svHoursOf(it) {
-  if (VIP_SUBJECT_CATS.includes(it.category) || it.category === 'ta') return it.default_hours != null ? it.default_hours : 2;
-  return svHrs[it.id] != null ? svHrs[it.id] : (it.default_hours != null ? it.default_hours : 2);
+  if (svHrs[it.id] != null) return svHrs[it.id];
+  return it.default_hours != null ? it.default_hours : (it.category === 'ta' ? 20 : 2);
 }
 function svCalc() {
   let sessions = 0, hours = 0;
@@ -524,15 +524,10 @@ function renderSvSelect(mc) {
     const col = VIP_CAT_COLOR[g.key] || { bg: '#eee', color: '#333' };
     const rows = g.items.map(it => {
       const sel = svSel.has(it.id);
-      const editable = !VIP_SUBJECT_CATS.includes(it.category) && it.category !== 'ta';
+      const isTa = it.category === 'ta';
       const h = svHoursOf(it);
-      let hoursCtl;
-      if (editable) {
-        const opts = VIP_HOURS_OPTIONS.map(o => `<option value="${o}"${o === h ? ' selected' : ''}>${o}H</option>`).join('');
-        hoursCtl = `<select onclick="event.stopPropagation()" onchange="svSetHours('${it.id}',this.value)" ${sel ? '' : 'disabled'} style="font-family:'DM Mono',monospace;font-size:12px;font-weight:500;background:#f7f5f0;border:1px solid #e2ded6;border-radius:3px;padding:2px 4px;width:58px;text-align:center;cursor:pointer;${sel ? '' : 'opacity:.35;cursor:not-allowed'}">${opts}</select>`;
-      } else {
-        hoursCtl = `<span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:500">${h}H</span>`;
-      }
+      const opts = (isTa ? [10, 20] : VIP_HOURS_OPTIONS).map(o => `<option value="${o}"${o === h ? ' selected' : ''}>${o}H</option>`).join('');
+      const hoursCtl = `<select onclick="event.stopPropagation()" onchange="svSetHours('${it.id}',this.value)" ${sel ? '' : 'disabled'} style="font-family:'DM Mono',monospace;font-size:12px;font-weight:500;background:#f7f5f0;border:1px solid #e2ded6;border-radius:3px;padding:2px 4px;width:58px;text-align:center;cursor:pointer;${sel ? '' : 'opacity:.35;cursor:not-allowed'}">${opts}</select>`;
       return `
       <div onclick="svToggle('${it.id}')" class="vsel-row" style="display:grid;grid-template-columns:34px 1fr auto;align-items:stretch;border-top:1px solid #ede9e2;cursor:pointer;min-height:50px;background:${sel ? '#f0ede8' : '#fff'}">
         <div style="display:flex;align-items:center;justify-content:center;border-right:1px solid #ede9e2">
@@ -544,7 +539,7 @@ function renderSvSelect(mc) {
           ${it.homework ? `<div style="font-size:10px;color:#9a9590;margin-top:1px"><span style="background:#f7f5f0;border:1px solid #ede9e2;border-radius:2px;padding:0 4px;font-size:9px;margin-right:4px">作业</span>${tvEsc(it.homework)}</div>` : ''}
         </div>
         <div style="padding:7px 12px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px;min-width:74px">
-          ${hoursCtl}<span style="font-size:9px;color:#9a9590">${editable ? '课时/回' : '课时'}</span>
+          ${hoursCtl}<span style="font-size:9px;color:#9a9590">${isTa ? '课时' : '课时/回'}</span>
         </div>
       </div>`;
     }).join('');
