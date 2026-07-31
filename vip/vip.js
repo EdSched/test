@@ -873,6 +873,7 @@ function renderVipBookingSection() {
 }
 
 // VIP 课程安排区（绑定的规划 + 课时进度）
+function tspStudentMD(s){ if(!s) return ''; const p=s.split('-'); return p.length===3?(+p[1])+'/'+(+p[2]):s; }
 function renderVipPlanSection() {
   const totalH = vipStudent.vip_hours_total || 0;
   const usedH = vipStudent.vip_hours_used || 0;
@@ -896,6 +897,15 @@ function renderVipPlanSection() {
   }
 
   const items = Array.isArray(vipStudentPlan.items) ? vipStudentPlan.items : [];
+  // 已上完的课：按课程名匹配已完成的 VIP 预约，取最近日期
+  const doneByName = {};
+  (vipBookings || []).forEach(b => {
+    if (b.status === 'completed' && b.vip_content) {
+      const d = b.slot_date || '';
+      if (!doneByName[b.vip_content] || d > doneByName[b.vip_content]) doneByName[b.vip_content] = d;
+    }
+  });
+  const fmtMD = d => { if (!d) return ''; const p = d.split('-'); return p.length === 3 ? `${+p[1]}/${+p[2]}` : d; };
   const catColor = {
     found: { bg: '#f5f0e8', color: '#2a2820' }, base: { bg: '#ddeaf8', color: '#1a3a6a' },
     adv: { bg: '#e8e4f8', color: '#3a2a7a' }, method: { bg: '#ddf0e0', color: '#1a4a28' },
@@ -915,7 +925,7 @@ function renderVipPlanSection() {
   const groups = Object.values(catMap).sort((a, b) => catRank(a.key) - catRank(b.key));
   const groupsHtml = groups.map(g => {
     const col = catColor[g.key] || { bg: '#eee', color: '#333' };
-    const rows = g.items.map(it => `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:7px 10px;border-top:1px solid var(--border-light);font-size:12px"><div><div style="font-weight:500">${it.name || ''}</div>${it.content ? `<div style="font-size:11px;color:var(--text-muted);margin-top:1px">${it.content}</div>` : ''}</div><div style="color:var(--text-muted);white-space:nowrap">${it.hours != null ? it.hours + 'H' : ''}</div></div>`).join('');
+    const rows = g.items.map(it => { const done = doneByName[it.name]; const planned = it.planned_date && !done ? tspStudentMD(it.planned_date) : ''; return `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:7px 10px;border-top:1px solid var(--border-light);font-size:12px;${done ? 'background:#f2f8f3' : ''}"><div><div style="font-weight:500">${done ? '<span style="color:#1a7a3a">✓ </span>' : ''}${it.name || ''}${done ? ` <span style="font-size:10px;color:#1a7a3a">已上 · ${fmtMD(done)}</span>` : (planned ? ` <span style="font-size:10px;color:#5a7a9a">预计 · ${planned}</span>` : '')}</div>${it.content ? `<div style="font-size:11px;color:var(--text-muted);margin-top:1px">${it.content}</div>` : ''}</div><div style="color:var(--text-muted);white-space:nowrap">${it.hours != null ? it.hours + 'H' : ''}</div></div>`; }).join('');
     return `<div style="margin-bottom:12px"><div style="margin-bottom:4px"><span style="border-radius:3px;padding:2px 10px;font-size:11px;font-weight:500;background:${col.bg};color:${col.color}">${g.label}</span></div><div style="border:1px solid var(--border);border-radius:4px;overflow:hidden">${rows}</div></div>`;
   }).join('');
 
