@@ -112,7 +112,7 @@ function buildTabs() {
   if (p.lect_info) tabs.push({ id: 'lectinfo', label: '👤 讲师信息' });
   // 我的课表：有排班权限或有实际排到课才显示
   if (p.schedule || slots.length) tabs.push({ id: 'mycourses', label: '📚 我的课表' });
-  if ((typeof teacherVipFrameworks !== 'undefined' && teacherVipFrameworks.length) || (typeof teacherVipPlans !== 'undefined' && teacherVipPlans.length)) tabs.push({ id: 'vipframework', label: '⭐ VIP框架' });
+  if ((typeof teacherVipFrameworks !== 'undefined' && teacherVipFrameworks.length) || (typeof teacherVipPlans !== 'undefined' && teacherVipPlans.length) || (typeof teacherVipMyPlans !== 'undefined' && teacherVipMyPlans.length)) tabs.push({ id: 'vipframework', label: '⭐ VIP框架' });
   if (p.vip_sales) tabs.push({ id: 'vipsales', label: '🗂 VIP规划' });
   // 工作记录：有实际教学相关权限才显示
   if (p.booking || p.slots || p.schedule || p.homework || slots.length) tabs.push({ id: 'workrecords', label: '📋 工作记录' });
@@ -1106,7 +1106,22 @@ function shiftMyCalMonth(delta) {
 const VIP_CONTENT_OPTIONS = ['专业课指导', '过去问对策', '研究计划书', '出愿指导', '面试对策', 'TA指导'];
 
 let vipRecordPlanItems = [];  // 当前打开记录的学生 VIP 规划课程
+let vipRecordPickIdx = null;  // 当前选中的规划课程下标
 function vipRecEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// 规划课程点选：整行卡片（无圆点，文字完整），选中高亮打勾
+function vipPlanPickRowsHtml() {
+  return vipRecordPlanItems.map((it, i) => {
+    const sel = vipRecordPickIdx === i;
+    return `<div onclick="vipPickPlanItem(${i})" style="display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:pointer;padding:7px 9px;border-radius:4px;border:1px solid ${sel ? 'var(--accent,#1a1814)' : 'var(--border)'};background:${sel ? 'var(--bg)' : 'transparent'}">
+      <div style="flex-shrink:0;width:14px;height:14px;margin-top:1px;border:1px solid ${sel ? 'var(--accent,#1a1814)' : 'var(--border)'};border-radius:3px;background:${sel ? 'var(--accent,#1a1814)' : 'transparent'};color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center">${sel ? '✓' : ''}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:600">${vipRecEsc(it.category_label ? it.category_label + '·' : '')}${vipRecEsc(it.name)}${(it.hours != null) ? ` <span style="color:var(--text-3);font-weight:400">(${it.hours}H)</span>` : ''}</div>
+        ${it.content ? `<div style="color:var(--text-3);line-height:1.5;margin-top:2px">${vipRecEsc(it.content)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
 
 async function openVipSessionRecord(bookingId) {
   const b = cachedTeacherBookings.find(x => x.id === bookingId);
@@ -1119,6 +1134,8 @@ async function openVipSessionRecord(bookingId) {
     if (plans && plans.length && Array.isArray(plans[0].items)) vipRecordPlanItems = plans[0].items;
   } catch (e) {}
   const hasPlan = vipRecordPlanItems.length > 0;
+  vipRecordPickIdx = hasPlan ? vipRecordPlanItems.findIndex(it => it.name === b.vip_content) : -1;
+  if (vipRecordPickIdx < 0) vipRecordPickIdx = null;
   const availableContent = slot?.vip_content || VIP_CONTENT_OPTIONS;
 
   let contentSection;
@@ -1127,11 +1144,8 @@ async function openVipSessionRecord(bookingId) {
     const isOff = !!offReason && !(b.vip_content && vipRecordPlanItems.some(it => it.name === b.vip_content));
     contentSection = `
       <div class="form-group"><label class="form-label">本次授课内容（来自该学生 VIP 规划，点选本次所上）</label>
-        <div id="vip_plan_pick" style="display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:6px">
-          ${vipRecordPlanItems.map((it, i) => `<label style="display:flex;align-items:flex-start;gap:6px;font-size:11px;cursor:pointer;padding:5px 6px;border-radius:3px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
-            <input type="radio" name="vipPlanPick" value="${i}" ${b.vip_content === it.name ? 'checked' : ''} onchange="vipPickPlanItem(${i})" style="margin-top:2px;accent-color:var(--accent);flex-shrink:0">
-            <span><span style="font-weight:600">${vipRecEsc(it.category_label ? it.category_label + '·' : '')}${vipRecEsc(it.name)}</span>${it.content ? `<br><span style="color:var(--text-3)">${vipRecEsc(it.content)}</span>` : ''}${(it.hours != null) ? ` <span style="color:var(--text-3)">(${it.hours}H)</span>` : ''}</span>
-          </label>`).join('')}
+        <div id="vip_plan_pick" style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:6px">
+          ${vipPlanPickRowsHtml(b)}
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;margin-top:8px;color:var(--danger,#a33)">
           <input type="checkbox" id="vip_offplan" ${isOff ? 'checked' : ''} onchange="vipToggleOffplan(this)" style="accent-color:var(--accent)">未按规划上课（手动输入内容）
@@ -1192,8 +1206,11 @@ async function openVipSessionRecord(bookingId) {
 function vipPickPlanItem(i) {
   const it = vipRecordPlanItems[i];
   if (!it) return;
+  vipRecordPickIdx = i;
   const off = document.getElementById('vip_offplan');
-  if (off && off.checked) { off.checked = false; vipToggleOffplan(off); }
+  if (off && off.checked) { off.checked = false; const w = document.getElementById('vip_offplan_wrap'); if (w) w.style.display = 'none'; }
+  const box = document.getElementById('vip_plan_pick');
+  if (box) box.innerHTML = vipPlanPickRowsHtml();
   const notes = document.getElementById('vip_notes');
   if (notes && !notes.value.trim() && it.content) notes.value = it.content;
 }
@@ -1201,7 +1218,7 @@ function vipPickPlanItem(i) {
 function vipToggleOffplan(cb) {
   const wrap = document.getElementById('vip_offplan_wrap');
   if (wrap) wrap.style.display = cb.checked ? 'block' : 'none';
-  if (cb.checked) { document.querySelectorAll('#vip_plan_pick input:checked').forEach(r => r.checked = false); }
+  if (cb.checked) { vipRecordPickIdx = null; const box = document.getElementById('vip_plan_pick'); if (box) box.innerHTML = vipPlanPickRowsHtml(); }
 }
 
 async function saveVipSessionRecord(bookingId) {
@@ -1216,9 +1233,8 @@ async function saveVipSessionRecord(bookingId) {
       if (!offplanReason) { alert('未按规划上课，请填写理由'); return; }
       content = '';
     } else {
-      const pick = document.querySelector('#vip_plan_pick input:checked');
-      if (!pick) { alert('请点选本次所上的规划课程，或勾选「未按规划上课」'); return; }
-      content = vipRecordPlanItems[parseInt(pick.value)]?.name || '';
+      if (vipRecordPickIdx == null) { alert('请点选本次所上的规划课程，或勾选「未按规划上课」'); return; }
+      content = vipRecordPlanItems[vipRecordPickIdx]?.name || '';
     }
   } else {
     content = [...document.querySelectorAll('#vip_content_select input:checked')].map(c => c.value).join('・');
