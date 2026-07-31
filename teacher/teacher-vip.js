@@ -4,6 +4,9 @@
 
 let teacherVipFrameworks = [];   // 分享给本老师的框架列表
 let teacherVipPlans = [];        // 待本老师确认的学生方案（场景2）
+let teacherVipMyPlans = [];      // 已确认/签约、指导老师是本人的 VIP 学生方案
+let tspPlan = null;              // 当前编辑的学生方案
+let tspItems = [];               // 工作副本
 let tvItems = [];                // 当前打开框架的条目（内存工作副本）
 let tvCurrentId = null;
 let tvOriginalItemIds = new Set();
@@ -32,6 +35,10 @@ async function loadTeacherVipFrameworks() {
   teacherVipPlans = await sb(
     `/rest/v1/vip_student_plans?assigned_teachers=cs.{"${teacherName}"}&status=eq.pending&select=*&order=created_at.desc`
   ).catch(() => []);
+  // 已确认/签约、由本老师指导的 VIP 学生（可排期/改内容）
+  teacherVipMyPlans = await sb(
+    `/rest/v1/vip_student_plans?assigned_teachers=cs.{"${teacherName}"}&status=in.("signed","confirmed")&select=*&order=created_at.desc`
+  ).catch(() => []);
 }
 
 const TV_STATUS_LABEL = { shared: '待补充', done: '已完成' };
@@ -42,10 +49,25 @@ function renderTeacherVipFrameworks(mc) {
   tvCurrentId = null;
   const hasFw = teacherVipFrameworks.length;
   const hasPlans = teacherVipPlans.length;
-  if (!hasFw && !hasPlans) {
-    mc.innerHTML = '<div class="empty">暂无需要处理的 VIP 事项<br><span style="font-size:11px">收到 VIP 框架或待确认的学生方案后，会在这里出现</span></div>';
+  const hasMine = teacherVipMyPlans.length;
+  if (!hasFw && !hasPlans && !hasMine) {
+    mc.innerHTML = '<div class="empty">暂无需要处理的 VIP 事项<br><span style="font-size:11px">收到 VIP 框架、待确认方案或指导的 VIP 学生后，会在这里出现</span></div>';
     return;
   }
+
+  // 我的 VIP 学生（可排期/改内容）
+  const mineHtml = hasMine ? `
+    <div style="margin-bottom:22px">
+      <div style="font-size:12px;font-weight:600;color:#1a3a6a;margin-bottom:8px">我的 VIP 学生 <span style="font-size:10px;color:var(--text-3);font-weight:400">排课节奏、逐回调整内容与日期</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px">${teacherVipMyPlans.map(p => {
+        const done = (Array.isArray(p.items) ? p.items : []).filter(it => it.planned_date).length;
+        const total = (Array.isArray(p.items) ? p.items : []).length;
+        return `<div onclick="openTspEditor('${p.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:12px 14px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:12px" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div><div style="font-size:13px;font-weight:600">${tvEsc(p.student_name)}<span style="font-size:10px;color:var(--text-3);font-weight:400;margin-left:8px">${tvEsc(majorLabel(p.major))} · ${p.total_sessions || 0}回/${p.total_hours || 0}课时</span></div>${p.start_date ? `<div style="font-size:10px;color:var(--text-3);margin-top:2px">已排期 ${done}/${total} · 起始 ${tvEsc(p.start_date)}</div>` : '<div style="font-size:10px;color:#8a6d3b;margin-top:2px">尚未排期</div>'}</div>
+          <span style="font-size:11px;color:#1a3a6a">排课 ›</span>
+        </div>`;
+      }).join('')}</div>
+    </div>` : '';
 
   // 待确认的学生方案（场景2）
   const plansHtml = hasPlans ? `
@@ -79,8 +101,9 @@ function renderTeacherVipFrameworks(mc) {
   <div class="page-section" style="max-width:900px">
     <div style="margin-bottom:16px">
       <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">VIP 框架</div>
-      <div style="font-size:11px;color:var(--text-3);margin-top:2px">确认营业发来的学生方案，或补充课程框架内容</div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:2px">给 VIP 学生排课、确认营业方案、或补充课程框架内容</div>
     </div>
+    ${mineHtml}
     ${plansHtml}
     ${fwSection}
   </div>`;
@@ -319,6 +342,140 @@ async function confirmTvPlan() {
     alert('已确认，方案生效');
     renderTeacherVipFrameworks(document.getElementById('mainContent'));
   } catch (e) { alert('确认失败：' + e.message); }
+}
+
+// ── 上课老师：给 VIP 学生排课（每周节奏 + 逐回调整），改动记录给 admin ──
+const TSP_DAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+function tspYmd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function tspMD(s) { if (!s) return ''; const p = s.split('-'); return p.length === 3 ? (+p[1]) + '/' + (+p[2]) : s; }
+
+function openTspEditor(planId) {
+  const p = teacherVipMyPlans.find(x => x.id === planId);
+  if (!p) return;
+  tspPlan = p;
+  // 按分类顺序排序，专业知识在前，便于排课
+  tspItems = (Array.isArray(p.items) ? p.items : []).map(it => ({ ...it }))
+    .sort((a, b) => vipCatRank(a.category) - vipCatRank(b.category));
+  renderTspEditor(document.getElementById('mainContent'));
+}
+
+function renderTspEditor(mc) {
+  const p = tspPlan;
+  if (!p) { renderTeacherVipFrameworks(mc); return; }
+  const dayOpts = TSP_DAYS.map((d, i) => `<option value="${i}"${p.weekly_day === i ? ' selected' : ''}>${d}</option>`).join('');
+  const dated = tspItems.filter(it => it.planned_date).map(it => it.planned_date).sort();
+  const endDate = dated.length ? dated[dated.length - 1] : '';
+
+  const rows = tspItems.map((it, i) => {
+    const col = VIP_CAT_COLOR[it.category] || { bg: '#eee', color: '#333' };
+    return `
+    <div style="display:grid;grid-template-columns:96px 1fr 1.4fr 56px;gap:8px;align-items:start;padding:8px 10px;border-top:1px solid var(--border-light)">
+      <input type="date" value="${it.planned_date || ''}" onchange="tspEdit(${i},'planned_date',this.value)" style="font-size:11px">
+      <div>
+        <div style="margin-bottom:3px"><span style="border-radius:2px;padding:1px 6px;font-size:9px;background:${col.bg};color:${col.color}">${tvEsc(it.category_label || '')}</span></div>
+        <input value="${tvEsc(it.name)}" onchange="tspEdit(${i},'name',this.value)" style="font-size:11px;font-weight:500;width:100%">
+      </div>
+      <textarea onchange="tspEdit(${i},'content',this.value)" placeholder="内容" style="font-size:11px;resize:vertical;min-height:34px;line-height:1.5">${tvEsc(it.content)}</textarea>
+      <input type="number" step="0.5" min="0" value="${it.hours != null ? it.hours : 2}" onchange="tspEdit(${i},'hours',this.value)" style="font-size:11px;text-align:center">
+    </div>`;
+  }).join('');
+
+  mc.innerHTML = `
+  <div class="page-section" style="max-width:1000px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap">
+      <button onclick="backToTvList()" style="font-size:11px;background:none;border:1px solid var(--border);border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:var(--text-2)">← 返回</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="tspSaveAsTemplate()">另存为套餐</button>
+        <button class="btn btn-primary" onclick="tspSave()">保存排期</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin:8px 0 4px">
+      <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">${tvEsc(p.student_name)} 的 VIP 排课</div>
+      <span style="font-size:11px;color:var(--text-3)">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时</span>
+    </div>
+
+    <div style="padding:12px 14px;border:1px solid var(--border);border-radius:5px;background:var(--bg);margin:12px 0">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px">每周固定上课节奏</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--text-3)">起始日</span>
+        <input type="date" id="tsp_start" value="${p.start_date || ''}" style="font-size:12px">
+        <span style="font-size:11px;color:var(--text-3)">每周</span>
+        <select id="tsp_day" style="font-size:12px">${dayOpts}</select>
+        <span style="font-size:11px;color:var(--text-3)">时间</span>
+        <input type="time" id="tsp_time" value="${p.weekly_time || ''}" style="font-size:12px">
+        <button class="btn btn-primary" onclick="tspAutoSchedule()" style="white-space:nowrap">自动排期（每周一回）</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-3);margin-top:6px">自动按每周一回往后排出日期；排好后可逐回改日期（改成一周多次或某段集中上课），内容也可改。${endDate ? '　预计结束：' + tspMD(endDate) : ''}</div>
+    </div>
+
+    <div style="border:1px solid var(--border);border-radius:5px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:96px 1fr 1.4fr 56px;gap:8px;padding:7px 10px;background:var(--bg);font-size:10px;color:var(--text-3);font-weight:600">
+        <div>日期</div><div>课程</div><div>内容</div><div style="text-align:center">课时</div>
+      </div>
+      ${rows || '<div style="padding:12px;font-size:11px;color:var(--text-3)">此方案暂无课程</div>'}
+    </div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:10px">说明：这里的修改只对<strong>该学生</strong>生效（不影响套餐）；每次保存会在管理端留一条变更记录。若想沉淀成通用套餐，用「另存为套餐」。</div>
+  </div>`;
+}
+
+function tspEdit(i, field, val) {
+  const it = tspItems[i]; if (!it) return;
+  it[field] = field === 'hours' ? (parseFloat(val) || 0) : val;
+  if (field === 'planned_date') { renderTspEditor(document.getElementById('mainContent')); }
+}
+
+function tspAutoSchedule() {
+  const startV = document.getElementById('tsp_start').value;
+  const dayV = parseInt(document.getElementById('tsp_day').value);
+  if (!startV) { alert('请先选择起始日期'); return; }
+  let d = new Date(startV + 'T12:00:00');
+  if (!isNaN(dayV)) { let guard = 0; while (d.getDay() !== dayV && guard < 7) { d.setDate(d.getDate() + 1); guard++; } }
+  tspItems.forEach(it => { it.planned_date = tspYmd(d); d = new Date(d); d.setDate(d.getDate() + 7); });
+  renderTspEditor(document.getElementById('mainContent'));
+}
+
+async function tspLog(action, detail) {
+  try {
+    await sb('/rest/v1/vip_plan_logs', 'POST', [{
+      id: 'vlog-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+      plan_id: tspPlan.id, student_name: tspPlan.student_name,
+      teacher_name: (typeof teacherName !== 'undefined' ? teacherName : ''), action, detail,
+    }]);
+  } catch (e) {}
+}
+
+async function tspSave() {
+  const startV = document.getElementById('tsp_start').value || null;
+  const dayV = document.getElementById('tsp_day').value;
+  const timeV = document.getElementById('tsp_time').value || null;
+  const totalHours = tspItems.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0);
+  try {
+    await sb(`/rest/v1/vip_student_plans?id=eq.${tspPlan.id}`, 'PATCH', {
+      items: tspItems, total_hours: +totalHours.toFixed(1),
+      start_date: startV, weekly_day: dayV === '' ? null : parseInt(dayV), weekly_time: timeV,
+    });
+    Object.assign(tspPlan, { items: tspItems, start_date: startV, weekly_day: dayV === '' ? null : parseInt(dayV), weekly_time: timeV });
+    const scheduled = tspItems.filter(it => it.planned_date).length;
+    await tspLog('排期/编辑', `起始 ${startV || '—'}，每周${TSP_DAYS[parseInt(dayV)] || '—'} ${timeV || ''}，已排 ${scheduled}/${tspItems.length} 回`);
+    alert('已保存排期，并已在管理端留档。');
+    renderTeacherVipFrameworks(document.getElementById('mainContent'));
+  } catch (e) { alert('保存失败：' + e.message); }
+}
+
+async function tspSaveAsTemplate() {
+  const name = (prompt('套餐名称（如 20H / 30小时）：', (tspPlan.total_hours || '') + 'H') || '').trim();
+  if (!name) return;
+  const items = tspItems.map(it => ({ category: it.category, category_label: it.category_label, name: it.name, content: it.content, homework: it.homework, hours: parseFloat(it.hours) || 0 }));
+  const total = items.reduce((a, it) => a + (it.hours || 0), 0);
+  try {
+    await sb('/rest/v1/vip_plan_templates', 'POST', [{
+      id: 'vtpl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+      framework_id: tspPlan.framework_id || '', major: tspPlan.major || '', name,
+      items, total_sessions: tspPlan.total_sessions || 0, total_hours: +total.toFixed(1), subject_hours: tspPlan.subject_hours || 0,
+    }]);
+    await tspLog('另存套餐', `套餐名「${name}」`);
+    alert(`已另存为套餐「${name}」。`);
+  } catch (e) { alert('保存失败：' + e.message); }
 }
 
 // ════════════════════════════════════════════════════════════════
