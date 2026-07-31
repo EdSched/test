@@ -1108,6 +1108,26 @@ const VIP_CONTENT_OPTIONS = ['专业课指导', '过去问对策', '研究计划
 let vipRecordPlanItems = [];  // 当前打开记录的学生 VIP 规划课程
 let vipRecordPickIdx = null;  // 当前选中的规划课程下标
 let vipNotesAutoVal = '';     // 上次自动带入备注的内容（判断老师是否手改过）
+let vipStatusSet = new Set(); // 已选的学生状态标签
+let vipStatusFree = '';       // 学生状态·其他补充
+const VIP_STATUS_OPTIONS = [
+  { t: '优秀认真', k: 'good' }, { t: '积极配合', k: 'good' }, { t: '进步明显', k: 'good' },
+  { t: '基础扎实', k: 'good' }, { t: '主动提问', k: 'good' },
+  { t: '容易走神', k: 'warn' }, { t: '未完成任务', k: 'warn' }, { t: '专业知识薄弱', k: 'warn' },
+  { t: '需要督促', k: 'warn' }, { t: '状态低迷', k: 'warn' },
+];
+function vipStatusRowsHtml() {
+  return VIP_STATUS_OPTIONS.map(o => {
+    const sel = vipStatusSet.has(o.t);
+    const base = o.k === 'good' ? { bg: '#e3f0e6', color: '#1a4a28', bd: '#b8dcc2' } : { bg: '#faf0dc', color: '#8a5010', bd: '#e8d9b8' };
+    return `<span onclick="vipToggleStatus('${o.t}')" style="cursor:pointer;user-select:none;font-size:11px;border-radius:14px;padding:4px 12px;border:1px solid ${sel ? base.color : 'var(--border)'};background:${sel ? base.bg : 'transparent'};color:${sel ? base.color : 'var(--text-2)'}">${sel ? '✓ ' : ''}${o.t}</span>`;
+  }).join('');
+}
+function vipToggleStatus(t) {
+  if (vipStatusSet.has(t)) vipStatusSet.delete(t); else vipStatusSet.add(t);
+  const box = document.getElementById('vip_status_tags');
+  if (box) box.innerHTML = vipStatusRowsHtml();
+}
 function vipRecEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 // 规划课程点选：整行卡片（无圆点，文字完整），选中高亮打勾
@@ -1140,6 +1160,12 @@ async function openVipSessionRecord(bookingId) {
   const savedNotes = b.vip_session_notes || '';
   const selItem = vipRecordPickIdx != null ? vipRecordPlanItems[vipRecordPickIdx] : null;
   vipNotesAutoVal = (selItem && savedNotes === selItem.content) ? savedNotes : '';
+  // 解析已保存的学生状态：已知标签回填选中，其余入"其他补充"
+  vipStatusSet = new Set(); vipStatusFree = '';
+  const known = VIP_STATUS_OPTIONS.map(o => o.t);
+  (b.vip_student_status || '').split('、').map(s => s.trim()).filter(Boolean).forEach(s => {
+    if (known.includes(s)) vipStatusSet.add(s); else vipStatusFree = vipStatusFree ? vipStatusFree + '、' + s : s;
+  });
   const availableContent = slot?.vip_content || VIP_CONTENT_OPTIONS;
 
   let contentSection;
@@ -1179,8 +1205,12 @@ async function openVipSessionRecord(bookingId) {
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">${b.name} 的VIP上课记录</div>
       <div style="font-size:11px;color:var(--text-3);margin-bottom:14px">${b.slot_date} ${b.slot_time_range || ''}${hasPlan ? '　·　已关联 VIP 规划' : ''}</div>
       ${contentSection}
-      <div class="form-group"><label class="form-label">上课内容 / 学生状态</label>
-        <textarea id="vip_notes" rows="4" placeholder="本次课讲了什么、学生当前状态如何…">${vipRecEsc(b.vip_session_notes || '')}</textarea>
+      <div class="form-group"><label class="form-label">上课内容（本次讲了什么）</label>
+        <textarea id="vip_notes" rows="3" placeholder="本次课的具体内容…">${vipRecEsc(b.vip_session_notes || '')}</textarea>
+      </div>
+      <div class="form-group"><label class="form-label">学生状态（可多选）</label>
+        <div id="vip_status_tags" style="display:flex;flex-wrap:wrap;gap:6px">${vipStatusRowsHtml()}</div>
+        <input id="vip_status_note" value="${vipRecEsc(vipStatusFree)}" placeholder="其他补充（可选）" style="font-size:11px;margin-top:8px;width:100%">
       </div>
       <div class="form-group"><label class="form-label">布置作业（学生将在VIP页面看到并提交）</label>
         <textarea id="vip_homework" rows="3" placeholder="下节课前请完成…">${vipRecEsc(b.vip_homework || '')}</textarea>
@@ -1249,8 +1279,13 @@ async function saveVipSessionRecord(bookingId) {
     if (!content) { alert('请至少勾选一项本次授课内容'); return; }
   }
   const notes = document.getElementById('vip_notes').value.trim();
+  const freeEl = document.getElementById('vip_status_note');
+  const freeVal = freeEl ? freeEl.value.trim() : '';
+  const statusArr = [...vipStatusSet];
+  if (freeVal) statusArr.push(freeVal);
+  const studentStatus = statusArr.join('、');
   const newHours = parseFloat(document.getElementById('vip_hours').value) || 0;
-  if (!notes) { alert('请填写上课内容/学生状态/作业安排'); return; }
+  if (!notes) { alert('请填写上课内容'); return; }
   if (newHours <= 0) { alert('请填写本次耗时'); return; }
 
   const prevHours = b.vip_hours_used || 0; // 若是重新编辑，先扣除上次记录的耗时再加上新的，避免重复扣减
@@ -1279,6 +1314,7 @@ async function saveVipSessionRecord(bookingId) {
       vip_content: content,
       vip_offplan_reason: offplanReason || null,
       vip_session_notes: notes,
+      vip_student_status: studentStatus || null,
       vip_hours_used: newHours,
       vip_homework: homework,
       vip_homework_feedback: hwFeedback,
@@ -1286,7 +1322,7 @@ async function saveVipSessionRecord(bookingId) {
       student_confirmed: false,
       status: 'completed',
     });
-    Object.assign(b, { vip_content: content, vip_offplan_reason: offplanReason || null, vip_session_notes: notes, vip_hours_used: newHours, vip_homework: homework, vip_homework_feedback: hwFeedback, vip_homework_feedback_file_url: hwFeedbackFileUrl, student_confirmed: false, status: 'completed' });
+    Object.assign(b, { vip_content: content, vip_offplan_reason: offplanReason || null, vip_session_notes: notes, vip_student_status: studentStatus || null, vip_hours_used: newHours, vip_homework: homework, vip_homework_feedback: hwFeedback, vip_homework_feedback_file_url: hwFeedbackFileUrl, student_confirmed: false, status: 'completed' });
     document.getElementById('vipRecordModal').remove();
     renderMySchedule(document.getElementById('mainContent'));
     alert('上课记录已保存，课时已扣除。建议点击「生成确认链接文案」发给学生确认。');
