@@ -56,6 +56,7 @@ function renderVipFrameworkPage(mc) {
         <div style="font-size:11px;color:var(--text-3);margin-top:2px">按专业建立 VIP 课程模板，可自行完善或分享给老师补充内容</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-outline" onclick="renderVipPlanLogs()" style="white-space:nowrap">📋 变更记录</button>
         <select id="vf_new_major" style="font-size:12px">${majorOpts}</select>
         <button class="btn btn-outline" onclick="vfAddMajor()" style="white-space:nowrap">＋新增专业</button>
         <button class="btn btn-primary" onclick="createVipFramework()" style="white-space:nowrap">＋新建框架</button>
@@ -605,4 +606,31 @@ async function spbSavePlan() {
     if (typeof renderStudentVipPlans === 'function') renderStudentVipPlans(s || { id: spbCtx.sid, name: spbCtx.name });
     alert(`已为「${spbCtx.name}」创建 VIP 方案（${c.sessions}回/${c.hours}课时）并绑定。`);
   } catch (e) { alert('保存失败：' + e.message); }
+}
+
+
+// ── admin：VIP 规划变更记录（老师排课/改内容的留档，只读）──
+async function renderVipPlanLogs() {
+  const mc = document.getElementById('mainContent');
+  mc.innerHTML = '<div class="loading">加载中…</div>';
+  const logs = await sb('/rest/v1/vip_plan_logs?select=*&order=created_at.desc&limit=300').catch(() => []);
+  const fmt = t => { if (!t) return ''; const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  const rows = logs.length ? logs.map(l => `
+    <div style="display:grid;grid-template-columns:130px 90px 80px 1fr;gap:10px;padding:8px 10px;border-top:1px solid var(--border-light);font-size:11px;align-items:start">
+      <div style="color:var(--text-3)">${fmt(l.created_at)}</div>
+      <div style="font-weight:600">${vfEsc(l.student_name || '')}</div>
+      <div style="color:var(--text-2)">${vfEsc(l.teacher_name || '')}</div>
+      <div><span style="font-size:9px;background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:0 6px;margin-right:6px">${vfEsc(l.action || '')}</span>${vfEsc(l.detail || '')}</div>
+    </div>`).join('') : '<div style="padding:16px;font-size:12px;color:var(--text-3);text-align:center">暂无变更记录</div>';
+  mc.innerHTML = `
+  <div class="page-section" style="max-width:900px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div><div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">VIP 规划变更记录</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">老师对 VIP 学生方案的排期与修改留档（只读，供查证）</div></div>
+      <button onclick="renderVipFrameworkPage(document.getElementById('mainContent'))" style="font-size:11px;background:none;border:1px solid var(--border);border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:var(--text-2)">← 返回框架</button>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:5px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:130px 90px 80px 1fr;gap:10px;padding:7px 10px;background:var(--bg);font-size:10px;color:var(--text-3);font-weight:600"><div>时间</div><div>学生</div><div>老师</div><div>变更</div></div>
+      ${rows}
+    </div>
+  </div>`;
 }
