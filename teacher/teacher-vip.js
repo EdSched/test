@@ -369,8 +369,8 @@ function renderTspEditor(mc) {
   const rows = tspItems.map((it, i) => {
     const col = VIP_CAT_COLOR[it.category] || { bg: '#eee', color: '#333' };
     return `
-    <div style="display:grid;grid-template-columns:96px 1fr 1.4fr 56px;gap:8px;align-items:start;padding:8px 10px;border-top:1px solid var(--border-light)">
-      <input type="date" value="${it.planned_date || ''}" onchange="tspEdit(${i},'planned_date',this.value)" style="font-size:11px">
+    <div style="display:grid;grid-template-columns:140px 1fr 1.4fr 56px;gap:8px;align-items:start;padding:8px 10px;border-top:1px solid var(--border-light)">
+      <input type="date" value="${it.planned_date || ''}" onchange="tspEdit(${i},'planned_date',this.value)" style="font-size:11px;width:100%;box-sizing:border-box">
       <div>
         <div style="margin-bottom:3px"><span style="border-radius:2px;padding:1px 6px;font-size:9px;background:${col.bg};color:${col.color}">${tvEsc(it.category_label || '')}</span></div>
         <input value="${tvEsc(it.name)}" onchange="tspEdit(${i},'name',this.value)" style="font-size:11px;font-weight:500;width:100%">
@@ -409,7 +409,7 @@ function renderTspEditor(mc) {
     </div>
 
     <div style="border:1px solid var(--border);border-radius:5px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:96px 1fr 1.4fr 56px;gap:8px;padding:7px 10px;background:var(--bg);font-size:10px;color:var(--text-3);font-weight:600">
+      <div style="display:grid;grid-template-columns:140px 1fr 1.4fr 56px;gap:8px;padding:7px 10px;background:var(--bg);font-size:10px;color:var(--text-3);font-weight:600">
         <div>日期</div><div>课程</div><div>内容</div><div style="text-align:center">课时</div>
       </div>
       ${rows || '<div style="padding:12px;font-size:11px;color:var(--text-3)">此方案暂无课程</div>'}
