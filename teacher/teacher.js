@@ -1107,6 +1107,7 @@ const VIP_CONTENT_OPTIONS = ['专业课指导', '过去问对策', '研究计划
 
 let vipRecordPlanItems = [];  // 当前打开记录的学生 VIP 规划课程
 let vipRecordPickIdx = null;  // 当前选中的规划课程下标
+let vipNotesAutoVal = '';     // 上次自动带入备注的内容（判断老师是否手改过）
 function vipRecEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 // 规划课程点选：整行卡片（无圆点，文字完整），选中高亮打勾
@@ -1136,6 +1137,9 @@ async function openVipSessionRecord(bookingId) {
   const hasPlan = vipRecordPlanItems.length > 0;
   vipRecordPickIdx = hasPlan ? vipRecordPlanItems.findIndex(it => it.name === b.vip_content) : -1;
   if (vipRecordPickIdx < 0) vipRecordPickIdx = null;
+  const savedNotes = b.vip_session_notes || '';
+  const selItem = vipRecordPickIdx != null ? vipRecordPlanItems[vipRecordPickIdx] : null;
+  vipNotesAutoVal = (selItem && savedNotes === selItem.content) ? savedNotes : '';
   const availableContent = slot?.vip_content || VIP_CONTENT_OPTIONS;
 
   let contentSection;
@@ -1212,7 +1216,11 @@ function vipPickPlanItem(i) {
   const box = document.getElementById('vip_plan_pick');
   if (box) box.innerHTML = vipPlanPickRowsHtml();
   const notes = document.getElementById('vip_notes');
-  if (notes && !notes.value.trim() && it.content) notes.value = it.content;
+  // 备注为空、或还等于上次自动带入的内容（老师没手改）→ 跟随所选课程更新
+  if (notes && it.content && (!notes.value.trim() || notes.value === vipNotesAutoVal)) {
+    notes.value = it.content;
+    vipNotesAutoVal = it.content;
+  }
 }
 // 切换"未按规划"：显示理由框，并清除规划课程选择
 function vipToggleOffplan(cb) {
