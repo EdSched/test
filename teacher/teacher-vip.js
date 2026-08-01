@@ -7,6 +7,9 @@ let teacherVipPlans = [];        // 待本老师确认的学生方案（场景2�
 let teacherVipMyPlans = [];      // 已确认/签约、指导老师是本人的 VIP 学生方案
 let tspPlan = null;              // 当前编辑的学生方案
 let tspItems = [];               // 工作副本
+let tspStudent = null;           // 关联学生（取课时上限）
+let tspUsedHours = 0;            // 已上课时（已完成预约合计）
+let tspDoneNames = new Set();    // 已上完的课名
 let tvItems = [];                // 当前打开框架的条目（内存工作副本）
 let tvCurrentId = null;
 let tvOriginalItemIds = new Set();
@@ -376,10 +379,20 @@ function tspExpandSessions(items, subjH) {
 function tspCountSessions(arr) { return arr.filter(it => it.category !== 'ta').length; }
 function tspSumHours(arr) { return +arr.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0).toFixed(1); }
 
-function openTspEditor(planId) {
+async function openTspEditor(planId) {
   const p = teacherVipMyPlans.find(x => x.id === planId);
   if (!p) return;
   tspPlan = p;
+  // 拉学生课时上限 + 已上课（已完成预约）
+  tspStudent = null; tspUsedHours = 0; tspDoneNames = new Set();
+  try {
+    if (p.student_id) {
+      const st = await sb(`/rest/v1/students?id=eq.${p.student_id}&select=vip_hours_total,vip_hours_used&limit=1`);
+      tspStudent = (st && st[0]) || null;
+    }
+    const bks = await sb(`/rest/v1/bookings?name=eq.${encodeURIComponent(p.student_name)}&type=eq.vip&status=eq.completed&select=vip_content,vip_hours_used,slot_date`).catch(() => []);
+    (bks || []).forEach(b => { tspUsedHours += parseFloat(b.vip_hours_used) || 0; if (b.vip_content) tspDoneNames.add(b.vip_content); });
+  } catch (e) {}
   let items = (Array.isArray(p.items) ? p.items : []).map(it => ({ ...it }));
   const subjH = parseFloat(p.subject_hours) || 0;
   const needExpand = items.some(it => TSP_SUBJECT_CATS.includes(it.category) && (parseFloat(it.hours) || 0) > 2.0001) || subjH > 0;
@@ -388,6 +401,7 @@ function openTspEditor(planId) {
   tspItems = items.sort((a, b) => vipCatRank(a.category) - vipCatRank(b.category));
   renderTspEditor(document.getElementById('mainContent'));
 }
+function tspCap() { return tspStudent && tspStudent.vip_hours_total != null ? parseFloat(tspStudent.vip_hours_total) || 0 : 0; }
 
 function renderTspEditor(mc) {
   const p = tspPlan;
@@ -398,15 +412,16 @@ function renderTspEditor(mc) {
 
   const rows = tspItems.map((it, i) => {
     const col = VIP_CAT_COLOR[it.category] || { bg: '#eee', color: '#333' };
+    const done = tspDoneNames.has(it.name);
     return `
-    <div style="display:grid;grid-template-columns:140px 1fr 1.4fr 56px;gap:8px;align-items:start;padding:8px 10px;border-top:1px solid var(--border-light)">
-      <input type="date" value="${it.planned_date || ''}" onchange="tspEdit(${i},'planned_date',this.value)" style="font-size:11px;width:100%;box-sizing:border-box">
+    <div style="display:grid;grid-template-columns:140px 1fr 1.4fr 56px;gap:8px;align-items:start;padding:8px 10px;border-top:1px solid var(--border-light);${done ? 'background:#f2f8f3' : ''}">
+      <input type="date" value="${it.planned_date || ''}" onchange="tspEdit(${i},'planned_date',this.value)" style="font-size:11px;width:100%;box-sizing:border-box"${done ? ' disabled' : ''}>
       <div>
-        <div style="margin-bottom:3px"><span style="border-radius:2px;padding:1px 6px;font-size:9px;background:${col.bg};color:${col.color}">${tvEsc(it.category_label || '')}</span></div>
-        <input value="${tvEsc(it.name)}" onchange="tspEdit(${i},'name',this.value)" style="font-size:11px;font-weight:500;width:100%">
+        <div style="margin-bottom:3px"><span style="border-radius:2px;padding:1px 6px;font-size:9px;background:${col.bg};color:${col.color}">${tvEsc(it.category_label || '')}</span>${done ? '<span style="font-size:9px;color:#1a7a3a;margin-left:6px">✓ 已上</span>' : ''}</div>
+        <input value="${tvEsc(it.name)}" onchange="tspEdit(${i},'name',this.value)" style="font-size:11px;font-weight:500;width:100%"${done ? ' disabled' : ''}>
       </div>
-      <textarea onchange="tspEdit(${i},'content',this.value)" placeholder="内容" style="font-size:11px;resize:vertical;min-height:34px;line-height:1.5">${tvEsc(it.content)}</textarea>
-      <input type="number" step="0.5" min="0" value="${it.hours != null ? it.hours : 2}" onchange="tspEdit(${i},'hours',this.value)" style="font-size:11px;text-align:center">
+      <textarea onchange="tspEdit(${i},'content',this.value)" placeholder="内容" style="font-size:11px;resize:vertical;min-height:34px;line-height:1.5"${done ? ' disabled' : ''}>${tvEsc(it.content)}</textarea>
+      <input type="number" step="0.5" min="0" value="${it.hours != null ? it.hours : 2}" onchange="tspEdit(${i},'hours',this.value)" style="font-size:11px;text-align:center"${done ? ' disabled' : ''}>
     </div>`;
   }).join('');
 
@@ -415,6 +430,7 @@ function renderTspEditor(mc) {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap">
       <button onclick="backToTvList()" style="font-size:11px;background:none;border:1px solid var(--border);border-radius:3px;padding:4px 12px;cursor:pointer;font-family:inherit;color:var(--text-2)">← 返回</button>
       <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="tspClearSchedule()">清空排期</button>
         <button class="btn btn-outline" onclick="tspSaveAsTemplate()">另存为套餐</button>
         <button class="btn btn-primary" onclick="tspSave()">保存排期</button>
       </div>
@@ -423,6 +439,22 @@ function renderTspEditor(mc) {
       <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">${tvEsc(p.student_name)} 的 VIP 排课</div>
       <span style="font-size:11px;color:var(--text-3)">${tspCountSessions(tspItems)} 回 · ${tspSumHours(tspItems)} 课时</span>
     </div>
+
+    ${(() => {
+      const cap = tspCap(); const used = +tspUsedHours.toFixed(1); const planH = tspSumHours(tspItems);
+      const remain = cap > 0 ? +(cap - used).toFixed(1) : null;
+      const over = cap > 0 && planH > cap + 0.001;
+      const cell = (label, val, color) => `<div style="text-align:center"><div style="font-size:9px;color:var(--text-3)">${label}</div><div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;${color ? 'color:' + color : ''}">${val}</div></div>`;
+      return `<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:10px 14px;border:1px solid ${over ? '#e0b0a0' : 'var(--border)'};border-radius:5px;background:${over ? '#fbf0ec' : 'var(--surface)'};margin:6px 0 12px">
+        ${cell('学生课时', cap > 0 ? cap : '未设', cap > 0 ? '' : '#a33')}
+        ${cell('已上', used, '#8a6d3b')}
+        ${cell('剩余', remain != null ? remain : '—', '#1a4a28')}
+        <div style="width:1px;height:26px;background:var(--border)"></div>
+        ${cell('本方案计划', planH, over ? '#a33' : '')}
+        ${cell('预计完成', endDate ? tspMD(endDate) : '—')}
+        ${over ? '<div style="font-size:11px;color:#a33;margin-left:auto">⚠ 计划课时已超学生课时上限，请下调至 ' + cap + ' 以内</div>' : (cap > 0 ? '<div style="font-size:10px;color:var(--text-3);margin-left:auto">只能在学生课时额度内安排</div>' : '')}
+      </div>`;
+    })()}
 
     <div style="padding:12px 14px;border:1px solid var(--border);border-radius:5px;background:var(--bg);margin:12px 0">
       <div style="font-size:12px;font-weight:600;margin-bottom:8px">每周固定上课节奏</div>
@@ -460,6 +492,15 @@ function tspEdit(i, field, val) {
   if (field === 'planned_date') { tspSyncCadence(); renderTspEditor(document.getElementById('mainContent')); }
 }
 
+// 清空排期：清掉所有日期与每周节奏（不删方案），重新排
+function tspClearSchedule() {
+  if (!confirm('确认清空该学生的排期日期与每周节奏？（课程内容保留，方案不会被删除）')) return;
+  tspSyncCadence();
+  tspItems.forEach(it => { it.planned_date = ''; });
+  tspPlan.start_date = null; tspPlan.weekly_day = null; tspPlan.weekly_time = null;
+  renderTspEditor(document.getElementById('mainContent'));
+}
+
 function tspAutoSchedule() {
   const startV = document.getElementById('tsp_start').value;
   const dayV = parseInt(document.getElementById('tsp_day').value);
@@ -490,6 +531,9 @@ async function tspSave() {
   const dayV = document.getElementById('tsp_day').value;
   const timeV = document.getElementById('tsp_time').value || null;
   try {
+    const cap = tspCap();
+    const planH = tspSumHours(tspItems);
+    if (cap > 0 && planH > cap + 0.001) { alert(`本方案计划课时 ${planH} 已超出学生课时上限 ${cap}，请先把课时下调到 ${cap} 以内再保存。`); return; }
     const patch = {
       items: tspItems, total_hours: tspSumHours(tspItems), total_sessions: tspCountSessions(tspItems),
       start_date: startV, weekly_day: dayV === '' ? null : parseInt(dayV), weekly_time: timeV,
@@ -655,7 +699,7 @@ function renderSvPlansBody() {
         <div style="font-size:10px;color:var(--text-3);margin-top:2px">${tvEsc(p.framework_title || '')}${(p.assigned_teachers && p.assigned_teachers.length) ? '　·　老师：' + p.assigned_teachers.join('、') : ''}</div>
       </div>
       <span style="flex-shrink:0;font-size:10px;padding:2px 9px;border-radius:3px;background:${stBg[st]};color:${stColor[st]}">${stLabel[st] || st}</span>
-      <button onclick="svDeletePlan('${p.id}')" title="删除方案" style="flex-shrink:0;background:none;border:1px solid var(--border);border-radius:3px;color:var(--text-3);cursor:pointer;font-size:12px;width:26px;height:26px">×</button>
+      <span style="flex-shrink:0;font-size:9px;color:var(--text-3)">删除请找管理端</span>
     </div>`;
   }).join('') + '</div>';
 }
