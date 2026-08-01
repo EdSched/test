@@ -349,13 +349,36 @@ const TSP_DAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '�
 function tspYmd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function tspMD(s) { if (!s) return ''; const p = s.split('-'); return p.length === 3 ? (+p[1]) + '/' + (+p[2]) : s; }
 
+// 把方案按「每回2小时」展开成回：8H的课→4回，专业知识总课时也展开成回
+function tspExpandSessions(items, subjH) {
+  const out = [];
+  items.forEach(it => {
+    const h = Math.max(0, parseFloat(it.hours) || 0);
+    if (h <= 2.0001) { out.push({ ...it, hours: h || 2 }); return; }
+    const n = Math.max(1, Math.round(h / 2));
+    for (let k = 0; k < n; k++) {
+      const hh = (k < n - 1) ? 2 : +(h - 2 * (n - 1)).toFixed(1);
+      out.push({ category: it.category, category_label: it.category_label, name: it.name + ` (${k + 1}/${n})`, content: it.content, homework: it.homework, hours: hh > 0 ? hh : 2, planned_date: '' });
+    }
+  });
+  if (subjH > 0) {
+    const n = Math.max(1, Math.round(subjH / 2));
+    for (let k = 0; k < n; k++) out.push({ category: 'base', category_label: '专业知识', name: `专业知识 (${k + 1}/${n})`, content: '', homework: '', hours: 2, planned_date: '' });
+  }
+  return out;
+}
+
 function openTspEditor(planId) {
   const p = teacherVipMyPlans.find(x => x.id === planId);
   if (!p) return;
   tspPlan = p;
-  // 按分类顺序排序，专业知识在前，便于排课
-  tspItems = (Array.isArray(p.items) ? p.items : []).map(it => ({ ...it }))
-    .sort((a, b) => vipCatRank(a.category) - vipCatRank(b.category));
+  let items = (Array.isArray(p.items) ? p.items : []).map(it => ({ ...it }));
+  const subjH = parseFloat(p.subject_hours) || 0;
+  // 若还是课程级（有超过2H的课或有专业知识总课时），展开成每回2小时的「回」
+  const needExpand = items.some(it => (parseFloat(it.hours) || 0) > 2.0001) || subjH > 0;
+  if (needExpand) { items = tspExpandSessions(items, subjH); tspPlan._justExpanded = true; }
+  else { tspPlan._justExpanded = false; }
+  tspItems = items.sort((a, b) => vipCatRank(a.category) - vipCatRank(b.category));
   renderTspEditor(document.getElementById('mainContent'));
 }
 
@@ -391,7 +414,7 @@ function renderTspEditor(mc) {
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin:8px 0 4px">
       <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">${tvEsc(p.student_name)} 的 VIP 排课</div>
-      <span style="font-size:11px;color:var(--text-3)">${p.total_sessions || 0} 回 · ${p.total_hours || 0} 课时</span>
+      <span style="font-size:11px;color:var(--text-3)">${tspItems.length} 回 · ${tspItems.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0)} 课时</span>
     </div>
 
     <div style="padding:12px 14px;border:1px solid var(--border);border-radius:5px;background:var(--bg);margin:12px 0">
@@ -461,11 +484,14 @@ async function tspSave() {
   const timeV = document.getElementById('tsp_time').value || null;
   const totalHours = tspItems.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0);
   try {
-    await sb(`/rest/v1/vip_student_plans?id=eq.${tspPlan.id}`, 'PATCH', {
-      items: tspItems, total_hours: +totalHours.toFixed(1),
+    const totalSessions = tspItems.length;                 // 每条=一回
+    const patch = {
+      items: tspItems, total_hours: +totalHours.toFixed(1), total_sessions: totalSessions,
       start_date: startV, weekly_day: dayV === '' ? null : parseInt(dayV), weekly_time: timeV,
-    });
-    Object.assign(tspPlan, { items: tspItems, start_date: startV, weekly_day: dayV === '' ? null : parseInt(dayV), weekly_time: timeV });
+    };
+    if (tspPlan._justExpanded) patch.subject_hours = 0;     // 专业知识已展开进 items，避免重复计
+    await sb(`/rest/v1/vip_student_plans?id=eq.${tspPlan.id}`, 'PATCH', patch);
+    Object.assign(tspPlan, patch); tspPlan._justExpanded = false;
     const scheduled = tspItems.filter(it => it.planned_date).length;
     await tspLog('排期/编辑', `起始 ${startV || '—'}，每周${TSP_DAYS[parseInt(dayV)] || '—'} ${timeV || ''}，已排 ${scheduled}/${tspItems.length} 回`);
     alert('已保存排期，并已在管理端留档。');
