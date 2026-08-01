@@ -194,9 +194,10 @@ async function renderStudentVipPlans(s) {
     const btn = mode === 'linked'
       ? `<button type="button" onclick="unlinkVipPlan('${p.id}')" style="font-size:10px;background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;color:var(--text-3)">解除关联</button>`
       : `<button type="button" onclick="linkVipPlan('${p.id}')" style="font-size:10px;background:var(--accent,#1a1814);color:#fff;border:none;border-radius:3px;padding:2px 10px;cursor:pointer">关联到该学生</button>`;
+    const delBtn = `<button type="button" onclick="deleteVipStudentPlan('${p.id}')" title="删除方案" style="font-size:10px;background:none;border:1px solid #e0b0a0;border-radius:3px;padding:2px 8px;cursor:pointer;color:#a33">删除</button>`;
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface,#fff);margin-bottom:5px">
       <div style="min-width:0"><span style="font-weight:600">${(typeof majorLabel === 'function' ? majorLabel(p.major) : p.major) || ''}</span>　<span style="color:var(--text-2)">${hoursTxt}</span>　<span style="color:var(--text-3);font-size:10px">${stLabel[p.status] || p.status}</span></div>
-      ${btn}
+      <div style="display:flex;gap:6px;flex-shrink:0">${btn}${delBtn}</div>
     </div>`;
   };
 
@@ -232,6 +233,18 @@ async function linkVipPlan(planId) {
     renderStudentVipPlans(s);
     alert('已关联。记得点「保存」以确认课时/老师等回填。');
   } catch (e) { alert('关联失败：' + e.message); }
+}
+
+async function deleteVipStudentPlan(planId) {
+  const p = stVipPlanList.find(x => x.id === planId);
+  if (!confirm(`确认彻底删除该 VIP 方案${p ? '（' + (p.total_sessions || 0) + '回/' + (p.total_hours || 0) + '课时）' : ''}？此操作不可撤销。`)) return;
+  try {
+    await sb(`/rest/v1/vip_student_plans?id=eq.${planId}`, 'DELETE');
+    stVipPlanList = stVipPlanList.filter(x => x.id !== planId);
+    const sid = document.getElementById('studentId').value;
+    const s = cachedStudents.find(x => x.id === sid);
+    renderStudentVipPlans(s || { id: sid, name: (document.getElementById('st_name') || {}).value });
+  } catch (e) { alert('删除失败：' + e.message); }
 }
 
 async function unlinkVipPlan(planId) {
