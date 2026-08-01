@@ -418,16 +418,27 @@ function renderTspEditor(mc) {
   </div>`;
 }
 
+function tspSyncCadence() {
+  const s = document.getElementById('tsp_start'), d = document.getElementById('tsp_day'), t = document.getElementById('tsp_time');
+  if (s) tspPlan.start_date = s.value || null;
+  if (d) tspPlan.weekly_day = d.value === '' ? null : parseInt(d.value);
+  if (t) tspPlan.weekly_time = t.value || null;
+}
 function tspEdit(i, field, val) {
   const it = tspItems[i]; if (!it) return;
   it[field] = field === 'hours' ? (parseFloat(val) || 0) : val;
-  if (field === 'planned_date') { renderTspEditor(document.getElementById('mainContent')); }
+  if (field === 'planned_date') { tspSyncCadence(); renderTspEditor(document.getElementById('mainContent')); }
 }
 
 function tspAutoSchedule() {
   const startV = document.getElementById('tsp_start').value;
   const dayV = parseInt(document.getElementById('tsp_day').value);
+  const timeV = document.getElementById('tsp_time').value;
   if (!startV) { alert('请先选择起始日期'); return; }
+  // 先把节奏写进方案对象，避免重绘时输入框被清空
+  tspPlan.start_date = startV;
+  tspPlan.weekly_day = isNaN(dayV) ? null : dayV;
+  tspPlan.weekly_time = timeV || null;
   let d = new Date(startV + 'T12:00:00');
   if (!isNaN(dayV)) { let guard = 0; while (d.getDay() !== dayV && guard < 7) { d.setDate(d.getDate() + 1); guard++; } }
   tspItems.forEach(it => { it.planned_date = tspYmd(d); d = new Date(d); d.setDate(d.getDate() + 7); });
