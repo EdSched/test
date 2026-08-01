@@ -349,16 +349,21 @@ const TSP_DAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '�
 function tspYmd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function tspMD(s) { if (!s) return ''; const p = s.split('-'); return p.length === 3 ? (+p[1]) + '/' + (+p[2]) : s; }
 
-// 把方案按「每回2小时」展开成回：8H的课→4回，专业知识总课时也展开成回
+// 把方案排成「回」——与建方案时的算法一致：
+//   专业课(基础/备考/方法论/拓展)每2小时一回；其它类每门一回(保留其课时)；TA不计回但算课时；专业知识总课时按每2小时一回展开
+const TSP_SUBJECT_CATS = ['base', 'adv', 'method', 'ext'];
 function tspExpandSessions(items, subjH) {
   const out = [];
   items.forEach(it => {
     const h = Math.max(0, parseFloat(it.hours) || 0);
-    if (h <= 2.0001) { out.push({ ...it, hours: h || 2 }); return; }
-    const n = Math.max(1, Math.round(h / 2));
-    for (let k = 0; k < n; k++) {
-      const hh = (k < n - 1) ? 2 : +(h - 2 * (n - 1)).toFixed(1);
-      out.push({ category: it.category, category_label: it.category_label, name: it.name + ` (${k + 1}/${n})`, content: it.content, homework: it.homework, hours: hh > 0 ? hh : 2, planned_date: '' });
+    if (TSP_SUBJECT_CATS.includes(it.category) && h > 2.0001) {
+      const n = Math.max(1, Math.round(h / 2));
+      for (let k = 0; k < n; k++) {
+        const hh = (k < n - 1) ? 2 : +(h - 2 * (n - 1)).toFixed(1);
+        out.push({ category: it.category, category_label: it.category_label, name: it.name + ` (${k + 1}/${n})`, content: it.content, homework: it.homework, hours: hh > 0 ? hh : 2, planned_date: '' });
+      }
+    } else {
+      out.push({ ...it, planned_date: it.planned_date || '' });
     }
   });
   if (subjH > 0) {
@@ -367,6 +372,9 @@ function tspExpandSessions(items, subjH) {
   }
   return out;
 }
+// 回数=非TA的行数，课时=全部课时之和（与建方案时一致）
+function tspCountSessions(arr) { return arr.filter(it => it.category !== 'ta').length; }
+function tspSumHours(arr) { return +arr.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0).toFixed(1); }
 
 function openTspEditor(planId) {
   const p = teacherVipMyPlans.find(x => x.id === planId);
@@ -374,8 +382,7 @@ function openTspEditor(planId) {
   tspPlan = p;
   let items = (Array.isArray(p.items) ? p.items : []).map(it => ({ ...it }));
   const subjH = parseFloat(p.subject_hours) || 0;
-  // 若还是课程级（有超过2H的课或有专业知识总课时），展开成每回2小时的「回」
-  const needExpand = items.some(it => (parseFloat(it.hours) || 0) > 2.0001) || subjH > 0;
+  const needExpand = items.some(it => TSP_SUBJECT_CATS.includes(it.category) && (parseFloat(it.hours) || 0) > 2.0001) || subjH > 0;
   if (needExpand) { items = tspExpandSessions(items, subjH); tspPlan._justExpanded = true; }
   else { tspPlan._justExpanded = false; }
   tspItems = items.sort((a, b) => vipCatRank(a.category) - vipCatRank(b.category));
@@ -414,7 +421,7 @@ function renderTspEditor(mc) {
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin:8px 0 4px">
       <div style="font-family:'Noto Serif SC',serif;font-size:16px;font-weight:600">${tvEsc(p.student_name)} 的 VIP 排课</div>
-      <span style="font-size:11px;color:var(--text-3)">${tspItems.length} 回 · ${tspItems.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0)} 课时</span>
+      <span style="font-size:11px;color:var(--text-3)">${tspCountSessions(tspItems)} 回 · ${tspSumHours(tspItems)} 课时</span>
     </div>
 
     <div style="padding:12px 14px;border:1px solid var(--border);border-radius:5px;background:var(--bg);margin:12px 0">
@@ -482,11 +489,9 @@ async function tspSave() {
   const startV = document.getElementById('tsp_start').value || null;
   const dayV = document.getElementById('tsp_day').value;
   const timeV = document.getElementById('tsp_time').value || null;
-  const totalHours = tspItems.reduce((a, it) => a + (parseFloat(it.hours) || 0), 0);
   try {
-    const totalSessions = tspItems.length;                 // 每条=一回
     const patch = {
-      items: tspItems, total_hours: +totalHours.toFixed(1), total_sessions: totalSessions,
+      items: tspItems, total_hours: tspSumHours(tspItems), total_sessions: tspCountSessions(tspItems),
       start_date: startV, weekly_day: dayV === '' ? null : parseInt(dayV), weekly_time: timeV,
     };
     if (tspPlan._justExpanded) patch.subject_hours = 0;     // 专业知识已展开进 items，避免重复计
