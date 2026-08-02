@@ -77,12 +77,20 @@ async function loadStudyData() {
   const id = studyStudent.id;
   const name = studyStudent.name;
   // 学习记录页内容绑定学生档案里的真实专业；URL 的 major 仅作后备
-  const shareMajor = studyStudent.major || studyMajor;
+  // 兼容匹配：分享存的是 booking_major，学生页有 major/URL，可能是 key 或 label，
+  // 因此用「学生专业 + 其romaji key + URL专业」一组候选去匹配，哪个对上都能读到（VIP 学生也能看到）。
+  const _shareCands = new Set();
+  [studyStudent.major, studyMajor].filter(Boolean).forEach(v => {
+    _shareCands.add(v);
+    if (typeof generateMajorKey === 'function') { try { const k = generateMajorKey(v); if (k) _shareCands.add(k); } catch (e) {} }
+    if (typeof majorLabel === 'function') { try { const l = majorLabel(v); if (l) _shareCands.add(l); } catch (e) {} }
+  });
+  const _shareIn = [..._shareCands].map(m => `"${String(m).replace(/"/g, '')}"`).join(',') || '"__none__"';
   const [timeline, schoolPlans, planDraftArr, sharedLists, bookings, sessionRecs] = await Promise.all([
     sb(`/rest/v1/student_progress_timeline?student_id=eq.${id}&select=*&order=created_at.desc`).catch(()=>[]),
     sb(`/rest/v1/student_school_plans?student_id=eq.${id}&select=*&order=level.asc`).catch(()=>[]),
     sb(`/rest/v1/student_plan_drafts?student_id=eq.${id}&select=*&order=updated_at.desc&limit=1`).catch(()=>[]),
-    sb(`/rest/v1/teacher_school_shares?major=eq.${shareMajor}&select=*&order=created_at.desc&limit=3`).catch(()=>[]),
+    sb(`/rest/v1/teacher_school_shares?major=in.(${_shareIn})&select=*&order=created_at.desc&limit=3`).catch(()=>[]),
     sb(`/rest/v1/bookings?name=eq.${encodeURIComponent(name)}&status=in.("confirmed","completed")&select=*&order=slot_date.desc`).catch(()=>[]),
     sb(`/rest/v1/session_records?student_name=eq.${encodeURIComponent(name)}&select=*&order=session_date.desc`).catch(()=>[]),
   ]);
