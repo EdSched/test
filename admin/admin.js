@@ -232,6 +232,7 @@ function renderTeachersPage(mc){
           <div style="padding:10px">
             <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;cursor:pointer;margin-bottom:8px;white-space:nowrap"><input type="checkbox" id="perm_student_mgmt" style="accent-color:var(--accent);flex-shrink:0;width:16px;height:16px;min-width:16px">学生管理</label>
             <div style="font-size:10px;color:var(--text-3);margin-bottom:8px;margin-left:20px">开启后老师端显示「学生管理」页，按下方勾选的子项提供对应功能</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;margin:0 0 8px 20px;color:#8a5010"><input type="checkbox" id="perm_guaranteed_only" style="accent-color:#8a5010;width:14px;height:14px">🎓 仅保录学生（勾选后此老师在学生管理里只能看到保录学生，看不到其他学生）</label>
             <div style="margin-left:20px;margin-bottom:8px">
               <div style="font-size:10px;color:var(--text-3);margin-bottom:4px">可用的子项</div>
               <div style="display:flex;flex-wrap:wrap;gap:4px" id="perm_student_mgmt_items">
@@ -319,6 +320,7 @@ function cancelEditTeacher(){
   document.getElementById('perm_slots').checked=false;
   document.getElementById('perm_schedule').checked=false;
     document.getElementById('perm_student_mgmt').checked=false;
+    {const _g=document.getElementById('perm_guaranteed_only'); if(_g) _g.checked=false;}
     document.getElementById('perm_progress_plan').checked=false;
     document.getElementById('perm_promo').checked=false;
     document.getElementById('perm_lect_info').checked=false;
@@ -338,6 +340,7 @@ function openTeacherManager(){
   document.getElementById('perm_slots').checked=false;
   document.getElementById('perm_schedule').checked=false;
     document.getElementById('perm_student_mgmt').checked=false;
+    {const _g=document.getElementById('perm_guaranteed_only'); if(_g) _g.checked=false;}
     document.getElementById('perm_progress_plan').checked=false;
     document.getElementById('perm_promo').checked=false;
     document.getElementById('perm_lect_info').checked=false;
@@ -477,6 +480,7 @@ function getPermissionsFromForm(){
     progress_plan:document.getElementById('perm_progress_plan').checked,
     vip_sales:document.getElementById('perm_vip_sales').checked,
     student_mgmt:document.getElementById('perm_student_mgmt').checked,
+    guaranteed_only:document.getElementById('perm_guaranteed_only')?.checked||false,
     student_mgmt_items:[...document.querySelectorAll('#perm_student_mgmt_items .filter-chip.active')].map(c=>c.dataset.value),
     student_majors:[...document.querySelectorAll('#perm_student_majors .filter-chip.active')].map(c=>c.dataset.value),
   };
@@ -505,6 +509,7 @@ async function addTeacher(){
     document.getElementById('perm_slots').checked=false;
     document.getElementById('perm_schedule').checked=false;
     document.getElementById('perm_student_mgmt').checked=false;
+    {const _g=document.getElementById('perm_guaranteed_only'); if(_g) _g.checked=false;}
     document.getElementById('perm_progress_plan').checked=false;
     document.getElementById('perm_promo').checked=false;
     document.getElementById('perm_lect_info').checked=false;
@@ -534,6 +539,7 @@ function openEditTeacher(id){
   document.getElementById('perm_progress_plan').checked=!!p.progress_plan;
   document.getElementById('perm_vip_sales').checked=!!p.vip_sales;
   document.getElementById('perm_student_mgmt').checked=!!p.student_mgmt;
+  {const _g=document.getElementById('perm_guaranteed_only'); if(_g) _g.checked=!!p.guaranteed_only;}
   document.querySelectorAll('#perm_student_mgmt_items .filter-chip').forEach(c=>{c.classList.toggle('active',(p.student_mgmt_items||[]).includes(c.dataset.value));});
   document.querySelectorAll('#perm_student_majors .filter-chip').forEach(c=>{c.classList.toggle('active',(p.student_majors||[]).includes(c.dataset.value));});
   document.querySelectorAll('#perm_booking_types .filter-chip').forEach(c=>{c.classList.toggle('active',(p.booking_types||[]).includes(c.dataset.value))});
