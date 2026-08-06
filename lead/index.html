@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>唯新教育 学科负责人</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../admin/admin.css">
+<style>
+  #leadLogin { position:fixed; inset:0; background:var(--bg,#f7f5f0); z-index:9999; display:flex; align-items:center; justify-content:center; }
+  #leadLogin .card { background:var(--surface,#fff); border:1px solid var(--border,#e2ded6); border-radius:8px; padding:28px 26px; width:320px; box-shadow:0 8px 30px rgba(0,0,0,.06); }
+  #leadLogin h1 { font-family:'Noto Serif SC',serif; font-size:18px; font-weight:600; margin:0 0 4px; color:var(--text-1,#1a1814); }
+  #leadLogin .sub { font-size:11px; color:var(--text-3,#9a9590); margin-bottom:18px; }
+  #leadLogin label { font-size:11px; color:var(--text-2,#5a5650); display:block; margin-bottom:5px; }
+  #leadLogin input { width:100%; font-size:13px; padding:9px 10px; border:1px solid var(--border,#e2ded6); border-radius:4px; margin-bottom:12px; box-sizing:border-box; background:var(--bg,#f7f5f0); font-family:inherit; }
+  #leadTopbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 20px; border-bottom:1px solid var(--border,#e2ded6); background:var(--surface,#fff); flex-wrap:wrap; }
+</style>
+</head>
+<body>
+
+<div id="leadLogin">
+  <div class="card">
+    <h1>学科负责人</h1>
+    <div class="sub">唯新教育 · 课程安排管理</div>
+    <label>姓名</label>
+    <input id="ll_name" placeholder="你的姓名" autocomplete="off">
+    <label>授权码</label>
+    <input id="ll_code" type="password" placeholder="授权码" onkeydown="if(event.key==='Enter')leadLoginSubmit()">
+    <div id="ll_err" style="font-size:11px;color:#c0392b;min-height:16px;margin-bottom:8px"></div>
+    <button class="btn btn-primary btn-full" onclick="leadLoginSubmit()">进入</button>
+    <div style="font-size:10px;color:var(--text-3,#9a9590);margin-top:12px;text-align:center">授权码由管理员提供</div>
+  </div>
+</div>
+
+<div id="leadTopbar" style="display:none">
+  <div style="font-family:'Noto Serif SC',serif;font-size:15px;font-weight:600" id="lead_hello">学科负责人</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="lead_majors_label" style="font-size:11px;color:var(--text-3)"></span>
+    <button class="btn btn-outline btn-sm" onclick="leadLogout()">退出</button>
+  </div>
+</div>
+
+<div class="main" id="mainContent" style="display:none"></div>
+
+<script src="../shared/supabase.js"></script>
+<script src="../shared/constants.js"></script>
+<script src="../admin/courses.js"></script>
+<script src="lead.js"></script>
+</body>
+</html>
