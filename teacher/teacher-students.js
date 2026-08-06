@@ -384,6 +384,7 @@ let tsaFormOpen = false;
 let tsaExpandedId = null;
 let tsaSearch = '';
 let tsaMajorFilter = 'all';
+let tsaGuaranteedOnly = false;  // 只看保录学生（course_type 含"保录"），与专业筛选平级
 
 async function renderTeacherStudents(box) {
   box.innerHTML = '<div class="empty">加载中…</div>';
@@ -391,6 +392,11 @@ async function renderTeacherStudents(box) {
     const all = await sb('/rest/v1/students?select=*&order=created_at.desc&limit=2000');
     const set = tsaAllowedSet();
     tsaStudents = set ? (all || []).filter(s => set.has(s.major)) : (all || []);
+    // admin 限定"仅保录"：数据层就只保留保录学生，彻底看不到其他学生
+    if (teacherData && teacherData.permissions && teacherData.permissions.guaranteed_only) {
+      tsaStudents = tsaStudents.filter(s => (s.course_type || '').includes('保录'));
+      tsaGuaranteedOnly = true;
+    }
   } catch (e) { box.innerHTML = `<div class="empty">加载失败：${e.message}</div>`; return; }
   tsaRender();
 }
@@ -410,6 +416,7 @@ function tsaMajorOptions(sel) {
 function tsaListHtml() {
   const kw = tsaSearch.trim().toLowerCase();
   let list = tsaMajorFilter === 'all' ? tsaStudents : tsaStudents.filter(s => s.major === tsaMajorFilter);
+  if (tsaGuaranteedOnly) list = list.filter(s => (s.course_type || '').includes('保录'));
   if (kw) list = list.filter(s => (s.name || '').toLowerCase().includes(kw) || (s.university || '').toLowerCase().includes(kw));
   const stLabel = v => ({ active:'在籍', graduated:'已合格', expired:'已到期', stopped:'停课', withdrawn:'退学' }[v] || v || '');
   return `<table style="width:100%;border-collapse:collapse;font-size:11px">
@@ -458,6 +465,9 @@ function tsaRender() {
         ${ms.map(m => `<div class="filter-chip ${tsaMajorFilter===m?'active':''}" onclick="tsaMajorFilter='${m}';tsaRender()" style="padding:2px 9px;font-size:10px">${MAJORS[m]||m}</div>`).join('')}
       </div>` : ''; })()}
       <div style="display:flex;gap:6px;align-items:center">
+        ${(teacherData && teacherData.permissions && teacherData.permissions.guaranteed_only)
+          ? `<div style="font-size:10px;padding:2px 10px;border-radius:12px;background:#8a5010;color:#fff;white-space:nowrap">🎓 仅保录学生（管理员限定）</div>`
+          : `<div class="filter-chip ${tsaGuaranteedOnly?'active':''}" onclick="tsaGuaranteedOnly=!tsaGuaranteedOnly;tsaRender()" style="padding:2px 10px;font-size:10px;white-space:nowrap;${tsaGuaranteedOnly?'background:#8a5010;color:#fff;border-color:#8a5010':''}">🎓 只看保录</div>`}
         <input placeholder="搜索姓名/大学…" value="${tsaEsc(tsaSearch)}" oninput="tsaSearch=this.value;tsaRenderList()" style="font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:2px;background:var(--bg);font-family:inherit;width:150px">
         <button onclick="tsaFormOpen=!tsaFormOpen;tsaRender()" style="font-size:11px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:6px 14px;cursor:pointer;font-family:inherit">${tsaFormOpen ? '收起表单' : '＋ 添加学生'}</button>
       </div>
