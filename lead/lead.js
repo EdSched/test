@@ -83,10 +83,26 @@ async function enterLead() {
 
 function renderLeadCourses() {
   const mc = document.getElementById('mainContent');
-  if (typeof renderCoursesPage === 'function') {
+  if (!LEAD_MAJORS.length) {
+    mc.innerHTML = '<div style="padding:50px 20px;text-align:center;color:var(--text-2,#5a5650)"><div style="font-size:15px;font-weight:600;margin-bottom:8px">尚未绑定负责专业</div><div style="font-size:12px;color:var(--text-3,#9a9590)">请让管理员在「管理老师」里，为你勾选「负责专业」并保存后再登录。</div></div>';
+    return;
+  }
+  if (typeof renderCoursesPage !== 'function') {
+    mc.innerHTML = '<div style="padding:50px;text-align:center;color:#c0392b">课程安排模块未加载（courses.js 未正确引入）</div>';
+    return;
+  }
+  try {
     renderCoursesPage(mc);
-  } else {
-    mc.innerHTML = '<div style="padding:40px;text-align:center;color:#c0392b">课程安排模块未加载，请联系管理员</div>';
+    // 空课程友好提示
+    if (!Array.isArray(window.cachedCourses) || !window.cachedCourses.length) {
+      const tip = document.createElement('div');
+      tip.style.cssText = 'padding:14px;margin-top:10px;font-size:12px;color:var(--text-3,#9a9590);text-align:center;border:1px dashed var(--border,#e2ded6);border-radius:6px';
+      tip.textContent = '你负责的专业（' + LEAD_MAJORS.map(m => (typeof majorLabel === 'function' ? majorLabel(m) : m)).join('・') + '）暂无课程。可用上方「＋ 手动添加」新建，或先在 Excel 导入。';
+      mc.appendChild(tip);
+    }
+  } catch (e) {
+    mc.innerHTML = '<div style="padding:40px;text-align:center;color:#c0392b">课程安排加载出错：' + (e && e.message ? e.message : e) + '</div>';
+    console.error(e);
   }
 }
 
