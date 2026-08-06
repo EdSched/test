@@ -64,14 +64,14 @@ async function enterLead() {
     return base.filter(k => LEAD_MAJORS.includes(k));
   };
 
-  // 只加载该负责人专业范围内的课程
+  // 只加载该负责人专业范围内的课程（与 admin 一致：全量取回后客户端过滤，避免 ov 查询兼容问题；加超时兜底防卡死）
   try {
-    if (LEAD_MAJORS.length) {
-      const ov = '{' + LEAD_MAJORS.map(m => `"${String(m).replace(/"/g, '')}"`).join(',') + '}';
-      window.cachedCourses = await sb(`/rest/v1/courses?major=ov.${ov}&select=*&order=created_at.desc`).catch(() => []);
-    } else {
-      window.cachedCourses = [];
-    }
+    const all = await Promise.race([
+      sb('/rest/v1/courses?select=*&order=created_at.desc').catch(() => []),
+      new Promise(res => setTimeout(() => res(null), 8000)),
+    ]);
+    const list = Array.isArray(all) ? all : [];
+    window.cachedCourses = list.filter(c => Array.isArray(c.major) && c.major.some(m => LEAD_MAJORS.includes(m)));
   } catch (e) { window.cachedCourses = []; }
 
   // 默认筛选：显示全部（已锁定为其专业）
