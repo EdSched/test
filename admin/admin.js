@@ -42,15 +42,7 @@ let cachedAdmissionMajorCounts={};
 let slotMode='single';
 
 // ── Navigation ──
-const COURSE_PW='miyako!!';
-function checkCoursePw(){
-  const r=localStorage.getItem('txe_course_pw');
-  if(r){const{ts}=JSON.parse(r);if(Date.now()-ts<30*24*60*60*1000)return true}
-  const pw=prompt('课程管理需要额外验证，请输入密码：');
-  if(pw===COURSE_PW){localStorage.setItem('txe_course_pw',JSON.stringify({ts:Date.now()}));return true}
-  if(pw!==null) alert('密码错误');
-  return false;
-}
+function checkCoursePw(){ return true; }  // 已取消课程管理二次密码
 
 function switchPage(page){
   if((page==='courses'||page==='schedule')&&!checkCoursePw()){return}
@@ -178,6 +170,14 @@ function renderTeachersPage(mc){
         <label class="form-label">负责专业（可多选）</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px" id="new_teacher_majors">
           ${majorFilterKeys().map(m=>`<div class="filter-chip" data-value="${m}" onclick="toggleChip(this)" style="padding:4px 10px">${majorLabel(m)}</div>`).join('')}
+        </div>
+      </div>
+      <div class="form-group" style="border:1px solid var(--border-light);border-radius:3px;padding:10px;background:var(--bg)">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap"><input type="checkbox" id="perm_subject_lead" style="accent-color:var(--accent);width:16px;height:16px" onchange="document.getElementById('lead_code_wrap').style.display=this.checked?'block':'none'">学科负责人</label>
+        <div style="font-size:10px;color:var(--text-3);margin:4px 0 0">开启后，此人可用「上方所选专业」登录学科负责人端口管理课程安排。</div>
+        <div id="lead_code_wrap" style="display:none;margin-top:8px">
+          <label class="form-label" style="font-size:11px">登录授权码</label>
+          <input id="lead_code_input" placeholder="设定一个授权码（登录学科负责人端口用）" style="font-size:12px">
         </div>
       </div>
       <div class="form-group">
@@ -491,7 +491,9 @@ async function addTeacher(){
   const permissions=getPermissionsFromForm();
   const tags=parseTeacherTags();
   try{
-    const t={id:`t-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,name,notes,majors,permissions,tags};
+    const subjectLead=document.getElementById('perm_subject_lead')?.checked||false;
+    const leadCode=(document.getElementById('lead_code_input')?.value||'').trim();
+    const t={id:`t-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,name,notes,majors,permissions,tags,subject_lead:subjectLead,lead_majors:subjectLead?majors:[],lead_code:subjectLead?leadCode:null};
     const res=await sb('/rest/v1/teachers','POST',[t]);
     cachedTeachers.push(Array.isArray(res)?res[0]:t);
     document.getElementById('new_teacher_name').value='';
@@ -518,6 +520,8 @@ function openEditTeacher(id){
   document.getElementById('new_teacher_notes').value=t.notes||'';
   document.getElementById('new_teacher_tags').value=(t.tags||[]).join('、');
   document.querySelectorAll('#new_teacher_majors .filter-chip').forEach(c=>{c.classList.toggle('active',(t.majors||[]).includes(c.dataset.value))});
+  const _sl=document.getElementById('perm_subject_lead'); if(_sl){_sl.checked=!!t.subject_lead; document.getElementById('lead_code_wrap').style.display=t.subject_lead?'block':'none';}
+  const _lc=document.getElementById('lead_code_input'); if(_lc) _lc.value=t.lead_code||'';
   const p=t.permissions||{};
   document.getElementById('perm_booking').checked=!!p.booking;
   document.getElementById('perm_slots').checked=!!p.slots;
@@ -555,9 +559,11 @@ async function saveEditTeacher(id){
   const notes=document.getElementById('new_teacher_notes').value.trim();
   const tags=parseTeacherTags();
   try{
-    await sb(`/rest/v1/teachers?id=eq.${id}`,'PATCH',{name,notes,majors,permissions,tags});
+    const subjectLead=document.getElementById('perm_subject_lead')?.checked||false;
+    const leadCode=(document.getElementById('lead_code_input')?.value||'').trim();
+    await sb(`/rest/v1/teachers?id=eq.${id}`,'PATCH',{name,notes,majors,permissions,tags,subject_lead:subjectLead,lead_majors:subjectLead?majors:[],lead_code:subjectLead?leadCode:null});
     const idx=cachedTeachers.findIndex(t=>t.id===id);
-    if(idx>=0) Object.assign(cachedTeachers[idx],{name,notes,majors,permissions,tags});
+    if(idx>=0) Object.assign(cachedTeachers[idx],{name,notes,majors,permissions,tags,subject_lead:subjectLead,lead_majors:subjectLead?majors:[],lead_code:subjectLead?leadCode:null});
     cancelEditTeacher();
     renderTeacherList();
   }catch(e){alert('保存失败：'+e.message)}
