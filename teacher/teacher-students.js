@@ -268,6 +268,12 @@ function tpRenderProgressList() {
             </tbody>
           </table></div>` : '<div style="font-size:11px;color:var(--text-3)">学生尚未填写志望校</div>'}
         </div>
+        ${(s.course_type||'').includes('保录') ? `
+        <!-- 保录学校 -->
+        <div style="padding:0 14px 12px">
+          <div style="font-size:10px;color:#8a5010;margin-bottom:6px;font-weight:600">🎓 保录学校（${(Array.isArray(s.guaranteed_schools)?s.guaranteed_schools.length:0)}所）</div>
+          ${(Array.isArray(s.guaranteed_schools)&&s.guaranteed_schools.length) ? `<div style="display:flex;flex-direction:column;gap:4px">${s.guaranteed_schools.map(g=>`<div style="font-size:11px;padding:5px 10px;border:1px solid #e8d9b8;border-radius:4px;background:#fdfaf5"><span style="font-weight:600">${tsaEsc(g.university)}</span>${g.program?` <span style="color:var(--text-3)">· ${tsaEsc(g.program)}</span>`:''}</div>`).join('')}</div>` : '<div style="font-size:11px;color:var(--text-3)">尚无保录学校（可在管理端录入）</div>'}
+        </div>` : ''}
         <!-- 老师评估记录（学生不可见） -->
         <div style="padding:0 14px 12px">
           <div onclick="event.stopPropagation();tpNotesToggle('${s.id}','${tsaEsc(s.name)}',this)" style="font-size:10px;color:var(--text-3);margin-bottom:6px;cursor:pointer;user-select:none">📝 老师评估记录（学生不可见，仅老师与 admin）<span class="arr" style="margin-left:4px">▸</span></div>
@@ -733,7 +739,8 @@ async function renderTsaMeetings(box) {
       if (!groups[b.name]) groups[b.name] = { name: b.name, major, source: (stu && stu.source) || '', list: [] };
       groups[b.name].list.push(b);
     });
-    const myStudents = (allStu || []).filter(s => (!set || set.has(s.major)) && (!s.status || s.status === 'active'));
+    let myStudents = (allStu || []).filter(s => (!set || set.has(s.major)) && (!s.status || s.status === 'active'));
+    if (tsaGuaranteedLock()) myStudents = myStudents.filter(tsaIsGuaranteed);
     tmData = {
       groups: Object.values(groups).sort((a, b) => (b.list[0].slot_date || '').localeCompare(a.list[0].slot_date || '')),
       students: myStudents,
