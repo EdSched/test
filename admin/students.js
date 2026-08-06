@@ -653,6 +653,15 @@ async function renderProgressPage(mc, focusStudentId=null){
             </tbody>
           </table></div>` : '<div style="font-size:11px;color:var(--text-3)">尚无志望校记录，可点击右上「＋ 添加志望校」录入</div>'}
         </div>
+        ${(s.course_type||'').includes('保录') ? `
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border-light);background:#fdfaf5">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:600;color:#8a5010">🎓 保录学校</span>
+            <span style="font-size:10px;color:var(--text-3)">保录方案专用名单，独立于志望校</span>
+            <button onclick="event.stopPropagation();gsAdd('${s.id}')" style="margin-left:auto;font-size:10px;background:#8a5010;color:#fff;border:none;border-radius:2px;padding:3px 12px;cursor:pointer;font-family:inherit">＋ 添加保录学校</button>
+          </div>
+          <div id="gs_list_${s.id}">${gsRenderList(s.id)}</div>
+        </div>` : ''}
         <!-- 老师评估记录（汇总各老师填写，admin 亦可补充） -->
         <div style="padding:12px 14px;border-bottom:1px solid var(--border-light)">
           <div onclick="event.stopPropagation();spNotesToggle('${s.id}','${(s.name||'').replace(/'/g,"")}',this)" style="font-size:11px;font-weight:600;color:var(--text-2);cursor:pointer;user-select:none">📝 老师评估记录（学生不可见）<span class="arr" style="margin-left:4px;color:var(--text-3)">▸</span></div>
@@ -1370,4 +1379,34 @@ async function spSchoolFromHint(sid, sname, major, schools) {
     await sb('/rest/v1/student_school_plans', 'POST', rows);
     renderPage();
   } catch (e) { alert('添加失败：' + e.message); }
+}
+
+
+// ── 保录学校（保录学生专用名单，存 students.guaranteed_schools）──
+function escGs(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function gsRenderList(sid){
+  const s=(typeof cachedStudents!=='undefined')?cachedStudents.find(x=>x.id===sid):null;
+  const list=(s&&Array.isArray(s.guaranteed_schools))?s.guaranteed_schools:[];
+  if(!list.length) return '<div style="font-size:11px;color:var(--text-3)">尚无保录学校，点右上「＋ 添加保录学校」录入</div>';
+  return '<div style="display:flex;flex-direction:column;gap:5px">'+list.map((g,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:12px">
+      <div><span style="font-weight:600">${escGs(g.university)}</span>${g.program?` <span style="color:var(--text-3)">· ${escGs(g.program)}</span>`:''}</div>
+      <span onclick="event.stopPropagation();gsDel('${sid}',${i})" style="font-size:10px;color:var(--danger);cursor:pointer">删除</span>
+    </div>`).join('')+'</div>';
+}
+async function gsAdd(sid){
+  const uni=(prompt('保录学校名称：')||'').trim(); if(!uni) return;
+  const prog=(prompt('专业 / 研究科（可留空）：')||'').trim();
+  const s=cachedStudents.find(x=>x.id===sid); if(!s) return;
+  const list=Array.isArray(s.guaranteed_schools)?[...s.guaranteed_schools]:[];
+  list.push({university:uni,program:prog});
+  try{ await sb(`/rest/v1/students?id=eq.${sid}`,'PATCH',{guaranteed_schools:list}); s.guaranteed_schools=list; const el=document.getElementById('gs_list_'+sid); if(el) el.innerHTML=gsRenderList(sid); }
+  catch(e){ alert('保存失败：'+e.message); }
+}
+async function gsDel(sid,idx){
+  const s=cachedStudents.find(x=>x.id===sid); if(!s) return;
+  const list=Array.isArray(s.guaranteed_schools)?[...s.guaranteed_schools]:[];
+  list.splice(idx,1);
+  try{ await sb(`/rest/v1/students?id=eq.${sid}`,'PATCH',{guaranteed_schools:list}); s.guaranteed_schools=list; const el=document.getElementById('gs_list_'+sid); if(el) el.innerHTML=gsRenderList(sid); }
+  catch(e){ alert('删除失败：'+e.message); }
 }
