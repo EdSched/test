@@ -48,6 +48,7 @@ async function renderTeacherStudyProgress(mc) {
     const all = await sb('/rest/v1/students?select=*&order=name.asc&limit=2000');
     const set = (typeof tsaAllowedSet === 'function') ? tsaAllowedSet() : null;
     students = (set ? (all || []).filter(s => set.has(s.major)) : (all || [])).filter(s => !s.status || s.status === 'active');
+    if (tsaGuaranteedLock()) students = students.filter(tsaIsGuaranteed);
   } catch (e) { mc.innerHTML = `<div class="empty">加载失败：${e.message}</div>`; return; }
 
   if (!students.length) {
@@ -365,6 +366,10 @@ function renderStudentMgmt(mc) {
 
 // ── 共用：允许专业集合（三个子项统一使用；与面谈预约逻辑完全无关） ──
 // 判定顺序：admin 显式勾选的 student_majors > 老师档案自身的 majors > 全部可见（兜底）
+// admin 是否把此老师的学生管理限定为"仅保录学生"
+function tsaGuaranteedLock() { return !!(teacherData && teacherData.permissions && teacherData.permissions.guaranteed_only); }
+function tsaIsGuaranteed(s) { return ((s && s.course_type) || '').includes('保录'); }
+
 function tsaAllowedSet() {
   const p = (teacherData && teacherData.permissions) || {};
   let allowed = (Array.isArray(p.student_majors) && p.student_majors.length)
@@ -542,9 +547,10 @@ let tsrRecCache = {};
 async function renderTsaRecords(box) {
   box.innerHTML = '<div class="empty">加载中…</div>';
   try {
-    const all = await sb('/rest/v1/students?select=id,name,major,level,status&order=name.asc&limit=2000');
+    const all = await sb('/rest/v1/students?select=id,name,major,level,status,course_type&order=name.asc&limit=2000');
     const set = tsaAllowedSet();
     tsrStudents = (set ? (all || []).filter(s => set.has(s.major)) : (all || [])).filter(s => !s.status || s.status === 'active');
+    if (tsaGuaranteedLock()) tsrStudents = tsrStudents.filter(tsaIsGuaranteed);
   } catch (e) { box.innerHTML = `<div class="empty">加载失败：${e.message}</div>`; return; }
   tsrRender();
 }
@@ -711,7 +717,7 @@ async function renderTsaMeetings(box) {
   try {
     const set = tsaAllowedSet();
     const [allStu, allBk] = await Promise.all([
-      sb('/rest/v1/students?select=id,name,major,source,status&limit=2000').catch(() => []),
+      sb('/rest/v1/students?select=id,name,major,source,status,course_type&limit=2000').catch(() => []),
       sb('/rest/v1/bookings?daily_record=not.is.null&select=*&order=slot_date.desc&limit=1500').catch(() => []),
     ]);
     const stuByName = {};
@@ -723,6 +729,7 @@ async function renderTsaMeetings(box) {
       const stu = stuByName[b.name];
       const major = (stu && stu.major) || b.major || '';
       if (set && !set.has(major)) return;
+      if (tsaGuaranteedLock() && !tsaIsGuaranteed(stu)) return;
       if (!groups[b.name]) groups[b.name] = { name: b.name, major, source: (stu && stu.source) || '', list: [] };
       groups[b.name].list.push(b);
     });
