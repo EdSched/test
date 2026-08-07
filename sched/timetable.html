@@ -25,7 +25,7 @@ let COURSES=[];
 async function boot(){
   fillSelect(el('cat'), CATEGORIES.filter(c=>c!=='语言'));
   fillSelect(el('campus'), CAMPUSES, v=>v, v=>v, '全部校区');
-  COURSES = await sbGet('sched_courses','select=*&order=weekday,start_time');
+  COURSES = await sbGet('sched_courses','select=*&order=start_time');
   el('go').onclick = run; run();
 }
 function run(){
@@ -44,7 +44,7 @@ function run(){
     const [s,e]=t.split('-');
     h+=`<tr><td class="muted">${t}</td>`;
     for(let d=1; d<=7; d++){
-      const cs=list.filter(c=>c.weekday===d && c.start_time===s && c.end_time===e);
+      const cs=list.filter(c=>(c.weekdays||'').split(',').map(Number).includes(d) && c.start_time===s && c.end_time===e);
       h+='<td>'+cs.map(c=>`<div class="blk ${c.category==='语言'?'k-vip':'k-course'}" style="position:static">${esc(c.name)}<small>${esc(c.teacher||'')} ${c.mode==='线上'?'· 线上':'· '+esc(c.campus)}</small></div>`).join('')+'</td>';
     }
     h+='</tr>';
@@ -53,7 +53,7 @@ function run(){
   el('grid').innerHTML = times.length? h : '<div class="muted">该条件下暂无课程</div>';
   // 明细含会议链接
   let l='<h4 style="margin:6px 0">课程明细</h4><table><thead><tr><th>课程</th><th>讲师</th><th>周几</th><th>时段</th><th>起止</th><th>方式</th><th>会议链接</th></tr></thead><tbody>';
-  list.forEach(c=>{ l+=`<tr><td>${esc(c.name)}</td><td>${esc(c.teacher||'')}</td><td>${WEEKDAYS[c.weekday]||''}</td>`+
+  list.forEach(c=>{ l+=`<tr><td>${esc(c.name)}</td><td>${esc(c.teacher||'')}</td><td>${weekdaysLabel(c.weekdays)}</td>`+
     `<td>${c.start_time||''}-${c.end_time||''}</td><td>${c.start_date||''}~${c.end_date||''}</td>`+
     `<td>${esc(c.mode)}</td><td>${c.meeting_link?`<a href="${esc(c.meeting_link)}" target="_blank">进入</a>`:'—'}</td></tr>`; });
   l+='</tbody></table>';
