@@ -39,7 +39,8 @@
         <div class="field"><label>类别（专业）</label><select id="c_cat"></select></div>
         <div class="field"><label>课程名</label><input id="c_name" placeholder="如 日语中级班N4"></div>
         <div class="field"><label>讲师</label><input id="c_teacher"></div>
-        <div class="field"><label>周几</label><select id="c_wd"></select></div>
+        <div class="field" style="grid-column:1/-1"><label>周几（可多选，如每周二+周四）</label>
+          <div id="c_wd" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
         <div class="field"><label>授课方式</label><select id="c_mode"><option>线下</option><option>线上</option></select></div>
         <div class="field"><label>开始时间</label><select id="c_st"></select></div>
         <div class="field"><label>结束时间</label><select id="c_et"></select></div>
@@ -118,7 +119,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 async function boot(){
   fillSelect(el('c_campus'), CAMPUSES);
   fillSelect(el('c_cat'), CATEGORIES);
-  fillSelect(el('c_wd'), [1,2,3,4,5,6,7], v=>v, v=>WEEKDAYS[v]);
+  renderWeekdayToggle();
   fillSelect(el('c_st'), SLOTS); fillSelect(el('c_et'), SLOTS);
   fillSelect(el('r_campus'), CAMPUSES);
   fillSelect(el('r_st'), SLOTS); fillSelect(el('r_et'), SLOTS);
@@ -140,9 +141,6 @@ async function boot(){
 }
 
 /* ===== Excel 批量导入 ===== */
-const WD_MAP = {'周一':1,'周二':2,'周三':3,'周四':4,'周五':5,'周六':6,'周日':7,'周天':7,
-  '星期一':1,'星期二':2,'星期三':3,'星期四':4,'星期五':5,'星期六':6,'星期日':7,
-  '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7};
 function normTime(t){ // "18-21" / "18:00-21:00" -> ["18:00","21:00"]
   if(!t) return [null,null];
   const parts = String(t).replace(/：/g,':').replace(/\s/g,'').split(/[-~—]/);
@@ -175,7 +173,7 @@ function parseXlsx(){
         return {
           campus, category:String(r['类别']||'').trim(), name:String(r['课程名']||'').trim(),
           teacher:String(r['讲师']||'').trim()||null,
-          weekday: WD_MAP[String(r['周几']||'').trim()] || null,
+          weekdays: parseWeekdays(r['周几']).join(','),
           start_time:st, end_time:et,
           start_date:normDate(r['开课日']), end_date:normDate(r['结课日']),
           sessions: r['回数']!==''?Number(r['回数']):null,
@@ -193,7 +191,7 @@ function rowErr(r){
   const e=[];
   if(!r.name) e.push('缺课程名');
   if(!CATEGORIES.includes(r.category)) e.push('类别不在允许范围');
-  if(!r.weekday) e.push('周几无法识别');
+  if(!r.weekdays) e.push('周几无法识别');
   if(!r.start_time||!r.end_time) e.push('时间无法识别');
   else if(r.end_time<=r.start_time) e.push('结束早于开始');
   return e;
@@ -205,7 +203,7 @@ function renderPrev(){
   PARSED.forEach((r,i)=>{
     const errs=rowErr(r); if(errs.length) bad++; else ok++;
     h+=`<tr${errs.length?' style="background:#fff5f5"':''}><td>${i+1}</td><td>${esc(r.campus)}</td><td>${esc(r.category)}</td>`+
-      `<td>${esc(r.name)}</td><td>${esc(r.teacher||'')}</td><td>${r.weekday?WEEKDAYS[r.weekday]:'?'}</td>`+
+      `<td>${esc(r.name)}</td><td>${esc(r.teacher||'')}</td><td>${r.weekdays?weekdaysLabel(r.weekdays):'?'}</td>`+
       `<td>${r.start_time||'?'}-${r.end_time||'?'}</td><td>${r.start_date||''}~${r.end_date||''}</td>`+
       `<td>${r.sessions??''}</td><td>${r.est_students??''}</td><td>${esc(r.mode)}</td>`+
       `<td>${errs.length?'<span class="badge b-err">'+errs.join('；')+'</span>':'<span class="badge b-ok">OK</span>'}</td></tr>`;
@@ -239,11 +237,26 @@ function fillRooms(){
 }
 
 /* 保存课程 */
+/* 周几多选切换 */
+function renderWeekdayToggle(){
+  const box=el('c_wd'); box.innerHTML='';
+  for(let d=1; d<=7; d++){
+    const b=document.createElement('button');
+    b.type='button'; b.className='ghost sm'; b.textContent=WEEKDAYS[d]; b.dataset.d=d;
+    b.onclick=()=>{ const on=b.dataset.on==='1'; b.dataset.on=on?'':'1';
+      b.style.background=on?'#fff':'var(--blue)'; b.style.color=on?'var(--ink)':'#fff'; };
+    box.appendChild(b);
+  }
+}
+function getSelectedWeekdays(){
+  return [...el('c_wd').querySelectorAll('button[data-on="1"]')].map(b=>b.dataset.d).join(',');
+}
+
 async function saveCourse(){
   const rec = {
     campus: el('c_campus').value,
     category: el('c_cat').value, name: el('c_name').value.trim(),
-    teacher: el('c_teacher').value.trim(), weekday: Number(el('c_wd').value),
+    teacher: el('c_teacher').value.trim(), weekdays: getSelectedWeekdays(),
     start_time: el('c_st').value, end_time: el('c_et').value,
     start_date: el('c_sd').value||null, end_date: el('c_ed').value||null,
     sessions: el('c_sess').value?Number(el('c_sess').value):null,
@@ -252,9 +265,11 @@ async function saveCourse(){
     confirmed: true, note:null
   };
   if(!rec.name){ toast('请填课程名', false); return; }
+  if(!rec.weekdays){ toast('请至少选择一个上课日', false); return; }
   if(rec.end_time <= rec.start_time){ toast('结束时间需晚于开始', false); return; }
   try{ await sbInsert('sched_courses', rec); toast('课程已保存');
     ['c_name','c_teacher','c_sess','c_est','c_link'].forEach(id=>el(id).value='');
+    renderWeekdayToggle();
   }catch(e){ toast(e.message, false); }
 }
 
