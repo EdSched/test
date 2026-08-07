@@ -89,20 +89,50 @@ function tabPending(){
 
 /* ---------- 排教室：课程 -> 生成 weekly 占用 ---------- */
 function tabAssign(){
-  const assignedCourseIds=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
   let h='<div class="card"><h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
     '<div class="tip">线下课需分配容量足够的教室；纯线上课不占教室，只需指定会议账号。分配后自动生成整学期每周占用。</div>'+
-    '<table><thead><tr><th>课程</th><th>校区</th><th>周几</th><th>时段</th><th>人数</th><th>方式</th><th>已排</th><th>操作</th></tr></thead><tbody>';
-  COURSES.forEach(c=>{
-    const done=assignedCourseIds.has(String(c.id));
-    h+=`<tr><td>${esc(c.name)}<br><small class="muted">${esc(c.teacher||'')}</small></td><td>${esc(c.campus)}</td>`+
+    '<div class="row" style="margin-bottom:10px">'+
+      '<div class="field"><label>搜索课程名/讲师</label><input id="af_q" placeholder="关键词"></div>'+
+      '<div class="field"><label>类别（专业/学科）</label><select id="af_cat"></select></div>'+
+      '<div class="field"><label>校区</label><select id="af_campus"></select></div>'+
+      '<div class="field"><label>状态</label><select id="af_status">'+
+        '<option value="">全部</option><option value="todo">未排</option><option value="done">已排</option></select></div>'+
+      '<div class="field"><label>&nbsp;</label><span class="muted" id="af_count"></span></div>'+
+    '</div><div id="assignTable"></div></div><div id="asForm"></div>';
+  render(h);
+  fillSelect(el('af_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
+  fillSelect(el('af_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
+  ['af_q','af_cat','af_campus','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=renderAssignTable);
+  renderAssignTable();
+}
+function renderAssignTable(){
+  const q=(el('af_q').value||'').trim().toLowerCase();
+  const cat=el('af_cat').value, campus=el('af_campus').value, status=el('af_status').value;
+  const assigned=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
+  let list=COURSES.filter(c=>{
+    const done=assigned.has(String(c.id));
+    if(q && !((c.name||'').toLowerCase().includes(q) || (c.teacher||'').toLowerCase().includes(q))) return false;
+    if(cat && c.category!==cat) return false;
+    if(campus && c.campus!==campus) return false;
+    if(status==='todo' && done) return false;
+    if(status==='done' && !done) return false;
+    return true;
+  });
+  el('af_count').textContent = '共 '+list.length+' 门';
+  let h='<table><thead><tr><th>课程</th><th>类别</th><th>校区</th><th>周几</th><th>时段</th><th>日期区间</th><th>人数</th><th>方式</th><th>已排</th><th>操作</th></tr></thead><tbody>';
+  if(!list.length) h+='<tr><td colspan="10" class="muted">无匹配课程</td></tr>';
+  list.forEach(c=>{
+    const done=assigned.has(String(c.id));
+    const noDate = !c.start_date || !c.end_date;
+    h+=`<tr><td>${esc(c.name)}<br><small class="muted">${esc(c.teacher||'')}</small></td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td>`+
       `<td>${weekdaysLabel(c.weekdays)}</td><td>${c.start_time||''}-${c.end_time||''}</td>`+
+      `<td>${noDate?'<span class="badge b-warn">缺日期</span>':(c.start_date+' ~ '+c.end_date)}</td>`+
       `<td>${c.est_students||'?'}</td><td>${esc(c.mode)}</td>`+
       `<td>${done?'<span class="badge b-ok">已排</span>':'<span class="badge b-mute">未排</span>'}</td>`+
       `<td><button class="sm" data-as="${c.id}">${done?'重排':'排教室'}</button></td></tr>`;
   });
-  h+='</tbody></table></div><div id="asForm"></div>';
-  render(h);
+  h+='</tbody></table>';
+  el('assignTable').innerHTML=h;
   bind('[data-as]', id=>assignForm(id));
 }
 function assignForm(courseId){
@@ -122,7 +152,15 @@ function assignForm(courseId){
   let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px">'+
     '<div class="card" style="width:520px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">为「'+esc(c.name)+'」排教室</h3>'+
     `<div class="muted" style="margin-bottom:8px">${esc(c.campus)} · ${weekdaysLabel(c.weekdays)} · ${c.start_time}-${c.end_time} · 预估${c.est_students||'?'}人 · ${c.mode}</div>`;
-  if(wdays.length>1) h+='<div class="tip">该课每周 '+weekdaysLabel(c.weekdays)+' 各上一次，将为每天生成一条占用（同一教室）。</div>';
+  // 日期区间：有则显示，缺则让补填
+  const noDate = !c.start_date || !c.end_date;
+  if(noDate){
+    h+='<div class="tip">这门课缺开课/结课日期，排教室前请补上（会同时写回课程）。</div>'+
+      '<div class="row"><div class="field"><label>开课日</label><input type="date" id="as_sd" value="'+(c.start_date||'')+'"></div>'+
+      '<div class="field"><label>结课日</label><input type="date" id="as_ed" value="'+(c.end_date||'')+'"></div></div>';
+  }else{
+    h+=`<div class="field" style="margin-bottom:8px"><label>日期区间</label><div>${c.start_date} ~ ${c.end_date}</div></div>`;
+  }
   if(!online){
     h+='<div class="field"><label>选择教室（仅列容量足够）</label><select id="as_room">';
     if(!cand.length) h+='<option value="">无满足容量的教室</option>';
@@ -142,14 +180,21 @@ function assignForm(courseId){
     const um = online ? true : el('as_um').value==='true';
     const roomId = online ? null : Number(el('as_room').value);
     if(!online && !roomId){ el('as_warn').className=''; el('as_warn').innerHTML='<span class="badge b-err">请选择教室</span>'; return; }
+    // 日期：优先补填框
+    let sd=c.start_date, ed=c.end_date;
+    if(noDate){
+      sd=el('as_sd').value||null; ed=el('as_ed').value||null;
+      if(!sd||!ed){ el('as_warn').className=''; el('as_warn').innerHTML='<span class="badge b-err">请补齐开课/结课日期</span>'; return; }
+    }
     // 每个上课日各一条 weekly 占用
     const recs = wdays.map(wd=>({ room_id:roomId, kind:'course', course_id:c.id,
       title:c.name, user_name:c.teacher||null, recurrence:'weekly', weekday:wd,
-      start_date:c.start_date||null, end_date:c.end_date||null,
+      start_date:sd, end_date:ed,
       start_time:c.start_time, end_time:c.end_time,
       uses_meeting:um, meeting_account_id: um?Number(el('as_acc').value):null,
       status:'confirmed', created_by:'admin', note:'排课自动生成' }));
     try{
+      if(noDate) await sbUpdate('sched_courses', c.id, {start_date:sd, end_date:ed}); // 写回课程
       const old=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
       for(const o of old) await sbDelete('sched_bookings',o.id);
       await sbInsert('sched_bookings',recs);
@@ -221,9 +266,11 @@ function tabAccounts(){
 
 /* ---------- 课程 CRUD（删除） ---------- */
 function tabCourses(){
-  let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）</h3><table><thead><tr><th>课程</th><th>类别</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>人数</th><th>方式</th><th></th></tr></thead><tbody>';
+  let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）</h3><table><thead><tr><th>课程</th><th>类别</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>人数</th><th>方式</th><th></th></tr></thead><tbody>';
   COURSES.forEach(c=>{ h+=`<tr><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
-    `<td>${weekdaysLabel(c.weekdays)}</td><td>${c.start_time||''}-${c.end_time||''}</td><td>${c.est_students||''}</td><td>${esc(c.mode)}</td>`+
+    `<td>${weekdaysLabel(c.weekdays)}</td><td>${c.start_time||''}-${c.end_time||''}</td>`+
+    `<td>${(c.start_date&&c.end_date)?(c.start_date+' ~ '+c.end_date):'<span class="badge b-warn">缺日期</span>'}</td>`+
+    `<td>${c.est_students||''}</td><td>${esc(c.mode)}</td>`+
     `<td><button class="sm danger" data-delc="${c.id}">删</button></td></tr>`; });
   h+='</tbody></table><p class="muted" style="font-size:12px">课程录入在「录入」页；删除课程会同时删除其教室占用。</p></div>';
   render(h);
