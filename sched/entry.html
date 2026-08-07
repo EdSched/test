@@ -25,6 +25,15 @@
 
     <!-- 课程录入 -->
     <div id="tab-course" class="card">
+      <div style="border:1px dashed #cfe0ff;background:#f7faff;border-radius:8px;padding:12px;margin-bottom:14px">
+        <b>📥 Excel 批量导入</b>
+        <span class="muted" style="font-size:12px;margin-left:6px">按模板表头填好后上传，可预览后再确认导入。</span>
+        <div class="row" style="margin-top:8px">
+          <div class="field"><label>选择 Excel 文件</label><input type="file" id="xlsxFile" accept=".xlsx,.xls"></div>
+          <div class="field"><label>&nbsp;</label><button class="ghost" id="xlsxParse">解析预览</button></div>
+        </div>
+        <div id="xlsxPrev" style="margin-top:10px"></div>
+      </div>
       <div class="grid2">
         <div class="field"><label>校区</label><select id="c_campus"></select></div>
         <div class="field"><label>类别（专业）</label><select id="c_cat"></select></div>
@@ -77,10 +86,11 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('entry.html');
-let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CODEREC=null;
+let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CODEREC=null, PARSED=[];
 
 /* 口令 */
 el('enter').onclick = doEnter;
@@ -126,6 +136,97 @@ async function boot(){
   el('c_save').onclick = saveCourse;
   el('r_save').onclick = saveRoom;
   el('m_load').onclick = loadMine;
+  el('xlsxParse').onclick = parseXlsx;
+}
+
+/* ===== Excel 批量导入 ===== */
+const WD_MAP = {'周一':1,'周二':2,'周三':3,'周四':4,'周五':5,'周六':6,'周日':7,'周天':7,
+  '星期一':1,'星期二':2,'星期三':3,'星期四':4,'星期五':5,'星期六':6,'星期日':7,
+  '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7};
+function normTime(t){ // "18-21" / "18:00-21:00" -> ["18:00","21:00"]
+  if(!t) return [null,null];
+  const parts = String(t).replace(/：/g,':').replace(/\s/g,'').split(/[-~—]/);
+  const fix = x => { if(!x) return null; if(x.indexOf(':')<0) x=x+':00';
+    const [h,m]=x.split(':'); return String(h).padStart(2,'0')+':'+String(m||'00').padStart(2,'0'); };
+  return [fix(parts[0]), fix(parts[1])];
+}
+function normDate(v){ // Excel 日期/字符串 -> YYYY-MM-DD
+  if(!v) return null;
+  if(v instanceof Date) return v.toISOString().slice(0,10);
+  const s=String(v).trim().replace(/\//g,'-');
+  const m=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  return null;
+}
+function parseXlsx(){
+  const f = el('xlsxFile').files[0];
+  if(!f){ toast('请先选择文件', false); return; }
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      PARSED = rows.map(r=>{
+        const campus=String(r['校区']||'').trim();
+        const [st,et]=normTime(r['上课时间']);
+        let mode=String(r['授课方式']||'').trim();
+        if(!mode) mode = campus.indexOf('线上')>=0 ? '线上' : '线下';
+        return {
+          campus, category:String(r['类别']||'').trim(), name:String(r['课程名']||'').trim(),
+          teacher:String(r['讲师']||'').trim()||null,
+          weekday: WD_MAP[String(r['周几']||'').trim()] || null,
+          start_time:st, end_time:et,
+          start_date:normDate(r['开课日']), end_date:normDate(r['结课日']),
+          sessions: r['回数']!==''?Number(r['回数']):null,
+          est_students: r['预估人数']!==''?Number(r['预估人数']):null,
+          mode, meeting_link:String(r['腾讯会议链接']||'').trim()||null,
+          confirmed:true, note:null
+        };
+      });
+      renderPrev();
+    }catch(err){ toast('解析失败：'+err.message, false); }
+  };
+  reader.readAsArrayBuffer(f);
+}
+function rowErr(r){
+  const e=[];
+  if(!r.name) e.push('缺课程名');
+  if(!CATEGORIES.includes(r.category)) e.push('类别不在允许范围');
+  if(!r.weekday) e.push('周几无法识别');
+  if(!r.start_time||!r.end_time) e.push('时间无法识别');
+  else if(r.end_time<=r.start_time) e.push('结束早于开始');
+  return e;
+}
+function renderPrev(){
+  if(!PARSED.length){ el('xlsxPrev').innerHTML='<span class="muted">未读到数据行</span>'; return; }
+  let ok=0, bad=0;
+  let h='<table><thead><tr><th>#</th><th>校区</th><th>类别</th><th>课程名</th><th>讲师</th><th>周几</th><th>时段</th><th>起止</th><th>回数</th><th>人数</th><th>方式</th><th>校验</th></tr></thead><tbody>';
+  PARSED.forEach((r,i)=>{
+    const errs=rowErr(r); if(errs.length) bad++; else ok++;
+    h+=`<tr${errs.length?' style="background:#fff5f5"':''}><td>${i+1}</td><td>${esc(r.campus)}</td><td>${esc(r.category)}</td>`+
+      `<td>${esc(r.name)}</td><td>${esc(r.teacher||'')}</td><td>${r.weekday?WEEKDAYS[r.weekday]:'?'}</td>`+
+      `<td>${r.start_time||'?'}-${r.end_time||'?'}</td><td>${r.start_date||''}~${r.end_date||''}</td>`+
+      `<td>${r.sessions??''}</td><td>${r.est_students??''}</td><td>${esc(r.mode)}</td>`+
+      `<td>${errs.length?'<span class="badge b-err">'+errs.join('；')+'</span>':'<span class="badge b-ok">OK</span>'}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  h+=`<div style="margin-top:10px"><b>${ok}</b> 行可导入，<b style="color:#d93025">${bad}</b> 行有问题。`+
+     `<button id="xlsxImport" style="margin-left:10px"${ok?'':' disabled'}>确认导入 ${ok} 行</button>`+
+     `<span class="muted" style="font-size:12px;margin-left:8px">有问题的行会跳过，可修正 Excel 后重新上传。</span></div>`;
+  el('xlsxPrev').innerHTML=h;
+  el('xlsxImport').onclick = doImport;
+}
+async function doImport(){
+  const good = PARSED.filter(r=>rowErr(r).length===0);
+  if(!good.length) return;
+  el('xlsxImport').disabled=true; el('xlsxImport').textContent='导入中…';
+  try{
+    await sbInsert('sched_courses', good);
+    toast('成功导入 '+good.length+' 门课程');
+    el('xlsxPrev').innerHTML='<span class="badge b-ok">已导入 '+good.length+' 门，可到「学生课表」或管理后台查看。</span>';
+    PARSED=[]; el('xlsxFile').value='';
+  }catch(e){ toast('导入失败：'+e.message, false); el('xlsxImport').disabled=false; el('xlsxImport').textContent='重试导入'; }
 }
 function fillRooms(){
   const rs = ROOMS.filter(r=>r.campus===el('r_campus').value);
