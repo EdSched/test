@@ -46,6 +46,19 @@ async function sbDelete(table, id){
 const CAMPUSES   = ['高马','市谷'];
 const CATEGORIES = ['学部文科','学部理科','语言','大学院文科','大学院理科'];
 const WEEKDAYS   = ['','周一','周二','周三','周四','周五','周六','周日'];
+const WD_MAP = {'周一':1,'周二':2,'周三':3,'周四':4,'周五':5,'周六':6,'周日':7,'周天':7,
+  '星期一':1,'星期二':2,'星期三':3,'星期四':4,'星期五':5,'星期六':6,'星期日':7,'星期天':7,
+  '礼拜一':1,'礼拜二':2,'礼拜三':3,'礼拜四':4,'礼拜五':5,'礼拜六':6,'礼拜日':7,
+  '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7};
+// 解析 "周二/周四"、"周二、周四"、"2,4" 等 -> [2,4]（去重升序）
+function parseWeekdays(s){
+  if(s==null || s==='') return [];
+  const arr = String(s).split(/[\/、,，\s;；]+/).map(x=>WD_MAP[x.trim()]).filter(Boolean);
+  return [...new Set(arr)].sort((a,b)=>a-b);
+}
+function weekdaysLabel(str){ // "2,4" -> "周二/周四"
+  return String(str||'').split(',').filter(Boolean).map(d=>WEEKDAYS[Number(d)]).join('/');
+}
 const KIND_LABEL = { course:'排课', vip:'VIP', temp:'临时使用', rental:'对外出租', meeting:'开会' };
 const KIND_CLASS = { course:'k-course', vip:'k-vip', temp:'k-temp', rental:'k-rental', meeting:'k-meeting' };
 
