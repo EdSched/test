@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>会议账号可用性 · 唯新</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="tip">判断某账号能否开会，<b>只看账号列有没有被占</b>——教室被出租但没用会议、或教室没排课时，账号依然可借。</div>
+  <div class="card">
+    <div class="row">
+      <div class="field"><label>日期</label><input type="date" id="date"></div>
+      <div class="field"><label>开始</label><select id="st"></select></div>
+      <div class="field"><label>结束</label><select id="et"></select></div>
+      <div class="field"><label>&nbsp;</label><button id="go">查可用账号</button></div>
+    </div>
+  </div>
+  <div class="card" id="box"><div class="muted">设定时段后查询</div></div>
+</div>
+<script src="common.js"></script>
+<script>
+el('nav').innerHTML = renderNav('meeting.html');
+let ROOMS=[], ACCOUNTS=[], BOOKINGS=[];
+async function boot(){
+  fillSelect(el('st'), SLOTS); fillSelect(el('et'), SLOTS);
+  el('date').value = todayStr();
+  ROOMS    = await sbGet('sched_rooms','select=*');
+  ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
+  BOOKINGS = await sbGet('sched_bookings','select=*');
+  el('go').onclick = run;
+}
+function run(){
+  const date=el('date').value, s=el('st').value, e=el('et').value;
+  if(e<=s){ toast('结束需晚于开始', false); return; }
+  const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r.name);
+  const fixed = ACCOUNTS.filter(a=>a.kind==='固定'), temp=ACCOUNTS.filter(a=>a.kind==='临时');
+  const render = list => list.map(a=>{
+    const conf = accountConflicts(BOOKINGS, a.id, date, s, e, null);
+    const free = conf.length===0;
+    const bind = a.room_id ? ('绑定 '+(rmap[a.room_id]||'')) : '通用';
+    let by = conf.map(c=>{ const who=c.title||KIND_LABEL[c.kind]; const rm=c.room_id?('@'+(rmap[c.room_id]||'')):''; return who+rm+' '+c.start_time+'-'+c.end_time; }).join('；');
+    return `<tr><td>${esc(a.name)}</td><td>${bind}</td>`+
+      (free?'<td><span class="badge b-ok">可开会</span></td><td>—</td>'
+           :`<td><span class="badge b-err">占用</span></td><td class="muted">${esc(by)}</td>`)+'</tr>';
+  }).join('');
+  el('box').innerHTML =
+    `<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} ${s}-${e}</div>`+
+    '<h4 style="margin:6px 0">固定账号（随教室）</h4>'+
+    '<table><thead><tr><th>账号</th><th>归属</th><th>状态</th><th>占用详情</th></tr></thead><tbody>'+render(fixed)+'</tbody></table>'+
+    '<h4 style="margin:14px 0 6px">临时账号（通用）</h4>'+
+    '<table><thead><tr><th>账号</th><th>归属</th><th>状态</th><th>占用详情</th></tr></thead><tbody>'+render(temp)+'</tbody></table>';
+}
+boot();
+</script>
+</body></html>
