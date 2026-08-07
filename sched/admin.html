@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理后台 · 唯新</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div id="gate" class="gate card">
+    <h3>管理员口令</h3>
+    <input id="code" placeholder="admin 口令" style="width:100%;margin-bottom:10px">
+    <button id="enter" style="width:100%">进入</button>
+    <p id="gerr" class="b-err badge hidden" style="margin-top:10px"></p>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="tabs">
+      <button class="on" data-t="pending">待确认预约 <span id="pendN" class="badge b-warn"></span></button>
+      <button data-t="assign">排教室</button>
+      <button data-t="conflict">冲突检查</button>
+      <button data-t="rooms">教室</button>
+      <button data-t="accounts">会议账号</button>
+      <button data-t="courses">课程</button>
+      <button data-t="codes">口令</button>
+    </div>
+    <div id="panel"></div>
+  </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+el('nav').innerHTML = renderNav('admin.html');
+let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[];
+
+/* 口令 */
+el('enter').onclick = doEnter;
+el('code').addEventListener('keydown',e=>{ if(e.key==='Enter') doEnter(); });
+async function doEnter(){
+  const code=el('code').value.trim(); if(!code) return;
+  try{
+    const rec=await checkCode(code,'admin');
+    if(!rec){ el('gerr').textContent='口令无效或非管理员'; el('gerr').classList.remove('hidden'); return; }
+    el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
+    await reloadAll(); show('pending');
+  }catch(e){ el('gerr').textContent=e.message; el('gerr').classList.remove('hidden'); }
+}
+async function reloadAll(){
+  [ROOMS,ACCOUNTS,COURSES,BOOKINGS,CODES] = await Promise.all([
+    sbGet('sched_rooms','select=*&order=campus,sort'),
+    sbGet('sched_meeting_accounts','select=*&order=id'),
+    sbGet('sched_courses','select=*&order=created_at.desc'),
+    sbGet('sched_bookings','select=*&order=created_at.desc'),
+    sbGet('sched_access_codes','select=*&order=id')
+  ]);
+  const pend=BOOKINGS.filter(b=>b.status==='pending').length;
+  el('pendN').textContent = pend||''; el('pendN').style.display=pend?'':'none';
+}
+const rname=id=>{ const r=ROOMS.find(x=>String(x.id)===String(id)); return r?r.name:'—'; };
+const aname=id=>{ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?a.name:'—'; };
+
+/* tabs */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>show(b.dataset.t));
+function show(t){
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
+  ({pending:tabPending,assign:tabAssign,conflict:tabConflict,rooms:tabRooms,
+    accounts:tabAccounts,courses:tabCourses,codes:tabCodes}[t])();
+}
+
+/* ---------- 待确认预约 ---------- */
+function tabPending(){
+  const list=BOOKINGS.filter(b=>b.status==='pending');
+  let h='<div class="card"><h3 style="margin-top:2px">待确认预约</h3>';
+  if(!list.length) h+='<div class="muted">没有待确认的预约</div>';
+  else{ h+='<table><thead><tr><th>日期</th><th>教室</th><th>用途</th><th>时段</th><th>人</th><th>账号</th><th>冲突</th><th>操作</th></tr></thead><tbody>';
+    list.forEach(b=>{
+      const rc=roomConflicts(BOOKINGS,b.room_id,b.booking_date,b.start_time,b.end_time,b.id);
+      const ac=b.uses_meeting?accountConflicts(BOOKINGS,b.meeting_account_id,b.booking_date,b.start_time,b.end_time,b.id):[];
+      const bad=rc.length||ac.length;
+      h+=`<tr><td>${b.booking_date||''}</td><td>${esc(rname(b.room_id))}</td><td>${esc(b.title||KIND_LABEL[b.kind])}</td>`+
+        `<td>${b.start_time}-${b.end_time}</td><td>${esc(b.user_name||'')}</td><td>${b.uses_meeting?esc(aname(b.meeting_account_id)):'—'}</td>`+
+        `<td>${bad?'<span class="badge b-err">有冲突</span>':'<span class="badge b-ok">无</span>'}</td>`+
+        `<td><button class="sm" data-ok="${b.id}">确认</button> <button class="sm ghost" data-no="${b.id}">驳回</button></td></tr>`;
+    });
+    h+='</tbody></table>'; }
+  h+='</div>'; render(h);
+  bind('[data-ok]', async id=>{ await sbUpdate('sched_bookings',id,{status:'confirmed'}); await reloadAll(); show('pending'); toast('已确认'); });
+  bind('[data-no]', async id=>{ if(confirm('驳回并删除该预约？')){ await sbDelete('sched_bookings',id); await reloadAll(); show('pending'); toast('已驳回'); } });
+}
+
+/* ---------- 排教室：课程 -> 生成 weekly 占用 ---------- */
+function tabAssign(){
+  const assignedCourseIds=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
+  let h='<div class="card"><h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
+    '<div class="tip">线下课需分配容量足够的教室；纯线上课不占教室，只需指定会议账号。分配后自动生成整学期每周占用。</div>'+
+    '<table><thead><tr><th>课程</th><th>校区</th><th>周几</th><th>时段</th><th>人数</th><th>方式</th><th>已排</th><th>操作</th></tr></thead><tbody>';
+  COURSES.forEach(c=>{
+    const done=assignedCourseIds.has(String(c.id));
+    h+=`<tr><td>${esc(c.name)}<br><small class="muted">${esc(c.teacher||'')}</small></td><td>${esc(c.campus)}</td>`+
+      `<td>${WEEKDAYS[c.weekday]||''}</td><td>${c.start_time||''}-${c.end_time||''}</td>`+
+      `<td>${c.est_students||'?'}</td><td>${esc(c.mode)}</td>`+
+      `<td>${done?'<span class="badge b-ok">已排</span>':'<span class="badge b-mute">未排</span>'}</td>`+
+      `<td><button class="sm" data-as="${c.id}">${done?'重排':'排教室'}</button></td></tr>`;
+  });
+  h+='</tbody></table></div><div id="asForm"></div>';
+  render(h);
+  bind('[data-as]', id=>assignForm(id));
+}
+function assignForm(courseId){
+  const c=COURSES.find(x=>String(x.id)===String(courseId));
+  const online=c.mode==='线上';
+  // 候选教室：同校区、容量>=人数
+  let cand=ROOMS.filter(r=>r.campus===c.campus && r.active);
+  if(c.est_students) cand=cand.filter(r=>r.capacity>=c.est_students);
+  // 每间教室在该周几该时段是否与既有占用冲突（用课程日期范围内任一周判断——用 weekly 逻辑近似：查同 weekday 的既有 weekly + 该范围 once）
+  // 是否与既有“每周”占用在同 weekday+时段+日期区间重叠（单日临时占用不整体拦截，留给冲突面板逐日提示）
+  const roomFree=r=>{
+    return !BOOKINGS.some(b=> b.status!=='pending' && b.recurrence==='weekly' &&
+      String(b.room_id)===String(r.id) && Number(b.weekday)===c.weekday &&
+      overlap(c.start_time,c.end_time,b.start_time,b.end_time) &&
+      !(c.end_date&&b.start_date&&c.end_date<b.start_date) &&
+      !(c.start_date&&b.end_date&&c.start_date>b.end_date) );
+  };
+  const accs=ACCOUNTS.filter(a=>a.kind==='临时' || (!online && cand.some(r=>String(r.meeting_account_id)===String(a.id))) || online);
+  let h='<div class="card"><h3 style="margin-top:2px">为「'+esc(c.name)+'」排教室</h3>'+
+    `<div class="muted" style="margin-bottom:8px">${esc(c.campus)} · ${WEEKDAYS[c.weekday]} · ${c.start_time}-${c.end_time} · 预估${c.est_students||'?'}人 · ${c.mode}</div>`;
+  if(!online){
+    h+='<div class="field"><label>选择教室（仅列容量足够）</label><select id="as_room">';
+    if(!cand.length) h+='<option value="">无满足容量的教室</option>';
+    cand.forEach(r=>{ const free=roomFree(r); h+=`<option value="${r.id}"${free?'':' disabled'}>${esc(r.name)}（${r.capacity}人）${free?'':' — 该时段已占'}</option>`; });
+    h+='</select></div>';
+  }
+  h+='<div class="field" style="margin-top:8px"><label>是否占用会议账号'+(online?'（线上课必占）':'（线下直播才占）')+'</label>'+
+    `<select id="as_um"><option value="${online}">${online?'是':'否'}</option>${online?'':'<option value="true">是</option>'}</select></div>`;
+  h+='<div class="field '+(online?'':'hidden')+'" id="as_accWrap" style="margin-top:8px"><label>会议账号</label><select id="as_acc">'+
+    accs.map(a=>`<option value="${a.id}">${esc(a.name)}（${a.kind}）</option>`).join('')+'</select></div>';
+  h+='<div id="as_warn" class="hidden" style="margin-top:8px"></div>';
+  h+='<div style="margin-top:12px"><button id="as_do">生成占用</button> <button class="ghost" id="as_cancel">取消</button></div></div>';
+  el('asForm').innerHTML=h;
+  if(!online){ el('as_um').onchange=()=>el('as_accWrap').classList.toggle('hidden',el('as_um').value!=='true'); }
+  el('as_cancel').onclick=()=>el('asForm').innerHTML='';
+  el('as_do').onclick=async()=>{
+    const um = online ? true : el('as_um').value==='true';
+    const roomId = online ? null : Number(el('as_room').value);
+    if(!online && !roomId){ el('as_warn').className=''; el('as_warn').innerHTML='<span class="badge b-err">请选择教室</span>'; return; }
+    const rec={ room_id:roomId, kind:'course', course_id:c.id,
+      title:c.name, user_name:c.teacher||null, recurrence:'weekly', weekday:c.weekday,
+      start_date:c.start_date||null, end_date:c.end_date||null,
+      start_time:c.start_time, end_time:c.end_time,
+      uses_meeting:um, meeting_account_id: um?Number(el('as_acc').value):null,
+      status:'confirmed', created_by:'admin', note:'排课自动生成' };
+    try{
+      // 若重排，先删旧的
+      const old=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
+      for(const o of old) await sbDelete('sched_bookings',o.id);
+      await sbInsert('sched_bookings',rec);
+      await reloadAll(); show('assign'); toast('已生成整学期占用');
+    }catch(e){ el('as_warn').className=''; el('as_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
+  };
+}
+
+/* ---------- 冲突检查 ---------- */
+function tabConflict(){
+  let h='<div class="card"><h3 style="margin-top:2px">冲突检查</h3>'+
+    '<div class="row"><div class="field"><label>检查日期</label><input type="date" id="cf_date" value="'+todayStr()+'"></div>'+
+    '<div class="field"><label>&nbsp;</label><button id="cf_go">检查</button></div></div><div id="cf_res" style="margin-top:10px"></div></div>';
+  render(h);
+  el('cf_go').onclick=runConflict; runConflict();
+}
+function runConflict(){
+  const date=el('cf_date').value;
+  const active=BOOKINGS.filter(b=>b.status!=='pending' && bookingOnDate(b,date));
+  const roomIssues=[], accIssues=[];
+  for(let i=0;i<active.length;i++) for(let j=i+1;j<active.length;j++){
+    const a=active[i],b=active[j];
+    if(!overlap(a.start_time,a.end_time,b.start_time,b.end_time)) continue;
+    if(a.room_id&&b.room_id&&String(a.room_id)===String(b.room_id))
+      roomIssues.push([a,b,rname(a.room_id)]);
+    if(a.uses_meeting&&b.uses_meeting&&String(a.meeting_account_id)===String(b.meeting_account_id)&&a.meeting_account_id)
+      accIssues.push([a,b,aname(a.meeting_account_id)]);
+  }
+  const line=(a,b,label,type)=>`<tr><td>${esc(label)}</td><td>${esc(a.title||KIND_LABEL[a.kind])} ${a.start_time}-${a.end_time}</td><td>${esc(b.title||KIND_LABEL[b.kind])} ${b.start_time}-${b.end_time}</td></tr>`;
+  let h=`<div class="muted">${WEEKDAYS[weekdayOf(date)]} ${date}</div>`;
+  h+='<h4 style="margin:10px 0 4px">教室冲突</h4>';
+  h+= roomIssues.length? '<table><thead><tr><th>教室</th><th>占用A</th><th>占用B</th></tr></thead><tbody>'+roomIssues.map(x=>line(...x)).join('')+'</tbody></table>'
+    : '<div class="badge b-ok">无教室冲突</div>';
+  h+='<h4 style="margin:14px 0 4px">会议账号冲突</h4>';
+  h+= accIssues.length? '<table><thead><tr><th>账号</th><th>占用A</th><th>占用B</th></tr></thead><tbody>'+accIssues.map(x=>line(...x)).join('')+'</tbody></table>'
+    : '<div class="badge b-ok">无账号冲突</div>';
+  el('cf_res').innerHTML=h;
+}
+
+/* ---------- 教室 CRUD ---------- */
+function tabRooms(){
+  let h='<div class="card"><h3 style="margin-top:2px">教室</h3><table><thead><tr><th>校区</th><th>楼层</th><th>名称</th><th>类型</th><th>大小</th><th>容量</th><th>固定账号</th><th></th></tr></thead><tbody>';
+  ROOMS.forEach(r=>{ h+=`<tr><td>${esc(r.campus)}</td><td>${esc(r.floor||'')}</td><td>${esc(r.name)}</td><td>${esc(r.type)}</td>`+
+    `<td>${esc(r.size_label||'')}</td><td><input value="${r.capacity}" style="width:60px" data-cap="${r.id}"></td>`+
+    `<td>${esc(aname(r.meeting_account_id))}</td>`+
+    `<td><button class="sm ghost" data-savecap="${r.id}">存</button></td></tr>`; });
+  h+='</tbody></table><p class="muted" style="font-size:12px">教室清单已按你的名单初始化；此处可微调容量。新增/删除教室请在数据库或告知我。</p></div>';
+  render(h);
+  bind('[data-savecap]', async id=>{ const v=Number(document.querySelector(`[data-cap="${id}"]`).value);
+    await sbUpdate('sched_rooms',id,{capacity:v}); await reloadAll(); toast('已更新'); });
+}
+
+/* ---------- 会议账号 CRUD ---------- */
+function tabAccounts(){
+  let h='<div class="card"><h3 style="margin-top:2px">会议账号</h3><table><thead><tr><th>名称</th><th>类型</th><th>绑定教室</th><th>会议号</th><th>链接</th><th></th></tr></thead><tbody>';
+  ACCOUNTS.forEach(a=>{ h+=`<tr><td>${esc(a.name)}</td><td>${esc(a.kind)}</td><td>${esc(rname(a.room_id))}</td>`+
+    `<td><input value="${esc(a.account_no||'')}" style="width:120px" data-no="${a.id}"></td>`+
+    `<td><input value="${esc(a.link||'')}" style="width:200px" data-link="${a.id}"></td>`+
+    `<td><button class="sm ghost" data-savea="${a.id}">存</button></td></tr>`; });
+  h+='</tbody></table><p class="muted" style="font-size:12px">固定账号已按教室自动生成，请在此补真实会议号/链接。</p></div>';
+  render(h);
+  bind('[data-savea]', async id=>{
+    const no=document.querySelector(`[data-no="${id}"]`).value.trim();
+    const link=document.querySelector(`[data-link="${id}"]`).value.trim();
+    await sbUpdate('sched_meeting_accounts',id,{account_no:no||null,link:link||null}); await reloadAll(); toast('已更新'); });
+}
+
+/* ---------- 课程 CRUD（删除） ---------- */
+function tabCourses(){
+  let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）</h3><table><thead><tr><th>课程</th><th>类别</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>人数</th><th>方式</th><th></th></tr></thead><tbody>';
+  COURSES.forEach(c=>{ h+=`<tr><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
+    `<td>${WEEKDAYS[c.weekday]||''}</td><td>${c.start_time||''}-${c.end_time||''}</td><td>${c.est_students||''}</td><td>${esc(c.mode)}</td>`+
+    `<td><button class="sm danger" data-delc="${c.id}">删</button></td></tr>`; });
+  h+='</tbody></table><p class="muted" style="font-size:12px">课程录入在「录入」页；删除课程会同时删除其教室占用。</p></div>';
+  render(h);
+  bind('[data-delc]', async id=>{ if(!confirm('删除课程及其教室占用？')) return;
+    const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
+    for(const b of bs) await sbDelete('sched_bookings',b.id);
+    await sbDelete('sched_courses',id); await reloadAll(); show('courses'); toast('已删除'); });
+}
+
+/* ---------- 口令 CRUD ---------- */
+function tabCodes(){
+  let h='<div class="card"><h3 style="margin-top:2px">口令</h3><table><thead><tr><th>口令</th><th>角色</th><th>范围</th><th>使用者</th><th>状态</th><th></th></tr></thead><tbody>';
+  CODES.forEach(c=>{ h+=`<tr><td><code>${esc(c.code)}</code></td><td>${esc(c.role)}</td><td>${esc(c.scope||'')}</td><td>${esc(c.label||'')}</td>`+
+    `<td>${c.active?'<span class="badge b-ok">启用</span>':'<span class="badge b-mute">停用</span>'}</td>`+
+    `<td><button class="sm ghost" data-togc="${c.id}">${c.active?'停用':'启用'}</button> <button class="sm danger" data-delc2="${c.id}">删</button></td></tr>`; });
+  h+='</tbody></table><div class="row" style="margin-top:12px">'+
+    '<div class="field"><label>口令</label><input id="nc_code"></div>'+
+    '<div class="field"><label>角色</label><select id="nc_role"><option value="entry">录入</option><option value="admin">管理员</option></select></div>'+
+    '<div class="field"><label>范围</label><input id="nc_scope"></div>'+
+    '<div class="field"><label>使用者</label><input id="nc_label"></div>'+
+    '<div class="field"><label>&nbsp;</label><button id="nc_add">新增</button></div></div></div>';
+  render(h);
+  bind('[data-togc]', async id=>{ const c=CODES.find(x=>String(x.id)===String(id)); await sbUpdate('sched_access_codes',id,{active:!c.active}); await reloadAll(); show('codes'); });
+  bind('[data-delc2]', async id=>{ if(confirm('删除该口令？')){ await sbDelete('sched_access_codes',id); await reloadAll(); show('codes'); } });
+  el('nc_add').onclick=async()=>{ const code=el('nc_code').value.trim(); if(!code){ toast('填口令',false); return; }
+    await sbInsert('sched_access_codes',{code,role:el('nc_role').value,scope:el('nc_scope').value.trim()||null,label:el('nc_label').value.trim()||null,active:true});
+    await reloadAll(); show('codes'); toast('已新增'); };
+}
+
+/* helpers */
+function render(html){ el('panel').innerHTML=html; }
+function bind(sel, fn){
+  const attr = sel.match(/data-[\w-]+/)[0];
+  document.querySelectorAll(sel).forEach(b => { b.onclick = () => fn(b.getAttribute(attr)); });
+}
+</script>
+</body></html>
