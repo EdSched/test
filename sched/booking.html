@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>教室预约 · 唯新</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="tip">任何人都可提交预约申请，提交后进入<b>待确认</b>，由管理员确认后才真正占用。</div>
+  <div class="card">
+    <div class="row">
+      <div class="field"><label>校区</label><select id="campus"></select></div>
+      <div class="field"><label>教室类型</label><select id="type">
+        <option value="VIP">VIP教室</option><option value="大课">大课教室</option>
+        <option value="会议室">会议室</option></select></div>
+      <div class="field"><label>日期</label><input type="date" id="date"></div>
+      <div class="field"><label>开始</label><select id="st"></select></div>
+      <div class="field"><label>结束</label><select id="et"></select></div>
+      <div class="field"><label>预计人数</label><input type="number" id="ppl" min="1" style="width:90px"></div>
+      <div class="field"><label>&nbsp;</label><button id="find">查空闲</button></div>
+    </div>
+  </div>
+  <div class="card" id="resBox"><div class="muted">设定条件后点「查空闲」</div></div>
+</div>
+
+<!-- 预约表单（选中教室后展开） -->
+<div id="modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:50">
+  <div class="card" style="width:420px;max-width:92vw">
+    <h3 style="margin-top:2px">预约 <span id="m_room"></span></h3>
+    <div class="field"><label>用途</label><input id="m_title" placeholder="如 VIP面试指导 / 出租-XX公司"></div>
+    <div class="field" style="margin-top:8px"><label>预约人</label><input id="m_user"></div>
+    <div class="field" style="margin-top:8px"><label>是否需要腾讯会议账号</label><select id="m_um">
+      <option value="false">否</option><option value="true">是</option></select></div>
+    <div class="field hidden" id="m_accWrap" style="margin-top:8px"><label>会议账号</label><select id="m_acc"></select></div>
+    <div class="field" style="margin-top:8px"><label>备注</label><input id="m_note"></div>
+    <div id="m_warn" class="hidden" style="margin-top:8px"></div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button id="m_submit">提交预约</button>
+      <button class="ghost" id="m_cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+el('nav').innerHTML = renderNav('booking.html');
+let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CUR=null;
+
+async function boot(){
+  fillSelect(el('campus'), CAMPUSES);
+  fillSelect(el('st'), SLOTS); fillSelect(el('et'), SLOTS);
+  el('date').value = todayStr();
+  ROOMS    = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
+  ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
+  BOOKINGS = await sbGet('sched_bookings','select=*');
+  el('find').onclick = find;
+  el('m_cancel').onclick = ()=>el('modal').classList.add('hidden');
+  el('m_um').onchange = ()=>el('m_accWrap').classList.toggle('hidden', el('m_um').value!=='true');
+  el('m_submit').onclick = submit;
+}
+function find(){
+  const campus=el('campus').value, type=el('type').value, date=el('date').value;
+  const s=el('st').value, e=el('et').value, ppl=Number(el('ppl').value)||0;
+  if(e<=s){ toast('结束需晚于开始', false); return; }
+  let rooms = ROOMS.filter(r=>r.campus===campus && r.type===type);
+  if(ppl) rooms = rooms.filter(r=>r.capacity>=ppl);
+  const rows = rooms.map(r=>{
+    const conf = roomConflicts(BOOKINGS, r.id, date, s, e, null);
+    return { r, free: conf.length===0, conf };
+  });
+  let h=`<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} ${s}-${e}${ppl?(' · ≥'+ppl+'人'):''}</div>`;
+  h+='<table><thead><tr><th>教室</th><th>容量</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+  rows.forEach(({r,free,conf})=>{
+    h+=`<tr><td>${esc(r.name)}</td><td>${r.capacity}人</td>`+
+      (free?'<td><span class="badge b-ok">空闲</span></td>'
+           :`<td><span class="badge b-err">占用</span> <small class="muted">${conf.map(c=>c.title||KIND_LABEL[c.kind]).join('、')}</small></td>`)+
+      `<td>${free?`<button class="sm" data-r="${r.id}">预约</button>`:'—'}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  el('resBox').innerHTML = h;
+  el('resBox').querySelectorAll('button[data-r]').forEach(b=>b.onclick=()=>openModal(b.dataset.r));
+}
+function openModal(roomId){
+  const r = ROOMS.find(x=>String(x.id)===String(roomId)); CUR=r;
+  el('m_room').textContent = r.name;
+  el('m_title').value=''; el('m_user').value=''; el('m_note').value='';
+  el('m_um').value='false'; el('m_accWrap').classList.add('hidden');
+  const accs = ACCOUNTS.filter(a=>a.kind==='临时' || String(a.id)===String(r.meeting_account_id));
+  fillSelect(el('m_acc'), accs, a=>a.id, a=>a.name+'（'+a.kind+'）');
+  el('m_warn').classList.add('hidden');
+  el('modal').classList.remove('hidden');
+}
+async function submit(){
+  const s=el('st').value, e=el('et').value, date=el('date').value;
+  const um = el('m_um').value==='true';
+  if(um && el('m_acc').value){
+    const ac=accountConflicts(BOOKINGS, el('m_acc').value, date, s, e, null);
+    if(ac.length){ el('m_warn').className=''; el('m_warn').innerHTML='<span class="badge b-err">该账号此时段已被占用，请换账号或时段</span>'; return; }
+  }
+  const rec={ room_id:CUR.id, kind: CUR.type==='VIP'?'vip':(CUR.type==='会议室'?'meeting':'temp'),
+    title: el('m_title').value.trim()||null, user_name: el('m_user').value.trim(),
+    recurrence:'once', booking_date:date, start_time:s, end_time:e,
+    uses_meeting:um, meeting_account_id: um?Number(el('m_acc').value):null,
+    status:'pending', created_by: el('m_user').value.trim()||null, note: el('m_note').value.trim()||null };
+  if(!rec.user_name){ el('m_warn').className=''; el('m_warn').innerHTML='<span class="badge b-err">请填预约人</span>'; return; }
+  try{ const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
+    el('modal').classList.add('hidden'); toast('已提交，等待管理员确认'); find();
+  }catch(err){ el('m_warn').className=''; el('m_warn').innerHTML='<span class="badge b-err">'+esc(err.message)+'</span>'; }
+}
+boot();
+</script>
+</body></html>
