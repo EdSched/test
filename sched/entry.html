@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>数据录入 · 唯新</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+<div id="nav"></div>
+<div class="wrap">
+
+  <div id="gate" class="gate card">
+    <h3>录入口令</h3>
+    <p class="muted" style="font-size:13px">请输入管理员发放的录入口令</p>
+    <input id="code" placeholder="口令" style="width:100%;margin-bottom:10px">
+    <button id="enter" style="width:100%">进入</button>
+    <p id="gerr" class="b-err badge hidden" style="margin-top:10px"></p>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="tip">已进入录入模式（<span id="who"></span>）。你录入的内容将直接生效；公开预约需管理员确认。</div>
+    <div class="tabs">
+      <button class="on" data-t="course">课程录入</button>
+      <button data-t="room">教室占用录入</button>
+      <button data-t="mine">我最近录入的</button>
+    </div>
+
+    <!-- 课程录入 -->
+    <div id="tab-course" class="card">
+      <div class="grid2">
+        <div class="field"><label>校区</label><select id="c_campus"></select></div>
+        <div class="field"><label>类别（专业）</label><select id="c_cat"></select></div>
+        <div class="field"><label>课程名</label><input id="c_name" placeholder="如 日语中级班N4"></div>
+        <div class="field"><label>讲师</label><input id="c_teacher"></div>
+        <div class="field"><label>周几</label><select id="c_wd"></select></div>
+        <div class="field"><label>授课方式</label><select id="c_mode"><option>线下</option><option>线上</option></select></div>
+        <div class="field"><label>开始时间</label><select id="c_st"></select></div>
+        <div class="field"><label>结束时间</label><select id="c_et"></select></div>
+        <div class="field"><label>开课日</label><input type="date" id="c_sd"></div>
+        <div class="field"><label>结课日</label><input type="date" id="c_ed"></div>
+        <div class="field"><label>回数</label><input type="number" id="c_sess" min="1"></div>
+        <div class="field"><label>预估人数</label><input type="number" id="c_est" min="1" placeholder="用于安排教室"></div>
+      </div>
+      <div class="field" style="margin-top:10px"><label>腾讯会议链接（线上课/直播填）</label><input id="c_link" style="width:100%"></div>
+      <div style="margin-top:12px"><button id="c_save">保存课程</button>
+        <span class="muted" style="font-size:12px;margin-left:8px">课程不绑教室，只到校区+人数；教室由管理员按容量安排。</span></div>
+    </div>
+
+    <!-- 教室占用录入 -->
+    <div id="tab-room" class="card hidden">
+      <div class="grid2">
+        <div class="field"><label>用途</label><select id="r_kind">
+          <option value="temp">临时使用</option><option value="rental">对外出租</option>
+          <option value="meeting">纯开会（借账号）</option></select></div>
+        <div class="field"><label>校区</label><select id="r_campus"></select></div>
+        <div class="field"><label>教室</label><select id="r_room"></select></div>
+        <div class="field"><label>日期</label><input type="date" id="r_date"></div>
+        <div class="field"><label>开始时间</label><select id="r_st"></select></div>
+        <div class="field"><label>结束时间</label><select id="r_et"></select></div>
+        <div class="field"><label>使用人/单位</label><input id="r_user"></div>
+        <div class="field"><label>是否占用会议账号</label><select id="r_um">
+          <option value="false">否（教室真正空出账号，可借他人开会）</option>
+          <option value="true">是（占用该教室会议号）</option></select></div>
+      </div>
+      <div class="field" style="margin-top:10px"><label>会议账号（占用时选择）</label><select id="r_acc"></select></div>
+      <div class="field" style="margin-top:10px"><label>备注</label><input id="r_note" style="width:100%"></div>
+      <div id="r_conf" class="hidden" style="margin-top:10px"></div>
+      <div style="margin-top:12px"><button id="r_save">保存占用</button></div>
+    </div>
+
+    <!-- 我的记录 -->
+    <div id="tab-mine" class="card hidden">
+      <div class="row" style="margin-bottom:10px">
+        <div class="field"><label>你的名字（用于筛选自己的记录）</label><input id="m_name"></div>
+        <div class="field"><label>&nbsp;</label><button class="ghost sm" id="m_load">刷新</button></div>
+      </div>
+      <div id="mineBox" class="muted">输入名字后点刷新</div>
+    </div>
+  </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+el('nav').innerHTML = renderNav('entry.html');
+let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CODEREC=null;
+
+/* 口令 */
+el('enter').onclick = doEnter;
+el('code').addEventListener('keydown', e=>{ if(e.key==='Enter') doEnter(); });
+async function doEnter(){
+  const code = el('code').value.trim();
+  if(!code) return;
+  try{
+    const rec = await checkCode(code, 'entry');
+    if(!rec){ el('gerr').textContent='口令无效'; el('gerr').classList.remove('hidden'); return; }
+    CODEREC = rec;
+    el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
+    el('who').textContent = rec.label || rec.scope || '录入员';
+    await boot();
+  }catch(e){ el('gerr').textContent=e.message; el('gerr').classList.remove('hidden'); }
+}
+
+/* tabs */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  ['course','room','mine'].forEach(t=>el('tab-'+t).classList.toggle('hidden', t!==b.dataset.t));
+});
+
+async function boot(){
+  fillSelect(el('c_campus'), CAMPUSES);
+  fillSelect(el('c_cat'), CATEGORIES);
+  fillSelect(el('c_wd'), [1,2,3,4,5,6,7], v=>v, v=>WEEKDAYS[v]);
+  fillSelect(el('c_st'), SLOTS); fillSelect(el('c_et'), SLOTS);
+  fillSelect(el('r_campus'), CAMPUSES);
+  fillSelect(el('r_st'), SLOTS); fillSelect(el('r_et'), SLOTS);
+  el('r_date').value = todayStr();
+
+  ROOMS    = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
+  ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
+  BOOKINGS = await sbGet('sched_bookings','select=*');
+
+  el('r_campus').onchange = fillRooms; fillRooms();
+  el('r_um').onchange = ()=>el('r_acc').closest('.field').classList.toggle('hidden', el('r_um').value!=='true');
+  el('r_um').onchange();
+  ['r_room','r_date','r_st','r_et','r_um','r_acc'].forEach(id=>el(id).onchange=checkRoomConflict);
+
+  el('c_save').onclick = saveCourse;
+  el('r_save').onclick = saveRoom;
+  el('m_load').onclick = loadMine;
+}
+function fillRooms(){
+  const rs = ROOMS.filter(r=>r.campus===el('r_campus').value);
+  fillSelect(el('r_room'), rs, r=>r.id, r=>r.name+'（'+r.capacity+'人）');
+  // 账号：该校区所有账号 + 临时账号
+  const accs = ACCOUNTS.filter(a=>a.kind==='临时' ||
+    rs.some(r=>String(r.meeting_account_id)===String(a.id)));
+  fillSelect(el('r_acc'), accs, a=>a.id, a=>a.name+'（'+a.kind+'）');
+  checkRoomConflict();
+}
+
+/* 保存课程 */
+async function saveCourse(){
+  const rec = {
+    campus: el('c_campus').value,
+    category: el('c_cat').value, name: el('c_name').value.trim(),
+    teacher: el('c_teacher').value.trim(), weekday: Number(el('c_wd').value),
+    start_time: el('c_st').value, end_time: el('c_et').value,
+    start_date: el('c_sd').value||null, end_date: el('c_ed').value||null,
+    sessions: el('c_sess').value?Number(el('c_sess').value):null,
+    est_students: el('c_est').value?Number(el('c_est').value):null,
+    mode: el('c_mode').value, meeting_link: el('c_link').value.trim()||null,
+    confirmed: true, note:null
+  };
+  if(!rec.name){ toast('请填课程名', false); return; }
+  if(rec.end_time <= rec.start_time){ toast('结束时间需晚于开始', false); return; }
+  try{ await sbInsert('sched_courses', rec); toast('课程已保存');
+    ['c_name','c_teacher','c_sess','c_est','c_link'].forEach(id=>el(id).value='');
+  }catch(e){ toast(e.message, false); }
+}
+
+/* 占用冲突提示 */
+function checkRoomConflict(){
+  const box=el('r_conf'); const roomId=el('r_room').value, date=el('r_date').value;
+  const s=el('r_st').value, e=el('r_et').value;
+  let msgs=[];
+  if(roomId && date && s && e && e>s){
+    const rc = roomConflicts(BOOKINGS, roomId, date, s, e, null);
+    if(rc.length) msgs.push('⚠ 教室在该时段已被占用：'+rc.map(x=>x.title||KIND_LABEL[x.kind]).join('、'));
+  }
+  if(el('r_um').value==='true' && el('r_acc').value && date && s && e && e>s){
+    const ac = accountConflicts(BOOKINGS, el('r_acc').value, date, s, e, null);
+    if(ac.length) msgs.push('⚠ 该会议账号在此时段已被占用');
+  }
+  if(msgs.length){ box.className=''; box.innerHTML='<div class="b-err badge">'+msgs.join('<br>')+'</div>'; }
+  else box.className='hidden';
+}
+/* 保存占用 */
+async function saveRoom(){
+  const s=el('r_st').value, e=el('r_et').value;
+  if(e<=s){ toast('结束时间需晚于开始', false); return; }
+  const um = el('r_um').value==='true';
+  const rec = {
+    room_id: Number(el('r_room').value), kind: el('r_kind').value,
+    title: KIND_LABEL[el('r_kind').value], user_name: el('r_user').value.trim(),
+    recurrence:'once', booking_date: el('r_date').value,
+    start_time:s, end_time:e, uses_meeting: um,
+    meeting_account_id: um ? Number(el('r_acc').value) : null,
+    status:'confirmed', created_by: el('r_user').value.trim()||CODEREC.label,
+    note: el('r_note').value.trim()||null
+  };
+  try{
+    const ins = await sbInsert('sched_bookings', rec);
+    BOOKINGS.push(ins[0]); toast('占用已保存'); checkRoomConflict();
+  }catch(err){ toast(err.message, false); }
+}
+
+/* 我的记录 */
+async function loadMine(){
+  const name=el('m_name').value.trim();
+  if(!name){ el('mineBox').innerHTML='<span class="muted">请输入名字</span>'; return; }
+  const rows = await sbGet('sched_bookings',
+    'select=*&created_by=eq.'+encodeURIComponent(name)+'&order=created_at.desc&limit=50');
+  if(!rows.length){ el('mineBox').innerHTML='<span class="muted">暂无记录</span>'; return; }
+  const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r.name);
+  let h='<table><thead><tr><th>日期</th><th>教室</th><th>用途</th><th>时段</th><th>账号</th><th>状态</th></tr></thead><tbody>';
+  rows.forEach(b=>{ h+=`<tr><td>${b.booking_date||''}</td><td>${esc(rmap[b.room_id]||'—')}</td>`+
+    `<td>${KIND_LABEL[b.kind]}</td><td>${b.start_time}-${b.end_time}</td>`+
+    `<td>${b.uses_meeting?'📶':''}</td><td>${b.status==='pending'?'<span class="badge b-warn">待确认</span>':'<span class="badge b-ok">已确认</span>'}</td></tr>`; });
+  h+='</tbody></table>'; el('mineBox').innerHTML=h;
+}
+</script>
+</body></html>
