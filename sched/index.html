@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>唯新 · 教学资源调度</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="tip">拿到本页链接的所有人都可以自由查询；<b>录入</b>与<b>调整</b>需要口令，请联系管理员索取。</div>
+
+  <div class="card">
+    <h3 style="margin:2px 0 10px">查询（无需口令）</h3>
+    <div class="hub">
+      <a href="board.html"><b>📋 教室看板</b><span>选校区+日期，一眼看当天各教室占用情况</span></a>
+      <a href="timetable.html"><b>🎓 学生课表</b><span>按专业 + 语言课，生成个人周课表</span></a>
+      <a href="booking.html"><b>🏫 教室预约</b><span>查 VIP / 大课教室空闲，提交预约申请</span></a>
+      <a href="meeting.html"><b>📶 会议账号可用性</b><span>选时段，查哪个腾讯会议号此刻可安全开会</span></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:2px 0 10px">录入 / 管理（需口令）</h3>
+    <div class="hub">
+      <a href="entry.html"><b>✍️ 数据录入</b><span>各科老师录课程、排班老师录教室占用</span></a>
+      <a href="admin.html"><b>⚙️ 管理后台</b><span>确认预约、排教室、解决冲突、维护基础数据</span></a>
+    </div>
+  </div>
+</div>
+<script src="common.js"></script>
+<script>document.getElementById('nav').innerHTML = renderNav('index.html');</script>
+</body></html>
