@@ -244,7 +244,10 @@ function tpRenderProgressList() {
         </div>
         <!-- 志望校 -->
         <div style="padding:0 14px 12px">
-          <div style="font-size:10px;color:var(--text-3);margin-bottom:6px">🏫 志望校（${plans.length}所）· 状态与过去问/面试稿可直接修改，即时保存并与学生端同步</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div style="font-size:10px;color:var(--text-3)">🏫 志望校（${plans.length}所）· 状态与过去问/面试稿可直接修改，即时保存并与学生端同步</div>
+            <button onclick="event.stopPropagation();tpAddSchool('${s.id}','${(s.name||'').replace(/'/g,'')}','${s.major||''}')" style="margin-left:auto;font-size:10px;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:3px 12px;cursor:pointer;font-family:inherit;white-space:nowrap">＋ 添加志望校</button>
+          </div>
           ${plans.length ? `
           <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;background:var(--surface);border:1px solid var(--border-light)">
             <thead><tr style="background:var(--bg)">
@@ -1062,5 +1065,50 @@ async function tseSave(sid) {
     document.getElementById('tseModal')?.remove();
     tsaRender();
     alert('已保存，修改记录已同步给 admin');
+  } catch (e) { alert('保存失败：' + e.message); }
+}
+
+
+// ── 老师端：考学进度里添加志望校（沿用 admin 的 student_school_plans 表与字段）──
+function tpAddSchool(sid, sname, major) {
+  const ex = document.getElementById('tpSchoolModal'); if (ex) ex.remove();
+  const statusOpts = (typeof SCHOOL_STATUS_LABELS !== 'undefined')
+    ? Object.entries(SCHOOL_STATUS_LABELS).filter(([k]) => k !== 'failed').map(([k, v]) => `<option value="${k}">${v.t}</option>`).join('')
+    : '<option value="preparing">准备中</option>';
+  const m = document.createElement('div');
+  m.id = 'tpSchoolModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML = `
+    <div style="background:var(--surface);border-radius:6px;padding:18px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px">＋ 添加志望校 — ${tsaEsc(sname)}</div>
+      <div class="form-group"><label class="form-label">级别</label><select id="tps_level" style="font-size:12px;width:100%"><option value="1">1（冲刺）</option><option value="2" selected>2（适中）</option><option value="3">3（保底）</option></select></div>
+      <div class="form-group"><label class="form-label">学校名 *</label><input id="tps_school" placeholder="如 東京大学" style="width:100%"></div>
+      <div class="form-group"><label class="form-label">研究科 / 学部</label><input id="tps_faculty" placeholder="如 総合文化研究科" style="width:100%"></div>
+      <div class="form-group"><label class="form-label">教授</label><input id="tps_prof" style="width:100%"></div>
+      <div class="form-group"><label class="form-label">出愿期间</label><input id="tps_period" placeholder="如 2026/7" style="width:100%"></div>
+      <div class="form-group"><label class="form-label">该校进度</label><select id="tps_status" style="font-size:12px;width:100%">${statusOpts}</select></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button onclick="document.getElementById('tpSchoolModal').remove()" style="font-size:12px;background:none;border:1px solid var(--border);border-radius:3px;padding:7px 14px;cursor:pointer;font-family:inherit">取消</button>
+        <button onclick="tpSaveSchool('${sid}','${(sname || '').replace(/'/g, '')}','${major || ''}')" style="font-size:12px;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:7px 16px;cursor:pointer;font-family:inherit;font-weight:500">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+}
+
+async function tpSaveSchool(sid, sname, major) {
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const school_name = g('tps_school').trim();
+  if (!school_name) { alert('请填写学校名'); return; }
+  const row = {
+    id: `ssp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+    student_id: sid, student_name: sname, major,
+    school_name, faculty: g('tps_faculty').trim(), professor: g('tps_prof').trim(),
+    level: parseInt(g('tps_level')) || 2, application_period: g('tps_period').trim(),
+    status: g('tps_status') || 'preparing',
+  };
+  try {
+    await sb('/rest/v1/student_school_plans', 'POST', row);
+    document.getElementById('tpSchoolModal')?.remove();
+    renderTeacherStudyProgress(document.getElementById('sm_content') || document.getElementById('mainContent'));
   } catch (e) { alert('保存失败：' + e.message); }
 }
