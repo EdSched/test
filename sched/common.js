@@ -81,6 +81,51 @@ function weekdayOf(dateStr){ // 1=周一...7=周日
 }
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
+/* 日期加减 / 相差天数 */
+function addDays(dateStr, n){
+  const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function diffDays(a, b){ // b - a，天
+  return Math.round((new Date(b+'T00:00:00') - new Date(a+'T00:00:00'))/86400000);
+}
+/* 按开课月份归期 */
+function termOf(dateStr){
+  if(!dateStr) return '';
+  const [y,m]=dateStr.split('-').map(Number);
+  const s = m<=3?1 : m<=6?4 : m<=9?7 : 10;
+  return y+'年'+s+'月期';
+}
+/* 时长（分钟） */
+function durationMin(s,e){ const p=t=>{const[a,b]=t.split(':').map(Number);return a*60+b;}; return p(e)-p(s); }
+
+/* 就近空档：同教室当天其他空时段 + 前后 N 天同时段空的日期 */
+function findNearby(bookings, roomId, dateStr, s, e, days){
+  days = days||5;
+  const dur = durationMin(s,e);
+  const occupied = (d, ss, ee) => bookings.some(b =>
+    b.status!=='pending' && String(b.room_id)===String(roomId) &&
+    bookingOnDate(b, d) && overlap(ss, ee, b.start_time, b.end_time));
+  // 当天其他空时段（按开始时刻找能放下 dur 的连续空档起点）
+  const sameDay=[];
+  for(const st of SLOTS){
+    const stMin=(()=>{const[a,b]=st.split(':').map(Number);return a*60+b;})();
+    const etMin=stMin+dur; if(etMin>22*60) break;
+    const et=String(Math.floor(etMin/60)).padStart(2,'0')+':'+String(etMin%60).padStart(2,'0');
+    if(st===s) continue;
+    if(!occupied(dateStr, st, et)) sameDay.push(st+'-'+et);
+  }
+  // 前后 N 天同时段
+  const nearDates=[];
+  for(let off=1; off<=days; off++){
+    for(const d of [addDays(dateStr,off), addDays(dateStr,-off)]){
+      if(!occupied(d, s, e)) nearDates.push({date:d, off});
+    }
+  }
+  nearDates.sort((a,b)=>Math.abs(a.off)-Math.abs(b.off));
+  return { sameDay: sameDay.slice(0,6), nearDates: nearDates.slice(0,6) };
+}
+
 /* 某 booking 在指定日期是否生效 */
 function bookingOnDate(b, dateStr){
   if(b.recurrence === 'weekly'){
