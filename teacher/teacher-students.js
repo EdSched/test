@@ -715,7 +715,8 @@ function tDraftFullHtml(draft) {
 // 已完成面谈的完整文字记录 + 历史；查询逻辑与考学进度一致（汉字/拼音首字母 + 专业 + 来源）
 // ══════════════════════════════════
 let tmSearch = '';
-let tmView = 'has'; // has=有面谈记录 | none=无面谈记录（发提醒用）
+let tmView = 'has'; // has=有面谈记录 | none=无面谈记录（发提醒用）| contacted=已联系确认
+let tmContactByName = {}; // 学生姓名 → 联系确认记录[]
 let tmMajorFilter = '';
 let tmSourceFilter = '';
 let tmExpandedName = null;
@@ -725,10 +726,13 @@ async function renderTsaMeetings(box) {
   box.innerHTML = '<div class="empty">加载中…</div>';
   try {
     const set = tsaAllowedSet();
-    const [allStu, allBk] = await Promise.all([
+    const [allStu, allBk, allContact] = await Promise.all([
       sb('/rest/v1/students?select=id,name,major,source,status,course_type&limit=2000').catch(() => []),
       sb('/rest/v1/bookings?daily_record=not.is.null&select=*&order=slot_date.desc&limit=1500').catch(() => []),
+      sb('/rest/v1/student_contact_logs?select=*&order=created_at.desc&limit=3000').catch(() => []),
     ]);
+    tmContactByName = {};
+    (allContact || []).forEach(c => { (tmContactByName[c.student_name] = tmContactByName[c.student_name] || []).push(c); });
     const stuByName = {};
     (allStu || []).forEach(s => { if (!stuByName[s.name]) stuByName[s.name] = s; });
     // 只保留填写过记录内容的面谈（不限定预约状态，批量同步的历史记录同样纳入），专业按学生档案（无档案时按预约的 major 字段）过滤
@@ -763,6 +767,7 @@ function tmRenderShell() {
     <span style="font-size:10px;color:var(--text-3)">显示：</span>
     <div class="filter-chip ${tmView==='has'?'active':''}" onclick="tmSetView('has')" style="padding:3px 10px;font-size:10px">有面谈记录</div>
     <div class="filter-chip ${tmView==='none'?'active':''}" onclick="tmSetView('none')" style="padding:3px 10px;font-size:10px">⚠ 无面谈记录</div>
+    <div class="filter-chip ${tmView==='contacted'?'active':''}" onclick="tmSetView('contacted')" style="padding:3px 10px;font-size:10px;${tmView==='contacted'?'background:#1a6d3a;color:#fff;border-color:#1a6d3a':''}">✓ 已联系确认</div>
     ${tmView==='none' ? `<button onclick="tmBatchReminder()" style="font-size:10px;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:4px 12px;cursor:pointer;font-family:inherit;margin-left:auto">✉ 按专业批量生成提醒</button>` : ''}
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">
@@ -782,11 +787,23 @@ function tmRenderShell() {
 function tmSetMajor(v) { tmMajorFilter = v; tmRenderShell(); }
 function tmSetView(v) { tmView = v; tmRenderShell(); }
 
-// 当前筛选条件下「没有任何面谈记录」的在籍学生
+// 当前筛选条件下「没有任何面谈记录、且没有联系确认记录」的在籍学生（真正被忽略的）
 function tmNoRecStudents() {
   const recNames = new Set(tmData.groups.map(g => g.name));
   const q = tmSearch.trim();
   return (tmData.students || []).filter(s => !recNames.has(s.name)
+    && !(tmContactByName[s.name] && tmContactByName[s.name].length)
+    && tpMajorMatch(s.major, tmMajorFilter)
+    && (!tmSourceFilter || (s.source || '') === tmSourceFilter)
+    && (!q || tpNameMatch(s.name, q) || (s.source || '').includes(q)));
+}
+
+// 无面谈、但已有联系确认记录的学生
+function tmContactedStudents() {
+  const recNames = new Set(tmData.groups.map(g => g.name));
+  const q = tmSearch.trim();
+  return (tmData.students || []).filter(s => !recNames.has(s.name)
+    && (tmContactByName[s.name] && tmContactByName[s.name].length)
     && tpMajorMatch(s.major, tmMajorFilter)
     && (!tmSourceFilter || (s.source || '') === tmSourceFilter)
     && (!q || tpNameMatch(s.name, q) || (s.source || '').includes(q)));
@@ -798,7 +815,7 @@ function tmRenderList() {
   const listBox = document.getElementById('tm_list');
   if (!listBox || !tmData) return;
 
-  // 无面谈记录视图：直接列出可发提醒的学生
+  // 无面谈记录视图：真正被忽略的学生（无面谈+无联系记录），可发提醒 或 记录已联系
   if (tmView === 'none') {
     const noRec = tmNoRecStudents();
     const cnt0 = document.getElementById('tm_count');
@@ -808,8 +825,38 @@ function tmRenderList() {
       <span style="font-size:11px;color:var(--text-3)">${MAJORS[s.major]||s.major||''}</span>
       ${s.source?`<span style="font-size:10px;color:var(--accent);border:1px solid var(--border);border-radius:2px;padding:0 5px">${tsaEsc(s.source)}</span>`:''}
       <span style="font-size:11px;color:var(--warn,#b8860b)">⚠ 近期没有预约面谈</span>
-      <button onclick="tmGenReminder('${tsaEsc(s.name)}','${s.major||''}')" style="margin-left:auto;font-size:10px;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:3px 10px;cursor:pointer;font-family:inherit">✉ 生成提醒文字</button>
-    </div>`).join('') : '<div class="empty">当前筛选范围内的学生都有面谈记录 🎉</div>';
+      <button onclick="tmContactModal('${s.id||''}','${tsaEsc(s.name)}','${s.major||''}')" style="margin-left:auto;font-size:10px;background:#1a6d3a;color:#fff;border:none;border-radius:2px;padding:3px 10px;cursor:pointer;font-family:inherit">✓ 记录已联系</button>
+      <button onclick="tmGenReminder('${tsaEsc(s.name)}','${s.major||''}')" style="font-size:10px;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:3px 10px;cursor:pointer;font-family:inherit">✉ 生成提醒文字</button>
+    </div>`).join('') : '<div class="empty">当前筛选范围内的学生都已有面谈或联系记录 🎉</div>';
+    return;
+  }
+
+  // 已联系确认视图：无面谈但已记录联系的学生 + 备注/截图
+  if (tmView === 'contacted') {
+    const list = tmContactedStudents();
+    const cnt1 = document.getElementById('tm_count');
+    if (cnt1) cnt1.textContent = list.length;
+    listBox.innerHTML = list.length ? list.map(s => {
+      const logs = (tmContactByName[s.name] || []);
+      const logHtml = logs.map(l => `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--border-light)">
+        ${l.image_url ? `<a href="${l.image_url}" target="_blank" style="flex-shrink:0"><img src="${l.image_url}" style="width:52px;height:52px;object-fit:cover;border-radius:4px;border:1px solid var(--border)"></a>` : ''}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:var(--text-1);white-space:pre-wrap;line-height:1.5">${tsaEsc(l.note)||'（无备注）'}</div>
+          <div style="font-size:9px;color:var(--text-3);margin-top:3px">${(l.teacher_name||'')} · ${(l.created_at||'').slice(0,10)}</div>
+        </div>
+        <span onclick="tmDeleteContact('${l.id}')" style="flex-shrink:0;font-size:9px;color:var(--danger);cursor:pointer">删除</span>
+      </div>`).join('');
+      return `<div style="background:var(--surface);border:1px solid #cfe8d8;border-left:3px solid #1a6d3a;border-radius:4px;padding:10px 14px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+          <span style="font-size:13px;font-weight:600">${tsaEsc(s.name)}</span>
+          <span style="font-size:11px;color:var(--text-3)">${MAJORS[s.major]||s.major||''}</span>
+          ${s.source?`<span style="font-size:10px;color:var(--accent);border:1px solid var(--border);border-radius:2px;padding:0 5px">${tsaEsc(s.source)}</span>`:''}
+          <span style="font-size:10px;color:#1a6d3a">✓ 已联系 ${logs.length} 次</span>
+          <button onclick="tmContactModal('${s.id||''}','${tsaEsc(s.name)}','${s.major||''}')" style="margin-left:auto;font-size:10px;background:#1a6d3a;color:#fff;border:none;border-radius:2px;padding:3px 10px;cursor:pointer;font-family:inherit">＋ 追加记录</button>
+        </div>
+        ${logHtml}
+      </div>`;
+    }).join('') : '<div class="empty">还没有"已联系确认"的记录。在「无面谈记录」里点某个学生的「✓ 记录已联系」即可。</div>';
     return;
   }
 
@@ -1111,4 +1158,113 @@ async function tpSaveSchool(sid, sname, major) {
     document.getElementById('tpSchoolModal')?.remove();
     renderTeacherStudyProgress(document.getElementById('sm_content') || document.getElementById('mainContent'));
   } catch (e) { alert('保存失败：' + e.message); }
+}
+
+
+// ── 无面谈学生的"已联系确认"记录（备注 + 可选截图，支持 Ctrl+V 粘贴）──
+let tmPendingImg = null; // 待上传的截图（已压缩）
+
+async function tmCompressImg(file, maxSide, quality) {
+  if (!/^image\//.test(file.type)) return file;
+  if (file.size <= 300 * 1024) return file;
+  try {
+    let bmp;
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch (e) { bmp = await createImageBitmap(file); }
+    const scale = Math.min(1, (maxSide || 1400) / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) bmp.close();
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', quality || 0.8));
+    if (!blob) return file;
+    return new File([blob], 'shot.jpg', { type: 'image/jpeg' });
+  } catch (e) { return file; }
+}
+
+function tmContactModal(sid, name, major) {
+  tmPendingImg = null;
+  const ex = document.getElementById('tmContactModal'); if (ex) ex.remove();
+  const m = document.createElement('div');
+  m.id = 'tmContactModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML = `
+    <div style="background:var(--surface);border-radius:6px;padding:18px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">记录已联系 — ${tsaEsc(name)}</div>
+      <div style="font-size:10px;color:var(--text-3);margin-bottom:12px">记录你联系该学生的情况（例：已发提醒未回复 / 回复说不需要面谈）。可直接 Ctrl+V 粘贴截图。</div>
+      <div class="form-group">
+        <label class="form-label">备注</label>
+        <textarea id="tm_contact_note" rows="3" placeholder="如：已在微信发面谈提醒，学生未回复…" onpaste="tmHandlePaste(event)" style="width:100%;font-size:12px"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">截图证据（可选，Ctrl+V 粘贴或选择文件）</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="file" id="tm_contact_file" accept="image/*" onchange="tmPickFile(event)" style="font-size:11px">
+        </div>
+        <div id="tm_contact_preview" style="margin-top:8px"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+        <button onclick="document.getElementById('tmContactModal').remove()" style="font-size:12px;background:none;border:1px solid var(--border);border-radius:3px;padding:7px 14px;cursor:pointer;font-family:inherit">取消</button>
+        <button id="tm_contact_save" onclick="tmSaveContact('${sid}','${(name||'').replace(/'/g,'')}','${major||''}')" style="font-size:12px;background:#1a6d3a;color:#fff;border:none;border-radius:3px;padding:7px 16px;cursor:pointer;font-family:inherit;font-weight:500">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  setTimeout(() => { const t = document.getElementById('tm_contact_note'); if (t) t.focus(); }, 50);
+}
+
+async function tmHandlePaste(e) {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.type && it.type.indexOf('image') === 0) {
+      e.preventDefault();
+      const f = it.getAsFile();
+      if (f) await tmSetImg(f);
+      return;
+    }
+  }
+}
+async function tmPickFile(e) {
+  const f = e.target.files && e.target.files[0];
+  if (f) await tmSetImg(f);
+}
+async function tmSetImg(file) {
+  tmPendingImg = await tmCompressImg(file);
+  const prev = document.getElementById('tm_contact_preview');
+  if (prev) {
+    const url = URL.createObjectURL(tmPendingImg);
+    prev.innerHTML = `<div style="display:inline-flex;align-items:center;gap:8px"><img src="${url}" style="max-width:160px;max-height:120px;border-radius:4px;border:1px solid var(--border)"><span onclick="tmPendingImg=null;document.getElementById('tm_contact_preview').innerHTML='';document.getElementById('tm_contact_file').value=''" style="font-size:10px;color:var(--danger);cursor:pointer">移除</span></div>`;
+  }
+}
+
+async function tmSaveContact(sid, name, major) {
+  const note = (document.getElementById('tm_contact_note').value || '').trim();
+  if (!note && !tmPendingImg) { alert('请填写备注，或粘贴一张截图'); return; }
+  const btn = document.getElementById('tm_contact_save');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+  let imageUrl = '';
+  try {
+    if (tmPendingImg) {
+      imageUrl = await sbUpload('teacher-files', `contact/${(sid||'x')}-${Date.now()}.jpg`, tmPendingImg);
+    }
+    await sb('/rest/v1/student_contact_logs', 'POST', [{
+      id: 'sclog-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
+      student_id: sid || null, student_name: name, major: major || '',
+      teacher_name: (typeof teacherData !== 'undefined' && teacherData ? teacherData.name : '') || '',
+      note, image_url: imageUrl || null,
+    }]);
+    document.getElementById('tmContactModal')?.remove();
+    tmView = 'contacted';
+    renderTsaMeetings(document.getElementById('sm_content') || document.getElementById('mainContent'));
+  } catch (e) {
+    alert('保存失败：' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '保存'; }
+  }
+}
+
+async function tmDeleteContact(id) {
+  if (!confirm('确认删除这条联系记录？')) return;
+  try {
+    await sb(`/rest/v1/student_contact_logs?id=eq.${id}`, 'DELETE');
+    renderTsaMeetings(document.getElementById('sm_content') || document.getElementById('mainContent'));
+  } catch (e) { alert('删除失败：' + e.message); }
 }
