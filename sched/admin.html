@@ -298,34 +298,39 @@ function tabAccounts(){
 /* ---------- 课程：筛选 + 编辑 + 删除 ---------- */
 function tabCourses(){
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
+  const majors=[...new Set(COURSES.map(c=>c.major).filter(Boolean))].sort();
   let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）</h3>'+
     '<div class="row" style="margin-bottom:10px">'+
       '<div class="field"><label>搜索课名/讲师</label><input id="cf_q" placeholder="关键词"></div>'+
       '<div class="field"><label>期</label><select id="cf_term"><option value="">全部期</option>'+terms.map(t=>`<option>${esc(t)}</option>`).join('')+'</select></div>'+
       '<div class="field"><label>类别</label><select id="cf_cat"></select></div>'+
+      '<div class="field"><label>专业</label><select id="cf_major"><option value="">全部专业</option>'+majors.map(m=>`<option>${esc(m)}</option>`).join('')+'</select></div>'+
+      '<div class="field"><label>属性</label><select id="cf_type"><option value="">全部属性</option><option>共通课</option><option>专业课</option><option>大课</option></select></div>'+
       '<div class="field"><label>校区</label><select id="cf_campus"></select></div>'+
       '<div class="field"><label>&nbsp;</label><span class="muted" id="cf_count"></span></div>'+
     '</div><div id="coursesTable"></div></div><div id="cEdit"></div>';
   render(h);
   fillSelect(el('cf_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   fillSelect(el('cf_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
-  ['cf_q','cf_term','cf_cat','cf_campus'].forEach(id=>el(id)[id==='cf_q'?'oninput':'onchange']=renderCoursesTable);
+  ['cf_q','cf_term','cf_cat','cf_major','cf_type','cf_campus'].forEach(id=>el(id)[id==='cf_q'?'oninput':'onchange']=renderCoursesTable);
   renderCoursesTable();
 }
 function renderCoursesTable(){
   const q=(el('cf_q').value||'').trim().toLowerCase();
-  const term=el('cf_term').value, cat=el('cf_cat').value, campus=el('cf_campus').value;
+  const term=el('cf_term').value, cat=el('cf_cat').value, major=el('cf_major').value, ctype=el('cf_type').value, campus=el('cf_campus').value;
   let list=COURSES.filter(c=>{
     if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
     if(term && c.term!==term) return false;
     if(cat && c.category!==cat) return false;
+    if(major && c.major!==major) return false;
+    if(ctype && c.course_type!==ctype) return false;
     if(campus && c.campus!==campus) return false;
     return true;
   });
   el('cf_count').textContent='共 '+list.length+' 门';
-  let h='<table><thead><tr><th>期</th><th>课程</th><th>类别</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>人数</th><th>方式</th><th>操作</th></tr></thead><tbody>';
-  if(!list.length) h+='<tr><td colspan="11" class="muted">无匹配课程</td></tr>';
-  list.forEach(c=>{ h+=`<tr><td>${esc(c.term||'')}</td><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
+  let h='<table><thead><tr><th>期</th><th>课程</th><th>类别</th><th>专业</th><th>属性</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>人数</th><th>方式</th><th>操作</th></tr></thead><tbody>';
+  if(!list.length) h+='<tr><td colspan="13" class="muted">无匹配课程</td></tr>';
+  list.forEach(c=>{ h+=`<tr><td>${esc(c.term||'')}</td><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.major||'')}</td><td>${esc(c.course_type||'')}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
     `<td>${weekdaysLabel(c.weekdays)}</td><td>${c.start_time||''}-${c.end_time||''}</td>`+
     `<td>${(c.start_date&&c.end_date)?(c.start_date+' ~ '+c.end_date):'<span class="badge b-warn">缺日期</span>'}</td>`+
     `<td>${c.est_students||''}</td><td>${esc(c.mode)}</td>`+
@@ -351,6 +356,9 @@ function courseEdit(id){
     `<div class="field"><label>讲师</label><input id="e_teacher" value="${esc(c.teacher||'')}"></div>`+
     `<div class="field"><label>类别</label><select id="e_cat">${catOpts}</select></div>`+
     `<div class="field"><label>校区</label><select id="e_campus">${campOpts}</select></div>`+
+    `<div class="field"><label>专业</label><input id="e_major" value="${esc(c.major||'')}" placeholder="大学院填，如经营"></div>`+
+    `<div class="field"><label>课程属性</label><select id="e_ctype"><option value="">（无）</option>`+
+      ['共通课','专业课','大课'].map(x=>`<option${x===c.course_type?' selected':''}>${x}</option>`).join('')+`</select></div>`+
     `<div class="field"><label>期</label><input id="e_term" value="${esc(c.term||'')}" placeholder="如 2026年7月期"></div>`+
     `<div class="field"><label>方式</label><select id="e_mode"><option${c.mode==='线下'?' selected':''}>线下</option><option${c.mode==='线上'?' selected':''}>线上</option></select></div>`+
     `<div class="field"><label>开始时间</label><select id="e_st">${slotOpts(c.start_time)}</select></div>`+
@@ -379,6 +387,7 @@ function courseEdit(id){
     if(et<=st){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">结束需晚于开始</span>'; return; }
     const patch={ name:el('e_name').value.trim(), teacher:el('e_teacher').value.trim()||null,
       category:el('e_cat').value, campus:el('e_campus').value, term:el('e_term').value.trim()||null,
+      major:el('e_major').value.trim()||null, course_type:el('e_ctype').value||null,
       mode:el('e_mode').value, start_time:st, end_time:et,
       start_date:el('e_sd').value||null, end_date:el('e_ed').value||null,
       weekdays:days, sessions:el('e_sess').value?Number(el('e_sess').value):null,
