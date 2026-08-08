@@ -39,6 +39,9 @@
         <div class="field"><label>类别（专业）</label><select id="c_cat"></select></div>
         <div class="field"><label>课程名</label><input id="c_name" placeholder="如 日语中级班N4"></div>
         <div class="field"><label>讲师</label><input id="c_teacher"></div>
+        <div class="field"><label>专业（大学院填，如经营/情报）</label><input id="c_major" placeholder="学部/语言可留空"></div>
+        <div class="field"><label>课程属性</label><select id="c_ctype">
+          <option value="">（无）</option><option>共通课</option><option>专业课</option><option>大课</option></select></div>
         <div class="field" style="grid-column:1/-1"><label>周几（可多选，如每周二+周四）</label>
           <div id="c_wd" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
         <div class="field"><label>授课方式</label><select id="c_mode"><option>线下</option><option>线上</option></select></div>
@@ -217,6 +220,7 @@ function parseXlsx(){
         if(!mode) mode = campus.indexOf('线上')>=0 ? '线上' : '线下';
         return {
           campus, category:String(r['类别']||'').trim(), name:String(r['课程名']||'').trim(),
+          major:String(r['专业']||'').trim()||null, course_type:String(r['课程属性']||'').trim()||null,
           teacher:String(r['讲师']||'').trim()||null,
           weekdays: parseWeekdays(r['周几']).join(','),
           start_time:st, end_time:et,
@@ -299,6 +303,7 @@ async function saveCourse(){
   const rec = {
     campus: el('c_campus').value,
     category: el('c_cat').value, name: el('c_name').value.trim(),
+    major: el('c_major').value.trim()||null, course_type: el('c_ctype').value||null,
     teacher: el('c_teacher').value.trim(), weekdays: getSelectedWeekdays(),
     start_time: el('c_st').value, end_time: el('c_et').value,
     start_date: el('c_sd').value||null, end_date: el('c_ed').value||null,
@@ -312,7 +317,7 @@ async function saveCourse(){
   if(!rec.weekdays){ toast('请至少选择一个上课日', false); return; }
   if(rec.end_time <= rec.start_time){ toast('结束时间需晚于开始', false); return; }
   try{ await sbInsert('sched_courses', rec); toast('课程已保存');
-    ['c_name','c_teacher','c_sess','c_est','c_link'].forEach(id=>el(id).value='');
+    ['c_name','c_teacher','c_major','c_sess','c_est','c_link'].forEach(id=>el(id).value='');
     renderWeekdayToggle();
   }catch(e){ toast(e.message, false); }
 }
