@@ -60,19 +60,26 @@
         <div class="field"><label>用途</label><select id="r_kind">
           <option value="temp">临时使用</option><option value="rental">对外出租</option>
           <option value="meeting">纯开会（借账号）</option></select></div>
+        <div class="field"><label>重复方式</label><select id="r_rec">
+          <option value="once">单次（某一天）</option><option value="weekly">每周（一段日期内）</option></select></div>
         <div class="field"><label>校区</label><select id="r_campus"></select></div>
         <div class="field"><label>教室</label><select id="r_room"></select></div>
-        <div class="field"><label>日期</label><input type="date" id="r_date"></div>
+        <div class="field" id="r_dateWrap"><label>日期</label><input type="date" id="r_date"></div>
+        <div class="field hidden" id="r_sdWrap"><label>开始日期</label><input type="date" id="r_sd"></div>
+        <div class="field hidden" id="r_edWrap"><label>结束日期</label><input type="date" id="r_ed"></div>
         <div class="field"><label>开始时间</label><select id="r_st"></select></div>
         <div class="field"><label>结束时间</label><select id="r_et"></select></div>
         <div class="field"><label>使用人/单位</label><input id="r_user"></div>
         <div class="field"><label>是否占用会议账号</label><select id="r_um">
           <option value="false">否（教室真正空出账号，可借他人开会）</option>
-          <option value="true">是（占用该教室会议号）</option></select></div>
+          <option value="true">是（占用该教室会议账号）</option></select></div>
       </div>
-      <div class="field" style="margin-top:10px"><label>会议账号（占用时选择）</label><select id="r_acc"></select></div>
+      <div class="field hidden" id="r_wdWrap" style="margin-top:10px"><label>每周几（可多选）</label>
+        <div id="r_wd" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+      <div class="field hidden" id="r_accWrap" style="margin-top:10px"><label>会议账号</label><div id="r_accBox"></div></div>
       <div class="field" style="margin-top:10px"><label>备注</label><input id="r_note" style="width:100%"></div>
       <div id="r_conf" class="hidden" style="margin-top:10px"></div>
+      <div id="r_near" style="margin-top:8px"></div>
       <div style="margin-top:12px"><button id="r_save">保存占用</button></div>
     </div>
 
@@ -130,14 +137,52 @@ async function boot(){
   BOOKINGS = await sbGet('sched_bookings','select=*');
 
   el('r_campus').onchange = fillRooms; fillRooms();
-  el('r_um').onchange = ()=>el('r_acc').closest('.field').classList.toggle('hidden', el('r_um').value!=='true');
-  el('r_um').onchange();
-  ['r_room','r_date','r_st','r_et','r_um','r_acc'].forEach(id=>el(id).onchange=checkRoomConflict);
+  renderRoomWeekdayToggle();
+  el('r_rec').onchange = onRecChange; onRecChange();
+  el('r_um').onchange = refreshRoomAcc;
+  ['r_room','r_date','r_sd','r_ed','r_st','r_et'].forEach(id=>el(id).onchange=()=>{ checkRoomConflict(); refreshRoomAcc(); });
 
   el('c_save').onclick = saveCourse;
   el('r_save').onclick = saveRoom;
   el('m_load').onclick = loadMine;
   el('xlsxParse').onclick = parseXlsx;
+}
+function onRecChange(){
+  const weekly = el('r_rec').value==='weekly';
+  el('r_dateWrap').classList.toggle('hidden', weekly);
+  el('r_sdWrap').classList.toggle('hidden', !weekly);
+  el('r_edWrap').classList.toggle('hidden', !weekly);
+  el('r_wdWrap').classList.toggle('hidden', !weekly);
+  checkRoomConflict();
+}
+function renderRoomWeekdayToggle(){
+  const box=el('r_wd'); box.innerHTML='';
+  for(let d=1; d<=7; d++){ const b=document.createElement('button');
+    b.type='button'; b.className='ghost sm'; b.textContent=WEEKDAYS[d]; b.dataset.d=d;
+    b.onclick=()=>{ const on=b.dataset.on==='1'; b.dataset.on=on?'':'1';
+      b.style.background=on?'#fff':'var(--blue)'; b.style.color=on?'var(--ink)':'#fff'; checkRoomConflict(); };
+    box.appendChild(b); }
+}
+function roomSelectedWeekdays(){ return [...el('r_wd').querySelectorAll('button[data-on="1"]')].map(b=>Number(b.dataset.d)); }
+/* 账号自动绑定：默认教室固定账号，冲突才提示改临时 */
+function refreshRoomAcc(){
+  const um=el('r_um').value==='true';
+  el('r_accWrap').classList.toggle('hidden', !um);
+  if(!um){ el('r_accBox').innerHTML=''; return; }
+  const r=ROOMS.find(x=>String(x.id)===String(el('r_room').value));
+  const bound=r?r.meeting_account_id:null;
+  const temps=ACCOUNTS.filter(a=>a.kind==='临时');
+  let chosen = bound || (temps[0]&&temps[0].id);
+  const date=el('r_rec').value==='weekly'? (el('r_sd').value||todayStr()) : el('r_date').value;
+  const s=el('r_st').value, e=el('r_et').value;
+  const conf = (date&&s&&e&&e>s)? accountConflicts(BOOKINGS, chosen, date, s, e, null) : [];
+  if(conf.length){
+    el('r_accBox').innerHTML='<div class="badge b-err" style="margin-bottom:6px">该教室固定账号此时段已被占用，请改用临时账号</div>'+
+      '<select id="r_acc">'+temps.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')+'</select>';
+  }else{
+    el('r_accBox').innerHTML='<div>'+esc((ACCOUNTS.find(a=>String(a.id)===String(chosen))||{}).name||'—')+' <span class="badge b-ok">自动绑定</span></div>'+
+      '<input type="hidden" id="r_acc" value="'+(chosen||'')+'">';
+  }
 }
 
 /* ===== Excel 批量导入 ===== */
@@ -176,6 +221,7 @@ function parseXlsx(){
           weekdays: parseWeekdays(r['周几']).join(','),
           start_time:st, end_time:et,
           start_date:normDate(r['开课日']), end_date:normDate(r['结课日']),
+          term: termOf(normDate(r['开课日'])),
           sessions: r['回数']!==''?Number(r['回数']):null,
           est_students: r['预估人数']!==''?Number(r['预估人数']):null,
           mode, meeting_link:String(r['腾讯会议链接']||'').trim()||null,
@@ -229,11 +275,8 @@ async function doImport(){
 function fillRooms(){
   const rs = ROOMS.filter(r=>r.campus===el('r_campus').value);
   fillSelect(el('r_room'), rs, r=>r.id, r=>r.name+'（'+r.capacity+'人）');
-  // 账号：该校区所有账号 + 临时账号
-  const accs = ACCOUNTS.filter(a=>a.kind==='临时' ||
-    rs.some(r=>String(r.meeting_account_id)===String(a.id)));
-  fillSelect(el('r_acc'), accs, a=>a.id, a=>a.name+'（'+a.kind+'）');
   checkRoomConflict();
+  if(typeof refreshRoomAcc==='function') refreshRoomAcc();
 }
 
 /* 保存课程 */
@@ -259,6 +302,7 @@ async function saveCourse(){
     teacher: el('c_teacher').value.trim(), weekdays: getSelectedWeekdays(),
     start_time: el('c_st').value, end_time: el('c_et').value,
     start_date: el('c_sd').value||null, end_date: el('c_ed').value||null,
+    term: termOf(el('c_sd').value),
     sessions: el('c_sess').value?Number(el('c_sess').value):null,
     est_students: el('c_est').value?Number(el('c_est').value):null,
     mode: el('c_mode').value, meeting_link: el('c_link').value.trim()||null,
@@ -273,39 +317,75 @@ async function saveCourse(){
   }catch(e){ toast(e.message, false); }
 }
 
-/* 占用冲突提示 */
+/* 占用冲突提示 + 就近空档 */
 function checkRoomConflict(){
-  const box=el('r_conf'); const roomId=el('r_room').value, date=el('r_date').value;
+  const box=el('r_conf'), nearBox=el('r_near');
+  const roomId=el('r_room').value;
   const s=el('r_st').value, e=el('r_et').value;
-  let msgs=[];
-  if(roomId && date && s && e && e>s){
-    const rc = roomConflicts(BOOKINGS, roomId, date, s, e, null);
-    if(rc.length) msgs.push('⚠ 教室在该时段已被占用：'+rc.map(x=>x.title||KIND_LABEL[x.kind]).join('、'));
+  const weekly=el('r_rec').value==='weekly';
+  nearBox.innerHTML='';
+  if(!(roomId && s && e && e>s)){ box.className='hidden'; return; }
+  let msgs=[], firstDate=null;
+  if(weekly){
+    const sd=el('r_sd').value, ed=el('r_ed').value, wds=roomSelectedWeekdays();
+    if(sd && ed && wds.length){
+      // 对区间内每个所选周几的首次出现日检测（近似）
+      wds.forEach(wd=>{
+        let d=sd; while(weekdayOf(d)!==wd && d<=ed) d=addDays(d,1);
+        if(d<=ed){ const rc=roomConflicts(BOOKINGS, roomId, d, s, e, null);
+          if(rc.length) msgs.push('⚠ '+WEEKDAYS[wd]+' 该时段已占：'+rc.map(x=>x.title||KIND_LABEL[x.kind]).join('、')); }
+      });
+    }
+  }else{
+    const date=el('r_date').value; firstDate=date;
+    if(date){ const rc=roomConflicts(BOOKINGS, roomId, date, s, e, null);
+      if(rc.length) msgs.push('⚠ 教室在该时段已被占用：'+rc.map(x=>x.title||KIND_LABEL[x.kind]).join('、')); }
   }
-  if(el('r_um').value==='true' && el('r_acc').value && date && s && e && e>s){
-    const ac = accountConflicts(BOOKINGS, el('r_acc').value, date, s, e, null);
-    if(ac.length) msgs.push('⚠ 该会议账号在此时段已被占用');
-  }
-  if(msgs.length){ box.className=''; box.innerHTML='<div class="b-err badge">'+msgs.join('<br>')+'</div>'; }
-  else box.className='hidden';
+  if(msgs.length){
+    box.className=''; box.innerHTML='<div class="b-err badge">'+msgs.join('<br>')+'</div>';
+    // 单次冲突时给就近空档
+    if(!weekly && firstDate){
+      const nb=findNearby(BOOKINGS, roomId, firstDate, s, e, 5);
+      let h='<div class="tip"><b>就近空档参考</b><div style="margin-top:4px">当天其他空时段：'+
+        (nb.sameDay.length? nb.sameDay.map(t=>`<button class="ghost sm" data-pk="${firstDate}|${t}">${t}</button>`).join(' '):'无')+'</div>'+
+        '<div style="margin-top:4px">同时段前后几天有空：'+
+        (nb.nearDates.length? nb.nearDates.map(o=>`<button class="ghost sm" data-pk="${o.date}|${s}-${e}">${o.date}（${WEEKDAYS[weekdayOf(o.date)]}）</button>`).join(' '):'无')+'</div></div>';
+      nearBox.innerHTML=h;
+      nearBox.querySelectorAll('button[data-pk]').forEach(b=>b.onclick=()=>{
+        const [d,tt]=b.dataset.pk.split('|'); const [ns,ne]=tt.split('-');
+        el('r_date').value=d; el('r_st').value=ns; el('r_et').value=ne; checkRoomConflict(); refreshRoomAcc();
+      });
+    }
+  } else box.className='hidden';
 }
 /* 保存占用 */
 async function saveRoom(){
   const s=el('r_st').value, e=el('r_et').value;
   if(e<=s){ toast('结束时间需晚于开始', false); return; }
+  if(!el('r_room').value){ toast('请选择教室', false); return; }
   const um = el('r_um').value==='true';
-  const rec = {
+  const weekly = el('r_rec').value==='weekly';
+  const base = {
     room_id: Number(el('r_room').value), kind: el('r_kind').value,
     title: KIND_LABEL[el('r_kind').value], user_name: el('r_user').value.trim(),
-    recurrence:'once', booking_date: el('r_date').value,
     start_time:s, end_time:e, uses_meeting: um,
     meeting_account_id: um ? Number(el('r_acc').value) : null,
     status:'confirmed', created_by: el('r_user').value.trim()||CODEREC.label,
     note: el('r_note').value.trim()||null
   };
+  let recs=[];
+  if(weekly){
+    const sd=el('r_sd').value, ed=el('r_ed').value, wds=roomSelectedWeekdays();
+    if(!sd||!ed){ toast('请填开始/结束日期', false); return; }
+    if(!wds.length){ toast('请至少选一个周几', false); return; }
+    recs = wds.map(wd=>Object.assign({}, base, {recurrence:'weekly', weekday:wd, start_date:sd, end_date:ed}));
+  }else{
+    if(!el('r_date').value){ toast('请填日期', false); return; }
+    recs = [Object.assign({}, base, {recurrence:'once', booking_date:el('r_date').value})];
+  }
   try{
-    const ins = await sbInsert('sched_bookings', rec);
-    BOOKINGS.push(ins[0]); toast('占用已保存'); checkRoomConflict();
+    const ins = await sbInsert('sched_bookings', recs);
+    ins.forEach(x=>BOOKINGS.push(x)); toast('占用已保存（'+ins.length+' 条）'); checkRoomConflict();
   }catch(err){ toast(err.message, false); }
 }
 
