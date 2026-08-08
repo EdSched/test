@@ -839,7 +839,7 @@ function tmRenderList() {
     listBox.innerHTML = list.length ? list.map(s => {
       const logs = (tmContactByName[s.name] || []);
       const logHtml = logs.map(l => `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--border-light)">
-        ${l.image_url ? `<a href="${l.image_url}" target="_blank" style="flex-shrink:0"><img src="${l.image_url}" style="width:52px;height:52px;object-fit:cover;border-radius:4px;border:1px solid var(--border)"></a>` : ''}
+        ${l.image_url ? `<img src="${l.image_url}" onclick="tmImgLightbox('${l.image_url}')" style="flex-shrink:0;width:52px;height:52px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in">` : ''}
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;color:var(--text-1);white-space:pre-wrap;line-height:1.5">${tsaEsc(l.note)||'（无备注）'}</div>
           <div style="font-size:9px;color:var(--text-3);margin-top:3px">${(l.teacher_name||'')} · ${(l.created_at||'').slice(0,10)}</div>
@@ -1267,4 +1267,15 @@ async function tmDeleteContact(id) {
     await sb(`/rest/v1/student_contact_logs?id=eq.${id}`, 'DELETE');
     renderTsaMeetings(document.getElementById('sm_content') || document.getElementById('mainContent'));
   } catch (e) { alert('删除失败：' + e.message); }
+}
+
+// 页面内查看截图大图（点任意处或×关闭，不再开新标签页）
+function tmImgLightbox(url) {
+  const ex = document.getElementById('tmLightbox'); if (ex) ex.remove();
+  const o = document.createElement('div');
+  o.id = 'tmLightbox';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
+  o.onclick = () => o.remove();
+  o.innerHTML = `<img src="${url}" style="max-width:92vw;max-height:88vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.5)"><div style="position:absolute;top:14px;right:22px;color:#fff;font-size:30px;line-height:1;cursor:pointer">×</div>`;
+  document.body.appendChild(o);
 }
