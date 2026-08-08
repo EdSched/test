@@ -9,12 +9,14 @@
   <div class="card">
     <div class="row">
       <div class="field"><label>期</label><select id="term"></select></div>
-      <div class="field"><label>专业类别</label><select id="cat"></select></div>
+      <div class="field"><label>类别</label><select id="cat"></select></div>
+      <div class="field"><label>专业</label><select id="major"></select></div>
       <div class="field"><label>是否含语言课</label><select id="lang">
-        <option value="1">含语言课（日/英）</option><option value="0">仅本专业</option></select></div>
+        <option value="1">含语言课（日/英）</option><option value="0">不含</option></select></div>
       <div class="field"><label>校区（可选）</label><select id="campus"></select></div>
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
     </div>
+    <div class="tip" style="margin:10px 0 0">选定专业后，课表会自动包含该专业的<b>专业课</b> + 同类别的<b>共通课</b>（+ 语言课）。</div>
   </div>
   <div class="card" id="grid"><div class="muted">选择后生成</div></div>
   <div class="card" id="list"></div>
@@ -29,15 +31,30 @@ async function boot(){
   COURSES = await sbGet('sched_courses','select=*&order=start_time');
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
+  el('cat').onchange = fillMajors; fillMajors();
   el('go').onclick = run; run();
 }
+function fillMajors(){
+  const cat=el('cat').value;
+  const majors=[...new Set(COURSES.filter(c=>c.category===cat && c.major).map(c=>c.major))].sort();
+  fillSelect(el('major'), majors, v=>v, v=>v, majors.length?'全部专业':'（该类别无专业细分）');
+}
 function run(){
-  const term=el('term').value, cat=el('cat').value, withLang=el('lang').value==='1', campus=el('campus').value;
+  const term=el('term').value, cat=el('cat').value, major=el('major').value,
+        withLang=el('lang').value==='1', campus=el('campus').value;
   let list = COURSES.filter(c=>{
-    const catOk = c.category===cat || (withLang && c.category==='语言');
-    const campOk = !campus || c.campus===campus || c.mode==='线上';
-    const termOk = !term || c.term===term;
-    return catOk && campOk && termOk;
+    if(term && c.term!==term) return false;
+    if(campus && c.campus!==campus && c.mode!=='线上') return false;
+    // 类别匹配：本类别，或语言（含语言时）
+    const isLang = c.category==='语言';
+    if(isLang) return withLang;
+    if(c.category!==cat) return false;
+    // 专业匹配：选了专业时 = 该专业的课 + 该类别共通课；没选专业 = 全类别
+    if(major){
+      const isCommon = c.course_type==='共通课';
+      return c.major===major || isCommon;
+    }
+    return true;
   });
   // 周网格
   const times=[...new Set(list.map(c=>c.start_time+'-'+c.end_time))].sort();
@@ -56,8 +73,8 @@ function run(){
   h+='</tbody></table>';
   el('grid').innerHTML = times.length? h : '<div class="muted">该条件下暂无课程</div>';
   // 明细含会议链接
-  let l='<h4 style="margin:6px 0">课程明细</h4><table><thead><tr><th>课程</th><th>讲师</th><th>周几</th><th>时段</th><th>起止</th><th>方式</th><th>会议链接</th></tr></thead><tbody>';
-  list.forEach(c=>{ l+=`<tr><td>${esc(c.name)}</td><td>${esc(c.teacher||'')}</td><td>${weekdaysLabel(c.weekdays)}</td>`+
+  let l='<h4 style="margin:6px 0">课程明细</h4><table><thead><tr><th>课程</th><th>专业</th><th>属性</th><th>讲师</th><th>周几</th><th>时段</th><th>起止</th><th>方式</th><th>会议链接</th></tr></thead><tbody>';
+  list.forEach(c=>{ l+=`<tr><td>${esc(c.name)}</td><td>${esc(c.major||'')}</td><td>${esc(c.course_type||'')}</td><td>${esc(c.teacher||'')}</td><td>${weekdaysLabel(c.weekdays)}</td>`+
     `<td>${c.start_time||''}-${c.end_time||''}</td><td>${c.start_date||''}~${c.end_date||''}</td>`+
     `<td>${esc(c.mode)}</td><td>${c.meeting_link?`<a href="${esc(c.meeting_link)}" target="_blank">进入</a>`:'—'}</td></tr>`; });
   l+='</tbody></table>';
