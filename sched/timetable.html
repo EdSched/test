@@ -8,6 +8,7 @@
 <div class="wrap">
   <div class="card">
     <div class="row">
+      <div class="field"><label>期</label><select id="term"></select></div>
       <div class="field"><label>专业类别</label><select id="cat"></select></div>
       <div class="field"><label>是否含语言课</label><select id="lang">
         <option value="1">含语言课（日/英）</option><option value="0">仅本专业</option></select></div>
@@ -26,14 +27,17 @@ async function boot(){
   fillSelect(el('cat'), CATEGORIES.filter(c=>c!=='语言'));
   fillSelect(el('campus'), CAMPUSES, v=>v, v=>v, '全部校区');
   COURSES = await sbGet('sched_courses','select=*&order=start_time');
+  const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
+  fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
   el('go').onclick = run; run();
 }
 function run(){
-  const cat=el('cat').value, withLang=el('lang').value==='1', campus=el('campus').value;
+  const term=el('term').value, cat=el('cat').value, withLang=el('lang').value==='1', campus=el('campus').value;
   let list = COURSES.filter(c=>{
     const catOk = c.category===cat || (withLang && c.category==='语言');
     const campOk = !campus || c.campus===campus || c.mode==='线上';
-    return catOk && campOk;
+    const termOk = !term || c.term===term;
+    return catOk && campOk && termOk;
   });
   // 周网格
   const times=[...new Set(list.map(c=>c.start_time+'-'+c.end_time))].sort();
