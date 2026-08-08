@@ -353,7 +353,12 @@ const SM_ITEMS = [['progress','📊 考学进度'], ['meetings','💬 面谈查�
 function smAllowedItems() {
   const p = (teacherData && teacherData.permissions) || {};
   const items = (p.student_mgmt && Array.isArray(p.student_mgmt_items)) ? p.student_mgmt_items : [];
-  return SM_ITEMS.filter(([k]) => items.includes(k));
+  const allowed = SM_ITEMS.filter(([k]) => items.includes(k));
+  // 重点关注：汇总已有数据的另一种展示，只要有考学进度/学生档案/面谈任一权限就提供
+  if (items.includes('progress') || items.includes('profile') || items.includes('meetings')) {
+    allowed.push(['focus', '⭐ 重点关注']);
+  }
+  return allowed;
 }
 
 function renderStudentMgmt(mc) {
@@ -370,6 +375,7 @@ function renderStudentMgmt(mc) {
   if (smTab === 'progress') renderTeacherStudyProgress(box);
   else if (smTab === 'records') renderTsaRecords(box);
   else if (smTab === 'meetings') renderTsaMeetings(box);
+  else if (smTab === 'focus') renderTeacherFocus(box);
   else renderTeacherStudents(box);
 }
 
@@ -1278,4 +1284,179 @@ function tmImgLightbox(url) {
   o.onclick = () => o.remove();
   o.innerHTML = `<img src="${url}" style="max-width:92vw;max-height:88vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.5)"><div style="position:absolute;top:14px;right:22px;color:#fff;font-size:30px;line-height:1;cursor:pointer">×</div>`;
   document.body.appendChild(o);
+}
+
+
+// ══════════════════════════════════════════════════════════
+// 重点关注：按到期临近筛选 + 学生学习概要汇总（换一种展示方式）
+// ══════════════════════════════════════════════════════════
+let focusStudents = [];
+let focusUrgency = 'all';   // all | half | q3 | near | expired
+let focusSearch = '';
+
+function focusParseDate(str) {
+  if (!str) return null;
+  const s = String(str).replace(/\s/g, '');
+  let m = s.match(/(\d{4}|\d{2})[年\/\-\.](\d{1,2})/);
+  if (m) { let y = parseInt(m[1]); if (y < 100) y += 2000; return new Date(y, parseInt(m[2]) - 1, 1); }
+  m = s.match(/(20\d{2})/);
+  if (m) return new Date(parseInt(m[1]), 3, 1);   // 只有年份→默认4月入学
+  return null;
+}
+function focusMonthsUntil(str) {
+  const d = focusParseDate(str); if (!d) return null;
+  const now = new Date();
+  return (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
+}
+function focusBucket(months) {
+  if (months == null) return null;
+  if (months < 0) return 'expired';
+  if (months <= 1) return 'near';
+  if (months <= 3) return 'q3';
+  if (months <= 6) return 'half';
+  return 'far';
+}
+const FOCUS_URG = {
+  expired: { t: '已过期', bg: '#fdecea', c: '#c0392b' },
+  near: { t: '到期临近', bg: '#fbeee0', c: '#b8560b' },
+  q3: { t: '三个月内', bg: '#fef5e0', c: '#8a6d10' },
+  half: { t: '半年内', bg: '#eef5ea', c: '#4a7a2a' },
+  far: { t: '远期', bg: '#eef1f5', c: '#5a6a7a' },
+};
+
+async function renderTeacherFocus(box) {
+  box.innerHTML = '<div class="empty">加载中…</div>';
+  const all = await sb('/rest/v1/students?select=*&order=created_at.desc&limit=2000').catch(() => []);
+  const set = tsaAllowedSet();
+  let list = (set ? (all || []).filter(s => set.has(s.major)) : (all || [])).filter(s => !s.status || s.status === 'active');
+  if (tsaGuaranteedLock()) list = list.filter(tsaIsGuaranteed);
+  focusStudents = list;
+  focusRender();
+}
+
+function focusRender() {
+  const box = document.getElementById('sm_content') || document.getElementById('mainContent');
+  if (!box) return;
+  const rows = focusStudents.map(s => { const months = focusMonthsUntil(s.target_enrollment); return { s, months, bucket: focusBucket(months) }; });
+  const q = focusSearch.trim();
+  let filtered = rows.filter(r => {
+    if (q) return tpNameMatch(r.s.name, q) || (r.s.university || '').includes(q);
+    if (focusUrgency === 'all') return true;
+    if (focusUrgency === 'expired') return r.bucket === 'expired';
+    if (focusUrgency === 'near') return ['near', 'expired'].includes(r.bucket);
+    if (focusUrgency === 'q3') return ['near', 'q3', 'expired'].includes(r.bucket);
+    if (focusUrgency === 'half') return ['near', 'q3', 'half', 'expired'].includes(r.bucket);
+    return true;
+  });
+  const ord = { expired: 0, near: 1, q3: 2, half: 3, far: 4 };
+  filtered.sort((a, b) => ((ord[a.bucket] ?? 5) - (ord[b.bucket] ?? 5)) || ((a.months ?? 9999) - (b.months ?? 9999)));
+
+  const chip = (k, l) => `<div class="filter-chip ${focusUrgency === k ? 'active' : ''}" onclick="focusUrgency='${k}';focusSearch='';focusRender()" style="padding:3px 10px;font-size:10px;cursor:pointer">${l}</div>`;
+  const cards = filtered.length ? filtered.map(r => {
+    const u = r.bucket ? FOCUS_URG[r.bucket] : null;
+    const badge = u ? `<span style="font-size:10px;padding:1px 8px;border-radius:10px;background:${u.bg};color:${u.c};white-space:nowrap">${u.t}${r.months != null && r.months >= 0 ? '·' + r.months + '个月' : (r.months != null ? '·超' + (-r.months) + '月' : '')}</span>` : '<span style="font-size:10px;color:var(--text-3)">无入学目标</span>';
+    return `<div onclick="focusOpenSummary('${r.s.id}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px 14px;margin-bottom:7px" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
+      <span style="font-size:13px;font-weight:600">${tsaEsc(r.s.name)}</span>
+      <span style="font-size:11px;color:var(--text-3)">${MAJORS[r.s.major] || r.s.major || ''}</span>
+      ${badge}
+      <span style="font-size:10px;color:var(--text-3)">入学目标 ${tsaEsc(r.s.target_enrollment) || '—'}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--accent)">查看概要 ›</span>
+    </div>`;
+  }).join('') : '<div class="empty">当前筛选下没有学生</div>';
+
+  box.innerHTML = `
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      ${chip('all', '全部')}${chip('half', '半年内')}${chip('q3', '三个月内')}${chip('near', '临近')}${chip('expired', '已过期')}
+      <input placeholder="搜索姓名查看概要…" value="${tsaEsc(focusSearch)}" oninput="focusSearch=this.value;focusRender()" style="margin-left:auto;font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:2px;background:var(--bg);font-family:inherit;width:170px">
+    </div>
+    <div style="font-size:10px;color:var(--text-3);margin-bottom:8px">共 ${filtered.length} 人 · 点学生查看完整学习概要（可打印）。到期依据「入学目标」自动推算。</div>
+    <div>${cards}</div>`;
+}
+
+async function focusOpenSummary(sid) {
+  const s = focusStudents.find(x => x.id === sid);
+  if (!s) return;
+  if (!document.getElementById('focusPrintStyle')) {
+    const st = document.createElement('style');
+    st.id = 'focusPrintStyle';
+    st.textContent = '@media print{body>*:not(#focusSummary){display:none!important}#focusSummary{position:static!important;background:#fff!important;padding:0!important;overflow:visible!important;display:block!important}#focusSummary .focus-noprint{display:none!important}#focusReport{box-shadow:none!important;max-width:none!important;padding:0!important}}';
+    document.head.appendChild(st);
+  }
+  const ex = document.getElementById('focusSummary'); if (ex) ex.remove();
+  const o = document.createElement('div');
+  o.id = 'focusSummary';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
+  o.innerHTML = '<div style="background:#fff;border-radius:8px;max-width:820px;width:100%;padding:28px;margin:auto"><div style="text-align:center;color:#888;padding:30px">加载概要中…</div></div>';
+  document.body.appendChild(o);
+
+  const enc = encodeURIComponent;
+  const [timeline, plans, bks, contacts] = await Promise.all([
+    sb(`/rest/v1/student_progress_timeline?student_id=eq.${sid}&select=*&order=created_at.asc`).catch(() => []),
+    sb(`/rest/v1/student_school_plans?student_id=eq.${sid}&select=*&order=level.asc`).catch(() => []),
+    sb(`/rest/v1/bookings?name=eq.${enc(s.name)}&daily_record=not.is.null&select=slot_date,daily_record,teacher_name&order=slot_date.desc&limit=200`).catch(() => []),
+    sb(`/rest/v1/student_contact_logs?student_name=eq.${enc(s.name)}&select=*&order=created_at.desc`).catch(() => []),
+  ]);
+
+  const months = focusMonthsUntil(s.target_enrollment);
+  const u = focusBucket(months) ? FOCUS_URG[focusBucket(months)] : null;
+  const kv = (k, v) => v ? `<div style="font-size:12px;padding:3px 0"><span style="color:#888;display:inline-block;width:78px">${k}</span>${tsaEsc(v)}</div>` : '';
+  const lvl = { 1: '🔴 冲刺', 2: '🟡 匹配', 3: '🟢 保底' };
+
+  // 志望校
+  const schoolsHtml = plans.length ? plans.map(p => {
+    const st = (typeof SCHOOL_STATUS_LABELS !== 'undefined' && SCHOOL_STATUS_LABELS[p.status]) ? SCHOOL_STATUS_LABELS[p.status].t : (p.status || '');
+    return `<div style="font-size:12px;padding:5px 0;border-top:1px solid #eee"><span style="font-weight:600">${tsaEsc(p.school_name)}</span>${p.faculty ? ' · ' + tsaEsc(p.faculty) : ''}${p.professor ? ' · ' + tsaEsc(p.professor) : ''} <span style="color:#888">[${lvl[p.level] || p.level || ''}]</span> <span style="color:#2a6a9a">${st}</span>${p.application_period ? ' <span style="color:#888;font-size:11px">出愿 ' + tsaEsc(p.application_period) + '</span>' : ''}</div>`;
+  }).join('') : '<div style="font-size:11px;color:#aaa">暂无志望校</div>';
+
+  // 考学进度时间线
+  const tlHtml = timeline.length ? timeline.map(t => {
+    const d = (t.created_at || '').slice(0, 10);
+    const bits = Object.entries(t).filter(([k, v]) => !['id', 'student_id', 'student_name', 'created_at', 'updated_at', 'major'].includes(k) && v && typeof v === 'string').map(([k, v]) => `${tsaEsc(v)}`);
+    const note = t.note || t.summary || bits.join(' / ');
+    return `<div style="font-size:12px;padding:5px 0;border-top:1px solid #eee"><span style="color:#2a6a9a;font-family:monospace">${d}</span> ${tsaEsc(note) || '（进度更新）'}</div>`;
+  }).join('') : '<div style="font-size:11px;color:#aaa">暂无进度记录</div>';
+
+  // 面谈记录
+  const mtgHtml = bks.length ? bks.map(b => {
+    let txt = '';
+    const dr = b.daily_record;
+    if (dr && typeof dr === 'object') txt = Object.values(dr).filter(v => typeof v === 'string' && v.trim()).join(' / ');
+    return `<div style="font-size:12px;padding:5px 0;border-top:1px solid #eee"><span style="color:#2a6a9a;font-family:monospace">${b.slot_date || ''}</span> ${b.teacher_name ? '<span style="color:#888">' + tsaEsc(b.teacher_name) + '</span> ' : ''}${tsaEsc(txt.slice(0, 200))}</div>`;
+  }).join('') : '<div style="font-size:11px;color:#aaa">暂无面谈记录</div>';
+
+  // 联系记录
+  const contactHtml = contacts.length ? contacts.map(c => `<div style="font-size:12px;padding:5px 0;border-top:1px solid #eee"><span style="color:#2a6a9a;font-family:monospace">${(c.created_at || '').slice(0, 10)}</span> ${tsaEsc(c.note) || ''}${c.image_url ? ' <span style="color:#1a6d3a">[有截图]</span>' : ''}</div>`).join('') : '';
+
+  const sec = (title, html) => `<div style="margin-top:18px"><div style="font-size:12px;font-weight:600;color:#1a3a5a;border-bottom:2px solid #dbe4ec;padding-bottom:4px;margin-bottom:6px">${title}</div>${html}</div>`;
+
+  o.innerHTML = `
+  <div id="focusReport" style="background:#fff;border-radius:8px;max-width:820px;width:100%;padding:28px;margin:auto">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:2px solid #1a3a5a;padding-bottom:12px">
+      <div>
+        <div style="font-family:'Noto Serif SC',serif;font-size:20px;font-weight:600">${tsaEsc(s.name)}<span style="font-size:13px;color:#888;font-weight:400;margin-left:10px">${MAJORS[s.major] || s.major || ''}</span></div>
+        <div style="font-size:12px;color:#666;margin-top:3px">入学目标 ${tsaEsc(s.target_enrollment) || '—'} ${u ? `<span style="padding:1px 8px;border-radius:10px;background:${u.bg};color:${u.c};margin-left:6px">${u.t}${months != null && months >= 0 ? '·还有' + months + '个月' : ''}</span>` : ''}</div>
+      </div>
+      <div style="display:flex;gap:8px" class="focus-noprint">
+        <button onclick="window.print()" style="font-size:12px;background:#1a3a5a;color:#fff;border:none;border-radius:3px;padding:7px 14px;cursor:pointer;font-family:inherit">🖨 打印 / 存PDF</button>
+        <button onclick="document.getElementById('focusSummary').remove()" style="font-size:12px;background:none;border:1px solid #ccc;border-radius:3px;padding:7px 14px;cursor:pointer;font-family:inherit">关闭</button>
+      </div>
+    </div>
+
+    ${sec('基本信息', `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+      ${kv('等级', lvl[s.level] || s.level)}${kv('属性', s.course_type)}
+      ${kv('出身大学', s.university)}${kv('GPA', s.gpa)}
+      ${kv('毕业时间', s.graduation_date)}${kv('期待入学', s.target_enrollment)}
+      ${kv('赴日', s.japan_arrival)}${kv('来源', s.source)}
+      ${kv('VIP课时', s.vip_hours_total ? (s.vip_hours_used || 0) + '/' + s.vip_hours_total : '')}${kv('研究方向', s.thesis)}
+    </div>`)}
+
+    ${sec('语言成绩', `<div style="display:flex;gap:24px;font-size:13px"><div><span style="color:#888">日语　</span>${tsaEsc(s.japanese_score) || '—'}</div><div><span style="color:#888">英语　</span>${tsaEsc(s.english_score) || '—'}</div></div>`)}
+
+    ${sec('志望校', schoolsHtml)}
+    ${sec('考学进度时间线', tlHtml)}
+    ${sec('面谈记录（' + bks.length + '次）', mtgHtml)}
+    ${contacts.length ? sec('联系确认记录', contactHtml) : ''}
+
+    <div style="margin-top:20px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:8px">唯新教育 · 学生学习概要 · 生成于 ${new Date().toLocaleDateString('zh-CN')}</div>
+  </div>`;
 }
