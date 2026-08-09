@@ -142,6 +142,7 @@ async function boot(){
   ROOMS    = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
   ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
   BOOKINGS = await sbGet('sched_bookings','select=*');
+  { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
   EXISTING = await sbGet('sched_courses','select=id,name,campus,teacher,weekdays,start_time,end_time,start_date,end_date');
 
   el('r_campus').onchange = fillRooms; fillRooms();
