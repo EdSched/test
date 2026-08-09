@@ -75,14 +75,24 @@ el('nav').innerHTML = renderNav('timetable.html');
 let COURSES=[], EVENTS=[], curView='month';
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
-function clsOf(c){
-  if(c.course_type==='共通课') return 'e-common';
-  if(c.category==='语言') return 'e-lang';
-  if(c.category==='学部文科') return 'e-gbunka';
-  if(c.category==='学部理科') return 'e-grika';
-  if(c.category==='大学院文科') return 'e-bunka';
-  if(c.category==='大学院理科') return 'e-rika';
-  return 'e-common';
+const PALETTE=[
+  {bg:'#ddeaf8',fg:'#1a3a6a'},{bg:'#ddf0e0',fg:'#1a4a28'},{bg:'#e8e4f8',fg:'#3a2a7a'},
+  {bg:'#faecd8',fg:'#5a3010'},{bg:'#d8f0ea',fg:'#0a4038'},{bg:'#f8e4dc',fg:'#6a2818'},
+  {bg:'#e6e2f5',fg:'#40308a'},{bg:'#e0eef0',fg:'#1a5060'},{bg:'#f5e6f0',fg:'#7a2860'},
+  {bg:'#eef0da',fg:'#4a5010'},{bg:'#dfe8f5',fg:'#2a3a6a'},{bg:'#ece8e0',fg:'#3a3830'}
+];
+let COLORMAP={};
+function buildColorMap(){
+  COLORMAP={};
+  // 语言课优先归到一起靠前，其余按出现顺序
+  const names=[...new Set(EVENTS.map(e=>e.c.name))];
+  names.forEach((n,i)=>{ COLORMAP[n]=PALETTE[i%PALETTE.length]; });
+}
+function styleOf(name){ const p=COLORMAP[name]||PALETTE[PALETTE.length-1]; return 'background:'+p.bg+';color:'+p.fg; }
+function legendHtml(){
+  const names=[...new Set(EVENTS.map(e=>e.c.name))];
+  if(!names.length) return '';
+  return '<div class="legend">'+names.map(n=>'<div class="lg"><i style="'+styleOf(n)+'"></i>'+esc(n)+'</div>').join('')+'</div>';
 }
 function fmtMD(iso){ const [y,m,d]=iso.split('-').map(Number); return m+'/'+d; }
 function dowIdx(iso){ return new Date(iso+'T00:00:00').getDay(); } // 0=日
@@ -130,19 +140,14 @@ function expand(c){
 function gen(){
   const list=selectedCourses();
   EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
+  buildColorMap();
   render();
 }
 function render(){
   const box=el('cal');
   const title = (el('major').value||el('cat').value||'全部')+' 课程安排';
   let h='<div class="chead"><div><h2>'+esc(title)+'</h2><div class="sub">唯新教育 · '+esc(el('term').value||'全部期')+'</div></div></div>';
-  h+='<div class="legend">'+
-     '<div class="lg"><i class="e-lang"></i>语言</div>'+
-     '<div class="lg"><i class="e-common"></i>共通课</div>'+
-     '<div class="lg"><i class="e-bunka"></i>大学院文科</div>'+
-     '<div class="lg"><i class="e-rika"></i>大学院理科</div>'+
-     '<div class="lg"><i class="e-gbunka"></i>学部文科</div>'+
-     '<div class="lg"><i class="e-grika"></i>学部理科</div></div>';
+  h+= legendHtml();
   h+='<div class="vt"><button class="'+(curView==='month'?'on':'')+'" data-v="month">月历</button>'+
      '<button class="'+(curView==='week'?'on':'')+'" data-v="week">周历</button>'+
      '<button class="'+(curView==='sum'?'on':'')+'" data-v="sum">课程详解</button></div>';
@@ -173,7 +178,7 @@ function buildMonth(){
       const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
       const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
       html+='<div class="mcell"><div class="md '+dc+'">'+d+'</div>'+
-        evs.map(e=>`<div class="ev mini ${clsOf(e.c)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
+        evs.map(e=>`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
     });
     html+='</div></div>';
   });
@@ -207,7 +212,7 @@ function buildCal(){
       html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
       dates.forEach(ds=>{
         const evs=map[ds+'|'+sl]||[];
-        html+='<div class="ecell">'+evs.map(e=>`<div class="ev ${clsOf(e.c)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
+        html+='<div class="ecell">'+evs.map(e=>`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
       });
     });
     html+='</div></div>';
@@ -226,7 +231,7 @@ function buildSummary(){
     const {c,items}=groups[k]; items.sort((a,b)=>a.date.localeCompare(b.date));
     h+='<div class="grid" style="display:block">';
     h+='<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px">'+
-       `<span class="ev ${clsOf(c)}" style="padding:2px 10px">${esc(c.name)}</span>`+
+       `<span class="ev" style="${styleOf(c.name)};padding:2px 10px">${esc(c.name)}</span>`+
        `<span style="font-size:10px;color:var(--tm)">${items.length} 课次 · ${esc(c.teacher||'')} · ${esc(c.mode)}</span></div>`;
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">';
     items.forEach(e=>{ const dc=dowClass(e.date);
