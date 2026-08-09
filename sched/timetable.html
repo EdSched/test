@@ -162,13 +162,18 @@ function baseCourses(){
     return true;
   });
 }
-/* 课程多选标签：只列非语言课 */
+/* 课程多选标签：必须先选期+校区，只列非语言课 */
 function refreshCourseTags(){
+  const box=el('courseTags');
+  if(!el('term').value || !el('campus').value){
+    SELECTED_IDS.clear();
+    box.innerHTML='<span class="muted">请先选择「期」和「校区」，再勾选课程（避免混入其它期/校区的同名课）</span>';
+    return;
+  }
   const cand=baseCourses().filter(c=>c.category!=='语言');
   const seen=new Set(), items=[];
   cand.forEach(c=>{ if(!seen.has(String(c.id))){ seen.add(String(c.id)); items.push(c); } });
   [...SELECTED_IDS].forEach(id=>{ if(!seen.has(id)) SELECTED_IDS.delete(id); });
-  const box=el('courseTags');
   box.innerHTML = items.length ? items.map(c=>{
     const on=SELECTED_IDS.has(String(c.id));
     return `<button type="button" class="ghost sm tagbtn" data-id="${c.id}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${esc(c.name)}</button>`;
@@ -181,7 +186,9 @@ function refreshCourseTags(){
 }
 /* 跨校区滚动多选 */
 function refreshExtraList(){
+  const box=el('x_list');
   const campus=el('x_campus').value, cat=el('x_cat').value, major=el('x_major').value, q=(el('x_q').value||'').trim().toLowerCase();
+  if(!campus){ box.innerHTML='<span class="muted">请先选择校区（再按类别/搜索缩小范围）</span>'; el('x_info').textContent='已附加 '+EXTRA_IDS.size+' 门跨校区课程'; return; }
   let list=COURSES.filter(c=>{
     if(campus && c.campus!==campus) return false;
     if(cat && c.category!==cat) return false;
@@ -189,7 +196,6 @@ function refreshExtraList(){
     if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
     return true;
   }).slice(0,300);
-  const box=el('x_list');
   box.innerHTML = list.length ? list.map(c=>{
     const on=EXTRA_IDS.has(String(c.id));
     return `<div class="xrow" data-id="${c.id}" style="cursor:pointer;padding:5px 8px;border-radius:5px;display:flex;justify-content:space-between;gap:8px;${on?'background:#e8f0ff':''}">`+
