@@ -75,16 +75,19 @@ function slotEnd(t){ // 某 30 分格的结束时刻
 }
 
 /* ---------- 日期/时间工具 ---------- */
-function todayStr(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function weekdayOf(dateStr){ // 1=周一...7=周日
   const d=new Date(dateStr+'T00:00:00'); const w=d.getDay(); return w===0?7:w;
 }
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
+/* 本地时区日期格式化（避免 toISOString 的 UTC 偏移，日本 UTC+9 会差一天） */
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
 /* 日期加减 / 相差天数 */
 function addDays(dateStr, n){
   const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n);
-  return d.toISOString().slice(0,10);
+  return ymd(d);
 }
 function diffDays(a, b){ // b - a，天
   return Math.round((new Date(b+'T00:00:00') - new Date(a+'T00:00:00'))/86400000);
