@@ -75,9 +75,11 @@
     <div class="row">
       <div class="field"><label>模板</label><select id="tpl"><option value="">（不使用）</option></select></div>
       <div class="field"><label>模板名</label><input id="tplLabel" placeholder="如 张三·理科化学"></div>
+      <div class="field"><label>分享后缀（英文，选填）</label><input id="tplSlug" placeholder="如 keiei-q4"></div>
       <div class="field"><label>&nbsp;</label><button class="ghost" id="tplSave">保存为模板</button></div>
       <div class="field"><label>&nbsp;</label><button class="ghost sm" id="tplDel">删除所选模板</button></div>
     </div>
+    <div id="shareBar" class="hidden" style="margin:6px 0 0;font-size:13px"></div>
     <div class="row" style="margin-top:8px">
       <div class="field"><label>期</label><select id="term"></select></div>
       <div class="field"><label>类别</label><select id="cat"></select></div>
@@ -159,7 +161,23 @@ async function boot(){
   el('go').onclick=gen; el('print').onclick=doPrint;
   el('tplSave').onclick=saveTpl; el('tplDel').onclick=delTpl; el('tpl').onchange=loadTpl;
   await fillTplSelect();
-  fillMajors(); fillXMajors(); refreshCourseTags(); refreshExtraList(); gen();
+  fillMajors(); fillXMajors(); refreshCourseTags(); refreshExtraList();
+  // 分享链接 ?t=slug → 只读展示模式
+  const slug=new URLSearchParams(location.search).get('t');
+  if(slug){
+    const t=TEMPLATES.find(x=>x.slug===slug);
+    if(t){ applyTemplate(t); enterShareMode(t); return; }
+    else { el('cal').innerHTML='<div style="padding:20px">未找到该课表链接（后缀：'+esc(slug)+'）。</div>'; return; }
+  }
+  gen();
+}
+/* 只读展示模式：隐藏筛选栏与导航，隐藏讲师名 */
+let SHARE=false;
+function enterShareMode(t){
+  SHARE=true;
+  document.querySelector('.card.filters').style.display='none';
+  const nav=document.getElementById('nav'); if(nav) nav.style.display='none';
+  gen();
 }
 function fillMajors(){
   const cat=el('cat').value;
@@ -246,27 +264,45 @@ async function fillTplSelect(){
 async function saveTpl(){
   const label=el('tplLabel').value.trim();
   if(!label){ toast('请填模板名', false); return; }
-  const rec={ label, term:el('term').value||null, category:el('cat').value||null, major:el('major').value||null,
+  let slug=el('tplSlug').value.trim().toLowerCase();
+  if(slug && !/^[a-z0-9-]+$/.test(slug)){ toast('分享后缀只能用小写字母、数字、连字符', false); return; }
+  const rec={ label, slug:slug||null, term:el('term').value||null, category:el('cat').value||null, major:el('major').value||null,
     campus:el('campus').value||null, with_lang:el('lang').value==='1',
     course_ids:JSON.stringify([...SELECTED_IDS]), extra_ids:JSON.stringify([...EXTRA_IDS]) };
-  try{ await sbInsert('sched_timetable_templates', rec); toast('模板已保存'); el('tplLabel').value=''; await fillTplSelect(); }
-  catch(e){ toast(e.message, false); }
+  try{ await sbInsert('sched_timetable_templates', rec); toast('模板已保存'); el('tplLabel').value=''; el('tplSlug').value=''; await fillTplSelect(); }
+  catch(e){ toast(/duplicate|unique/i.test(e.message)?'该分享后缀已被占用，请换一个':e.message, false); }
 }
+function shareUrl(slug){ return location.origin+location.pathname+'?t='+encodeURIComponent(slug); }
 async function loadTpl(){
-  const id=el('tpl').value; if(!id) return;
+  const id=el('tpl').value;
+  if(!id){ el('shareBar').classList.add('hidden'); return; }
   const t=TEMPLATES.find(x=>String(x.id)===String(id)); if(!t) return;
+  applyTemplate(t);
+  el('tplLabel').value=t.label; el('tplSlug').value=t.slug||'';
+  // 分享链接
+  const bar=el('shareBar');
+  if(t.slug){
+    bar.classList.remove('hidden');
+    bar.innerHTML='🔗 学生/家长分享链接：<a href="'+esc(shareUrl(t.slug))+'" target="_blank">'+esc(shareUrl(t.slug))+'</a> '+
+      '<button class="ghost sm" id="copyShare">复制</button> <span class="muted">（打开为只读课表，无筛选栏、不显示讲师）</span>';
+    el('copyShare').onclick=()=>{ navigator.clipboard.writeText(shareUrl(t.slug)).then(()=>toast('已复制')); };
+  }else{
+    bar.classList.remove('hidden');
+    bar.innerHTML='<span class="muted">此模板未设分享后缀。填「分享后缀」后重新保存为模板即可生成固定链接。</span>';
+  }
+}
+function applyTemplate(t){
   el('term').value=t.term||''; el('cat').value=t.category||''; el('campus').value=t.campus||'';
   el('lang').value=t.with_lang?'1':'0';
   fillMajors(); el('major').value=t.major||'';
   SELECTED_IDS=new Set(JSON.parse(t.course_ids||'[]').map(String));
   EXTRA_IDS=new Set(JSON.parse(t.extra_ids||'[]').map(String));
-  el('tplLabel').value=t.label;
   refreshCourseTags(); refreshExtraList(); gen();
 }
 async function delTpl(){
   const id=el('tpl').value; if(!id){ toast('请先选模板', false); return; }
   if(!confirm('删除该模板？')) return;
-  try{ await sbDelete('sched_timetable_templates', id); toast('已删除'); await fillTplSelect(); }
+  try{ await sbDelete('sched_timetable_templates', id); toast('已删除'); el('shareBar').classList.add('hidden'); await fillTplSelect(); }
   catch(e){ toast(e.message, false); }
 }
 function expand(c){
@@ -340,7 +376,7 @@ function buildMonth(){
       const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
       const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
       html+='<div class="mcell"><div class="md '+dc+'">'+d+'</div>'+
-        evs.map(e=>e.off?`<div class="ev mini off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        evs.map(e=>e.off?`<div class="ev mini off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s}–${e.e} ${esc(e.c.name)}<small>${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
     });
     html+='</div></div>';
   });
@@ -374,7 +410,7 @@ function buildCal(){
       html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
       dates.forEach(ds=>{
         const evs=map[ds+'|'+sl]||[];
-        html+='<div class="ecell">'+evs.map(e=>e.off?`<div class="ev off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        html+='<div class="ecell">'+evs.map(e=>e.off?`<div class="ev off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
       });
     });
     html+='</div></div>';
@@ -394,7 +430,7 @@ function buildSummary(){
     h+='<div class="grid course-block" style="display:block">';
     h+='<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px">'+
        `<span class="ev" style="${styleOf(c.name)};padding:2px 10px">${esc(c.name)}</span>`+
-       `<span style="font-size:10px;color:var(--tm)">${items.length} 课次 · ${esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span></div>`;
+       `<span style="font-size:10px;color:var(--tm)">${items.length} 课次${SHARE?'':' · '+esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span></div>`;
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">';
     items.forEach(e=>{ const dc=dowClass(e.date);
       h+='<div style="padding:8px 16px;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light)'+(e.off?';opacity:.5':'')+'">'+
