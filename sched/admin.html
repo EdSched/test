@@ -328,20 +328,51 @@ function renderCoursesTable(){
     return true;
   });
   el('cf_count').textContent='共 '+list.length+' 门';
-  let h='<table><thead><tr><th>期</th><th>课程</th><th>类别</th><th>专业</th><th>属性</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>人数</th><th>方式</th><th>操作</th></tr></thead><tbody>';
+  let h='<div class="row" style="margin-bottom:8px">'+
+    '<button class="ghost sm" id="cf_dupscan">查找重复</button>'+
+    '<button class="danger sm" id="cf_delsel">删除所选</button>'+
+    '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>';
+  h+='<table><thead><tr><th><input type="checkbox" id="cf_all"></th><th>期</th><th>课程</th><th>类别</th><th>专业</th><th>属性</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>方式</th><th>操作</th></tr></thead><tbody>';
   if(!list.length) h+='<tr><td colspan="13" class="muted">无匹配课程</td></tr>';
-  list.forEach(c=>{ h+=`<tr><td>${esc(c.term||'')}</td><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.major||'')}</td><td>${esc(c.course_type||'')}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
+  list.forEach(c=>{ h+=`<tr data-cid="${c.id}"><td><input type="checkbox" class="cf_ck" value="${c.id}"></td><td>${esc(c.term||'')}</td><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.major||'')}</td><td>${esc(c.course_type||'')}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
     `<td>${weekdaysLabel(c.weekdays)}</td><td>${c.start_time||''}-${c.end_time||''}</td>`+
     `<td>${(c.start_date&&c.end_date)?(c.start_date+' ~ '+c.end_date):'<span class="badge b-warn">缺日期</span>'}</td>`+
-    `<td>${c.est_students||''}</td><td>${esc(c.mode)}</td>`+
+    `<td>${esc(c.mode)}</td>`+
     `<td><button class="sm ghost" data-edc="${c.id}">编辑</button> <button class="sm danger" data-delc="${c.id}">删</button></td></tr>`; });
   h+='</tbody></table>';
   el('coursesTable').innerHTML=h;
+  // 全选 + 计数
+  const updInfo=()=>{ const n=document.querySelectorAll('.cf_ck:checked').length; el('cf_selinfo').textContent=n?('已选 '+n+' 门'):''; };
+  el('cf_all').onchange=()=>{ document.querySelectorAll('.cf_ck').forEach(c=>c.checked=el('cf_all').checked); updInfo(); };
+  document.querySelectorAll('.cf_ck').forEach(c=>c.onchange=updInfo);
+  el('cf_delsel').onclick=async()=>{
+    const ids=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
+    if(!ids.length){ toast('未选择', false); return; }
+    if(!confirm('删除所选 '+ids.length+' 门课程及其教室占用？')) return;
+    for(const id of ids){ const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
+      for(const b of bs) await sbDelete('sched_bookings',b.id); await sbDelete('sched_courses',id); }
+    await reloadAll(); show('courses'); toast('已删除 '+ids.length+' 门');
+  };
+  el('cf_dupscan').onclick=()=>dupScan(list);
   bind('[data-edc]', id=>courseEdit(id));
   bind('[data-delc]', async id=>{ if(!confirm('删除课程及其教室占用？')) return;
     const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
     for(const b of bs) await sbDelete('sched_bookings',b.id);
     await sbDelete('sched_courses',id); await reloadAll(); show('courses'); toast('已删除'); });
+}
+/* 查找重复：同校区+同周几+同时段+同起止日 归为一组，组内>1 即疑似重复 */
+function dupScan(list){
+  const groups={};
+  list.forEach(c=>{ const k=[c.campus,c.weekdays,c.start_time,c.end_time,c.start_date,c.end_date].join('|');
+    (groups[k]=groups[k]||[]).push(c); });
+  const dups=Object.values(groups).filter(g=>g.length>1);
+  if(!dups.length){ toast('未发现重复'); return; }
+  // 高亮并勾选每组“除第一门外”的其余（保留最早一门，其余可删）
+  document.querySelectorAll('.cf_ck').forEach(c=>c.checked=false);
+  let mark=0;
+  dups.forEach(g=>{ g.slice(1).forEach(c=>{ const cb=document.querySelector('.cf_ck[value="'+c.id+'"]');
+    if(cb){ cb.checked=true; mark++; } const tr=document.querySelector('tr[data-cid="'+c.id+'"]'); if(tr) tr.style.background='#fffdf0'; }); });
+  el('cf_selinfo').textContent='发现 '+dups.length+' 组重复，已勾选其中 '+mark+' 门冗余（各组保留最早一门），可点「删除所选」';
 }
 function courseEdit(id){
   const c=COURSES.find(x=>String(x.id)===String(id));
