@@ -869,7 +869,7 @@ function renderEraView(data) {
       </table></div></div>`;
   }
   const out = eraBlock(newRows,'era-new','2026–2027 入学','#2c4a8a') +
-              eraBlock(histRows,'era-hist','2022–2024 実绩','#9a9590');
+              eraBlock(histRows,'era-hist','2022–2025 実绩','#9a9590');
   return out || '<div class="no-data">条件に該当するデータがありません</div>';
 }
 
@@ -881,7 +881,7 @@ function buildTableRow(r, showSubj=false) {
   const jStr = r.jlpt?(r.jlpt_score?`${r.jlpt}-${r.jlpt_score}`:r.jlpt):null;
   const eHi = r.eng_score&&((r.eng_type==='TOEIC'&&r.eng_score>=800)||(r.eng_type==='TOEFL'&&r.eng_score>=90)||(r.eng_type==='IELTS'&&r.eng_score>=7));
   const eCls = (r.eng_type||'').toLowerCase();
-  const eraTag = `<span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'2026–':r.era==='hist'?'往年':r.era}</span>`;
+  const eraTag = `<span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'26–27':r.era==='hist'?'22–25':r.era}</span>`;
   const showS = showSubj || curTrack==='rika';
   return `<tr>
     <td style="font-weight:500">${r.univ||'—'}</td>
@@ -964,7 +964,7 @@ function buildDetailPanelHTML(univ, rows, tier) {
       <td><span class="stag" style="background:${sc.bg};color:${sc.fg}">${SUBJ_LABEL[effSubj]||effSubj||'—'}</span></td>
       <td>${jStr?`<span class="sbadge jlpt${jHi?' hi':''}">${jStr}</span>`:'<span style="color:var(--text-muted)">—</span>'}</td>
       <td>${(r.eng_type&&r.eng_score)?`<span class="sbadge ${eCls}${eHi?' hi':''}">${r.eng_type} ${r.eng_score}</span>`:'<span style="color:var(--text-muted)">—</span>'}</td>
-      <td><span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'2026–':r.era==='hist'?'往年':r.era}</span></td>
+      <td><span class="etag ${r.era==='new'?'etag-new':'etag-hist'}">${r.era==='new'?'26–27':r.era==='hist'?'22–25':r.era}</span></td>
     </tr>`;
   }).join('');
 
