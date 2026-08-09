@@ -1,84 +1,207 @@
 <!DOCTYPE html>
 <html lang="zh"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>学生课表 · 唯新</title>
+<title>课表 · 唯新</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<style>
+:root{
+  --bg:#f7f5f0; --surface:#fff; --border:#e2ded6; --border-light:#ede9e2;
+  --tp:#1a1814; --ts:#5a5650; --tm:#9a9590; --sat:#1a4a8a; --sun:#8a1a2c;
+  --k-lang-bg:#ddeaf8; --k-lang:#1a3a6a;
+  --k-bunka-bg:#ddf0e0; --k-bunka:#1a4a28;
+  --k-rika-bg:#e8e4f8; --k-rika:#3a2a7a;
+  --k-gbunka-bg:#faecd8; --k-gbunka:#5a3010;
+  --k-grika-bg:#d8f0ea; --k-grika:#0a4038;
+  --k-common-bg:#ece8e0; --k-common:#3a3830;
+}
+#cal, #cal *{ font-family:'DM Mono','Noto Serif SC',monospace; }
+#cal{ background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:1.5rem; margin-top:14px; color:var(--tp); }
+#cal .chead{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:14px; }
+#cal h2{ font-family:'Noto Serif SC',serif; font-size:1.4rem; font-weight:600; }
+#cal .sub{ font-size:11px; color:var(--tm); letter-spacing:.05em; text-transform:uppercase; margin-top:3px; }
+#cal .legend{ display:flex; gap:16px; flex-wrap:wrap; margin:0 0 16px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+#cal .lg{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ts); }
+#cal .lg i{ width:9px; height:9px; border-radius:2px; }
+#cal .vt{ display:flex; gap:6px; margin-bottom:16px; }
+#cal .vt button{ padding:4px 14px; border:1px solid var(--border); border-radius:3px; background:transparent; font-family:inherit; font-size:11px; color:var(--tm); cursor:pointer; letter-spacing:.04em; }
+#cal .vt button.on{ border-color:var(--ts); color:var(--tp); background:var(--surface); }
+#cal .wk{ margin-bottom:1.6rem; }
+#cal .wkl{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--tm); margin-bottom:6px; }
+#cal .grid{ border:1px solid var(--border); border-radius:4px; overflow:hidden; background:var(--surface); display:grid; }
+#cal .hcell{ background:var(--bg); padding:6px 4px 5px; text-align:center; border-bottom:1px solid var(--border); border-left:1px solid var(--border-light); }
+#cal .hcell .dow{ display:block; font-size:10px; font-weight:500; letter-spacing:.04em; color:var(--ts); }
+#cal .hcell.sat .dow{ color:var(--sat); } #cal .hcell.sun .dow{ color:var(--sun); }
+#cal .hcell .dt{ display:block; font-size:10px; color:var(--tm); margin-top:1px; }
+#cal .tcell{ background:var(--bg); padding:6px 8px; font-size:10px; color:var(--tm); display:flex; align-items:center; border-top:1px solid var(--border-light); white-space:pre-line; line-height:1.35; border-bottom:1px solid var(--border); }
+#cal .ecell{ padding:4px; border-top:1px solid var(--border-light); border-left:1px solid var(--border-light); display:flex; flex-direction:column; gap:3px; align-items:stretch; justify-content:center; min-height:46px; }
+#cal .ev{ border-radius:3px; padding:3px 5px; font-size:10px; font-weight:500; text-align:center; line-height:1.35; }
+#cal .ev small{ display:block; font-size:9px; opacity:.7; }
+.e-lang{ background:var(--k-lang-bg); color:var(--k-lang); }
+.e-bunka{ background:var(--k-bunka-bg); color:var(--k-bunka); }
+.e-rika{ background:var(--k-rika-bg); color:var(--k-rika); }
+.e-gbunka{ background:var(--k-gbunka-bg); color:var(--k-gbunka); }
+.e-grika{ background:var(--k-grika-bg); color:var(--k-grika); }
+.e-common{ background:var(--k-common-bg); color:var(--k-common); }
+@media print{ #nav,.card.filters,#cal .vt{ display:none !important; } #cal{ border:none; } }
+</style>
 </head><body>
 <div id="nav"></div>
 <div class="wrap">
-  <div class="card">
+  <div class="card filters">
     <div class="row">
       <div class="field"><label>期</label><select id="term"></select></div>
       <div class="field"><label>类别</label><select id="cat"></select></div>
       <div class="field"><label>专业</label><select id="major"></select></div>
-      <div class="field"><label>是否含语言课</label><select id="lang">
-        <option value="1">含语言课（日/英）</option><option value="0">不含</option></select></div>
+      <div class="field"><label>是否含语言课</label><select id="lang"><option value="1">含语言课</option><option value="0">不含</option></select></div>
       <div class="field"><label>校区（可选）</label><select id="campus"></select></div>
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
+      <div class="field"><label>&nbsp;</label><button class="ghost" id="print">打印 / 存PDF</button></div>
     </div>
-    <div class="tip" style="margin:10px 0 0">选定专业后，课表会自动包含该专业的<b>专业课</b> + 同类别的<b>共通课</b>（+ 语言课）。</div>
+    <div class="tip" style="margin:10px 0 0">选定专业后，课表自动包含该专业<b>专业课</b> + 同类别<b>共通课</b>（+语言课）。日历按真实日期展开每一节课。</div>
   </div>
-  <div class="card" id="grid"><div class="muted">选择后生成</div></div>
-  <div class="card" id="list"></div>
+  <div id="cal"></div>
 </div>
+
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
-let COURSES=[];
+let COURSES=[], EVENTS=[], curView='cal';
+const DOW=['周日','周一','周二','周三','周四','周五','周六'];
+
+function clsOf(c){
+  if(c.course_type==='共通课') return 'e-common';
+  if(c.category==='语言') return 'e-lang';
+  if(c.category==='学部文科') return 'e-gbunka';
+  if(c.category==='学部理科') return 'e-grika';
+  if(c.category==='大学院文科') return 'e-bunka';
+  if(c.category==='大学院理科') return 'e-rika';
+  return 'e-common';
+}
+function fmtMD(iso){ const [y,m,d]=iso.split('-').map(Number); return m+'/'+d; }
+function dowIdx(iso){ return new Date(iso+'T00:00:00').getDay(); } // 0=日
+function dowClass(iso){ const w=dowIdx(iso); return w===6?'sat':w===0?'sun':''; }
+function mondayOf(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.toISOString().slice(0,10); }
+
 async function boot(){
   fillSelect(el('cat'), CATEGORIES.filter(c=>c!=='语言'));
   fillSelect(el('campus'), CAMPUSES, v=>v, v=>v, '全部校区');
-  COURSES = await sbGet('sched_courses','select=*&order=start_time');
+  COURSES = await sbGet('sched_courses','select=*');
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
-  el('cat').onchange = fillMajors; fillMajors();
-  el('go').onclick = run; run();
+  el('cat').onchange=fillMajors; fillMajors();
+  el('go').onclick=gen; el('print').onclick=()=>window.print();
+  gen();
 }
 function fillMajors(){
   const cat=el('cat').value;
   const majors=[...new Set(COURSES.filter(c=>c.category===cat && c.major).map(c=>c.major))].sort();
-  fillSelect(el('major'), majors, v=>v, v=>v, majors.length?'全部专业':'（该类别无专业细分）');
+  fillSelect(el('major'), majors, v=>v, v=>v, majors.length?'全部专业':'（无专业细分）');
 }
-function run(){
+function selectedCourses(){
   const term=el('term').value, cat=el('cat').value, major=el('major').value,
         withLang=el('lang').value==='1', campus=el('campus').value;
-  let list = COURSES.filter(c=>{
+  return COURSES.filter(c=>{
     if(term && c.term!==term) return false;
     if(campus && c.campus!==campus && c.mode!=='线上') return false;
-    // 类别匹配：本类别，或语言（含语言时）
-    const isLang = c.category==='语言';
-    if(isLang) return withLang;
+    if(c.category==='语言') return withLang;
     if(c.category!==cat) return false;
-    // 专业匹配：选了专业时 = 该专业的课 + 该类别共通课；没选专业 = 全类别
-    if(major){
-      const isCommon = c.course_type==='共通课';
-      return c.major===major || isCommon;
-    }
+    if(major) return c.major===major || c.course_type==='共通课';
     return true;
   });
-  // 周网格
-  const times=[...new Set(list.map(c=>c.start_time+'-'+c.end_time))].sort();
-  let h='<table><thead><tr><th>时段</th>';
-  for(let d=1; d<=7; d++) h+=`<th>${WEEKDAYS[d]}</th>`;
-  h+='</tr></thead><tbody>';
-  times.forEach(t=>{
-    const [s,e]=t.split('-');
-    h+=`<tr><td class="muted">${t}</td>`;
-    for(let d=1; d<=7; d++){
-      const cs=list.filter(c=>(c.weekdays||'').split(',').map(Number).includes(d) && c.start_time===s && c.end_time===e);
-      h+='<td>'+cs.map(c=>`<div class="blk ${c.category==='语言'?'k-vip':'k-course'}" style="position:static">${esc(c.name)}<small>${esc(c.teacher||'')} ${c.mode==='线上'?'· 线上':'· '+esc(c.campus)}</small></div>`).join('')+'</td>';
-    }
-    h+='</tr>';
+}
+function expand(c){
+  const out=[];
+  if(!c.start_date||!c.end_date||!c.weekdays||!c.start_time) return out;
+  const wds=c.weekdays.split(',').map(Number);
+  let d=c.start_date, guard=0;
+  while(d<=c.end_date && guard++<400){
+    if(wds.includes(weekdayOf(d))) out.push({date:d, s:c.start_time, e:c.end_time, c});
+    d=addDays(d,1);
+  }
+  return out;
+}
+function gen(){
+  const list=selectedCourses();
+  EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
+  render();
+}
+function render(){
+  const box=el('cal');
+  const title = (el('major').value||el('cat').value||'全部')+' 课程安排';
+  let h='<div class="chead"><div><h2>'+esc(title)+'</h2><div class="sub">唯新教育 · '+esc(el('term').value||'全部期')+'</div></div></div>';
+  h+='<div class="legend">'+
+     '<div class="lg"><i class="e-lang"></i>语言</div>'+
+     '<div class="lg"><i class="e-common"></i>共通课</div>'+
+     '<div class="lg"><i class="e-bunka"></i>大学院文科</div>'+
+     '<div class="lg"><i class="e-rika"></i>大学院理科</div>'+
+     '<div class="lg"><i class="e-gbunka"></i>学部文科</div>'+
+     '<div class="lg"><i class="e-grika"></i>学部理科</div></div>';
+  h+='<div class="vt"><button class="'+(curView==='cal'?'on':'')+'" data-v="cal">日历视图</button>'+
+     '<button class="'+(curView==='sum'?'on':'')+'" data-v="sum">课程汇总</button></div>';
+  h+= curView==='cal' ? buildCal() : buildSummary();
+  box.innerHTML=h;
+  box.querySelectorAll('.vt button').forEach(b=>b.onclick=()=>{ curView=b.dataset.v; render(); });
+}
+function buildCal(){
+  if(!EVENTS.length) return '<div class="muted" style="font-family:inherit">该条件下暂无课程</div>';
+  // 全局统一时段行（按开始时间排序）
+  const slots=[...new Set(EVENTS.map(e=>e.s+'–'+e.e))].sort((a,b)=>a.localeCompare(b));
+  // 分周
+  const weeks={};
+  EVENTS.forEach(e=>{ const mon=mondayOf(e.date); (weeks[mon]=weeks[mon]||[]).push(e); });
+  const monKeys=Object.keys(weeks).sort();
+  let html='';
+  monKeys.forEach((mon,wi)=>{
+    const wev=weeks[mon];
+    const dates=[...new Set(wev.map(e=>e.date))].sort();
+    const cols=dates.length;
+    const map={}; wev.forEach(e=>{ const k=e.date+'|'+e.s+'–'+e.e; (map[k]=map[k]||[]).push(e); });
+    const gridCols='84px repeat('+cols+',minmax(0,1fr))';
+    const gridRows='auto repeat('+slots.length+',auto)';
+    html+='<div class="wk"><div class="wkl">第 '+(wi+1)+' 周</div>';
+    html+='<div class="grid" style="grid-template-columns:'+gridCols+';grid-template-rows:'+gridRows+'">';
+    // 表头空角
+    html+='<div class="tcell" style="border-top:none;border-bottom:1px solid var(--border)"></div>';
+    dates.forEach(ds=>{ const dc=dowClass(ds);
+      html+='<div class="hcell '+dc+'"><span class="dow">'+DOW[dowIdx(ds)]+'</span><span class="dt">'+fmtMD(ds)+'</span></div>'; });
+    // 每个时段一行
+    slots.forEach(sl=>{
+      const [ss,ee]=sl.split('–');
+      html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
+      dates.forEach(ds=>{
+        const evs=map[ds+'|'+sl]||[];
+        html+='<div class="ecell">'+evs.map(e=>`<div class="ev ${clsOf(e.c)}">${esc(e.c.name)}<small>${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
+      });
+    });
+    html+='</div></div>';
   });
-  h+='</tbody></table>';
-  el('grid').innerHTML = times.length? h : '<div class="muted">该条件下暂无课程</div>';
-  // 明细含会议链接
-  let l='<h4 style="margin:6px 0">课程明细</h4><table><thead><tr><th>课程</th><th>专业</th><th>属性</th><th>讲师</th><th>周几</th><th>时段</th><th>起止</th><th>方式</th><th>会议链接</th></tr></thead><tbody>';
-  list.forEach(c=>{ l+=`<tr><td>${esc(c.name)}</td><td>${esc(c.major||'')}</td><td>${esc(c.course_type||'')}</td><td>${esc(c.teacher||'')}</td><td>${weekdaysLabel(c.weekdays)}</td>`+
-    `<td>${c.start_time||''}-${c.end_time||''}</td><td>${c.start_date||''}~${c.end_date||''}</td>`+
-    `<td>${esc(c.mode)}</td><td>${c.meeting_link?`<a href="${esc(c.meeting_link)}" target="_blank">进入</a>`:'—'}</td></tr>`; });
-  l+='</tbody></table>';
-  el('list').innerHTML = list.length? l : '';
+  return html;
+}
+function buildSummary(){
+  if(!EVENTS.length) return '<div class="muted" style="font-family:inherit">该条件下暂无课程</div>';
+  // 按课程分组
+  const groups={};
+  EVENTS.forEach(e=>{ (groups[e.c.id]=groups[e.c.id]||{c:e.c,items:[]}).items.push(e); });
+  const keys=Object.keys(groups).sort((a,b)=>{
+    const da=groups[a].items[0].date, db=groups[b].items[0].date; return da.localeCompare(db); });
+  let h='<div style="display:flex;flex-direction:column;gap:1rem">';
+  keys.forEach(k=>{
+    const {c,items}=groups[k]; items.sort((a,b)=>a.date.localeCompare(b.date));
+    h+='<div class="grid" style="display:block">';
+    h+='<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px">'+
+       `<span class="ev ${clsOf(c)}" style="padding:2px 10px">${esc(c.name)}</span>`+
+       `<span style="font-size:10px;color:var(--tm)">${items.length} 课次 · ${esc(c.teacher||'')} · ${esc(c.mode)}</span></div>`;
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">';
+    items.forEach(e=>{ const dc=dowClass(e.date);
+      h+='<div style="padding:8px 16px;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light)">'+
+         `<div style="display:flex;gap:8px;align-items:center"><span style="font-size:12px;font-weight:500">${fmtMD(e.date)}</span>`+
+         `<span style="font-size:11px" class="${dc==='sat'?'':''}">${DOW[dowIdx(e.date)]}</span></div>`+
+         `<div style="font-size:10px;color:var(--tm)">${e.s}–${e.e}</div></div>`; });
+    h+='</div></div>';
+  });
+  h+='</div>'; return h;
 }
 boot();
 </script>
