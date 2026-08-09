@@ -120,7 +120,7 @@ function mondayOf(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()
 
 async function boot(){
   fillSelect(el('cat'), CATEGORIES.filter(c=>c!=='语言'));
-  fillSelect(el('campus'), CAMPUSES, v=>v, v=>v, '全部校区');
+  fillSelect(el('campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
   COURSES = await sbGet('sched_courses','select=*');
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
@@ -155,7 +155,8 @@ function baseCourses(){
         withLang=el('lang').value==='1', campus=el('campus').value;
   return COURSES.filter(c=>{
     if(term && c.term!==term) return false;
-    if(campus && c.campus!==campus && c.mode!=='线上') return false;
+    if(campus==='线上'){ if(c.mode!=='线上') return false; }
+    else if(campus){ if(c.campus!==campus && c.mode!=='线上') return false; }
     if(c.category==='语言') return withLang;
     if(c.category!==cat) return false;
     if(major) return c.major===major || c.course_type==='共通课';
