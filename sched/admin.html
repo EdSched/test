@@ -401,6 +401,12 @@ function courseEdit(id){
     '</div>'+
     '<div class="field" style="margin-top:8px"><label>周几（可多选）</label><div id="e_wd" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>'+
     `<div class="field" style="margin-top:8px"><label>腾讯会议链接</label><input id="e_link" value="${esc(c.meeting_link||'')}"></div>`+
+    '<div class="field" style="margin-top:10px;border-top:1px dashed var(--line);padding-top:10px">'+
+      '<label>休讲日期（撞节假日等，该天不上课、日历标灰）</label>'+
+      '<div id="e_skipList" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>'+
+      '<div class="row"><input type="date" id="e_skipAdd"><button type="button" class="ghost sm" id="e_skipBtn">添加休讲日</button>'+
+      '<button type="button" class="ghost sm" id="e_postpone">按休讲次数顺延结课日</button></div>'+
+      '<div class="muted" id="e_skipInfo" style="font-size:12px;margin-top:4px"></div></div>'+
     '<div id="e_warn" class="hidden" style="margin-top:8px"></div>'+
     '<div style="margin-top:12px"><button id="e_save">保存</button> <button class="ghost" id="e_cancel">取消</button>'+
     '<span class="muted" style="font-size:12px;margin-left:8px">若已排教室，改动周几/时间后建议去「排教室」重排。</span></div></div></div>';
@@ -412,6 +418,27 @@ function courseEdit(id){
     b.onclick=()=>{ const on=b.dataset.on==='1'; b.dataset.on=on?'':'1'; b.style.background=on?'#fff':'var(--blue)'; b.style.color=on?'var(--ink)':'#fff'; };
     box.appendChild(b); }
   el('e_cancel').onclick=()=>el('cEdit').innerHTML='';
+  // 休讲日期管理
+  let SKIP = (c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean).sort();
+  function renderSkip(){
+    el('e_skipList').innerHTML = SKIP.length ? SKIP.map(d=>
+      `<span class="badge b-mute" style="cursor:pointer" data-sk="${d}">${d} ✕</span>`).join('')
+      : '<span class="muted" style="font-size:12px">暂无</span>';
+    el('e_skipList').querySelectorAll('[data-sk]').forEach(x=>x.onclick=()=>{ SKIP=SKIP.filter(d=>d!==x.dataset.sk); renderSkip(); });
+    el('e_skipInfo').textContent = SKIP.length? ('共 '+SKIP.length+' 次休讲；顺延会把结课日按上课周期往后推 '+SKIP.length+' 周') : '';
+  }
+  renderSkip();
+  el('e_skipBtn').onclick=()=>{ const d=el('e_skipAdd').value; if(d && !SKIP.includes(d)){ SKIP.push(d); SKIP.sort(); renderSkip(); } };
+  el('e_postpone').onclick=()=>{
+    const ed=el('e_ed').value; const days=[...box.querySelectorAll('button[data-on="1"]')].map(b=>Number(b.dataset.d));
+    if(!ed){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">请先填结课日</span>'; return; }
+    if(!days.length){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">请先选周几</span>'; return; }
+    // 每休讲一次，结课日顺延到“下一个上课日”，重复 SKIP.length 次
+    let d=ed;
+    for(let i=0;i<SKIP.length;i++){ do{ d=addDays(d,1); }while(!days.includes(weekdayOf(d))); }
+    el('e_ed').value=d;
+    el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-ok">结课日已顺延至 '+d+'（可再手动微调）</span>';
+  };
   el('e_save').onclick=async()=>{
     const days=[...box.querySelectorAll('button[data-on="1"]')].map(b=>b.dataset.d).join(',');
     const st=el('e_st').value, et=el('e_et').value;
@@ -422,9 +449,15 @@ function courseEdit(id){
       mode:el('e_mode').value, start_time:st, end_time:et,
       start_date:el('e_sd').value||null, end_date:el('e_ed').value||null,
       weekdays:days, sessions:el('e_sess').value?Number(el('e_sess').value):null,
-      est_students:el('e_est').value?Number(el('e_est').value):null, meeting_link:el('e_link').value.trim()||null };
-    try{ await sbUpdate('sched_courses', c.id, patch); await reloadAll(); show('courses'); toast('已保存'); }
-    catch(e){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
+      est_students:el('e_est').value?Number(el('e_est').value):null, meeting_link:el('e_link').value.trim()||null,
+      skip_dates: SKIP.length? SKIP.join(',') : null };
+    try{
+      await sbUpdate('sched_courses', c.id, patch);
+      // 若已排教室，同步把休讲日/结课日写进对应占用，看板才准
+      const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
+      for(const b of bs) await sbUpdate('sched_bookings', b.id, {end_date:patch.end_date, note: SKIP.length?('排课自动生成；休讲:'+SKIP.join(',')):'排课自动生成'});
+      await reloadAll(); show('courses'); toast('已保存');
+    }catch(e){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
   };
 }
 
