@@ -140,19 +140,23 @@ function bookingOnDate(b, dateStr){
 }
 
 /* ---------- 冲突检测 ---------- */
-// 教室冲突：同教室、同日期、时间重叠（排除自身）
+// 教室冲突：同教室、同日期、时间重叠（排除自身）；休讲日该课不占教室
 function roomConflicts(bookings, roomId, dateStr, s, e, excludeId){
+  const skip = (typeof window!=='undefined' && window.SKIPMAP) ? window.SKIPMAP : {};
   return bookings.filter(b =>
     b.id !== excludeId && b.status !== 'pending' &&
     String(b.room_id) === String(roomId) &&
-    bookingOnDate(b, dateStr) && overlap(s, e, b.start_time, b.end_time));
+    bookingOnDate(b, dateStr) && overlap(s, e, b.start_time, b.end_time) &&
+    !(b.kind==='course' && b.course_id && skip[b.course_id] && skip[b.course_id].has(dateStr)));
 }
-// 账号冲突：同账号、同日期、时间重叠（排除自身）
+// 账号冲突：同账号、同日期、时间重叠（排除自身）；休讲日该课不占账号
 function accountConflicts(bookings, accId, dateStr, s, e, excludeId){
+  const skip = (typeof window!=='undefined' && window.SKIPMAP) ? window.SKIPMAP : {};
   return bookings.filter(b =>
     b.id !== excludeId && b.status !== 'pending' &&
     b.uses_meeting && String(b.meeting_account_id) === String(accId) &&
-    bookingOnDate(b, dateStr) && overlap(s, e, b.start_time, b.end_time));
+    bookingOnDate(b, dateStr) && overlap(s, e, b.start_time, b.end_time) &&
+    !(b.kind==='course' && b.course_id && skip[b.course_id] && skip[b.course_id].has(dateStr)));
 }
 
 /* ---------- DOM 小工具 ---------- */
