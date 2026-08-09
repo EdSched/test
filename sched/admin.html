@@ -330,11 +330,46 @@ function tabRooms(){
   ROOMS.forEach(r=>{ h+=`<tr><td>${esc(r.campus)}</td><td>${esc(r.floor||'')}</td><td>${esc(r.name)}</td><td>${esc(r.type)}</td>`+
     `<td>${esc(r.size_label||'')}</td><td><input value="${r.capacity}" style="width:60px" data-cap="${r.id}"></td>`+
     `<td>${esc(aname(r.meeting_account_id))}</td>`+
-    `<td><button class="sm ghost" data-savecap="${r.id}">存</button></td></tr>`; });
-  h+='</tbody></table><p class="muted" style="font-size:12px">教室清单已按你的名单初始化；此处可微调容量。新增/删除教室请在数据库或告知我。</p></div>';
+    `<td><button class="sm ghost" data-savecap="${r.id}">存</button> <button class="sm danger" data-delroom="${r.id}">删</button></td></tr>`; });
+  h+='</tbody></table>'+
+    '<h4 style="margin:16px 0 8px">新增教室（临时租用等，可自定义名称）</h4>'+
+    '<div class="row">'+
+      '<div class="field"><label>校区</label><select id="nr_campus"></select></div>'+
+      '<div class="field"><label>楼层（选填）</label><input id="nr_floor" style="width:90px" placeholder="如 3階"></div>'+
+      '<div class="field"><label>名称</label><input id="nr_name" placeholder="如 外借-新宿A"></div>'+
+      '<div class="field"><label>类型</label><select id="nr_type"><option>大课</option><option>VIP</option><option>会议室</option></select></div>'+
+      '<div class="field"><label>大小（大课用）</label><select id="nr_size"><option value="">—</option><option>小</option><option>大</option></select></div>'+
+      '<div class="field"><label>容量</label><input type="number" id="nr_cap" style="width:80px" value="20"></div>'+
+      '<div class="field"><label>建固定会议账号</label><select id="nr_acc"><option value="1">是</option><option value="0">否</option></select></div>'+
+      '<div class="field"><label>&nbsp;</label><button id="nr_add">添加教室</button></div>'+
+    '</div><p class="muted" style="font-size:12px;margin-top:6px">选“建固定会议账号”会同时生成一个绑定该教室的账号（可到会议账号页填登录名/密码）。</p></div>';
   render(h);
+  fillSelect(el('nr_campus'), ['高马','市谷','线上'], v=>v, v=>v);
   bind('[data-savecap]', async id=>{ const v=Number(document.querySelector(`[data-cap="${id}"]`).value);
     await sbUpdate('sched_rooms',id,{capacity:v}); await reloadAll(); toast('已更新'); });
+  bind('[data-delroom]', async id=>{
+    const used=BOOKINGS.some(b=>String(b.room_id)===String(id));
+    if(used && !confirm('该教室已有占用记录，删除教室不会删这些记录。确定删除教室？')) return;
+    if(!used && !confirm('确定删除该教室？')) return;
+    // 删除其绑定的固定账号
+    const r=ROOMS.find(x=>String(x.id)===String(id));
+    if(r&&r.meeting_account_id) await sbDelete('sched_meeting_accounts', r.meeting_account_id).catch(()=>{});
+    await sbDelete('sched_rooms',id); await reloadAll(); show('rooms'); toast('已删除'); });
+  el('nr_add').onclick=async()=>{
+    const name=el('nr_name').value.trim(); if(!name){ toast('请填名称', false); return; }
+    const campus=el('nr_campus').value, type=el('nr_type').value;
+    const rec={ campus, floor:el('nr_floor').value.trim()||null, name, type,
+      size_label: type==='大课'?(el('nr_size').value||null):null,
+      capacity:Number(el('nr_cap').value)||0, sort:999, active:true };
+    try{
+      const ins=await sbInsert('sched_rooms', rec); const room=ins[0];
+      if(el('nr_acc').value==='1'){
+        const a=await sbInsert('sched_meeting_accounts', {name:campus+'-'+name+' 账号', kind:'固定', room_id:room.id, active:true});
+        await sbUpdate('sched_rooms', room.id, {meeting_account_id:a[0].id});
+      }
+      await reloadAll(); show('rooms'); toast('教室已添加');
+    }catch(e){ toast(e.message, false); }
+  };
 }
 
 /* ---------- 会议账号 CRUD ---------- */
