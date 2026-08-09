@@ -81,7 +81,7 @@
     </div>
     <div id="shareBar" class="hidden" style="margin:6px 0 0;font-size:13px"></div>
     <div class="row" style="margin-top:8px">
-      <div class="field"><label>期</label><select id="term"></select></div>
+      <div class="field"><label>期（可多选）</label><div id="termTags" style="display:flex;gap:6px;flex-wrap:wrap;max-width:360px"></div></div>
       <div class="field"><label>类别</label><select id="cat"></select></div>
       <div class="field"><label>专业</label><select id="major"></select></div>
       <div class="field"><label>是否含语言课</label><select id="lang"><option value="1">含语言课</option><option value="0">不含</option></select></div>
@@ -115,7 +115,7 @@
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
-let COURSES=[], EVENTS=[], curView='month', SELECTED_IDS=new Set(), EXTRA_IDS=new Set(), TEMPLATES=[], MULTI=false;
+let COURSES=[], EVENTS=[], curView='month', SELECTED_IDS=new Set(), EXTRA_IDS=new Set(), TEMPLATES=[], MULTI=false, ALL_TERMS=[], SEL_TERMS=new Set();
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
 const PALETTE=[
@@ -146,14 +146,14 @@ async function boot(){
   fillSelect(el('cat'), CATEGORIES.filter(c=>c!=='语言'));
   fillSelect(el('campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
   COURSES = await sbGet('sched_courses','select=*');
-  const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
-  fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
+  ALL_TERMS=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
+  renderTermTags();
   // 跨校区控件
   fillSelect(el('x_campus'), ['高马','市谷','线上'], v=>v, v=>v, '选择校区');
   fillSelect(el('x_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   el('cat').onchange=()=>{ fillMajors(); SELECTED_IDS.clear(); refreshCourseTags(); };
   el('major').onchange=()=>{ SELECTED_IDS.clear(); refreshCourseTags(); };
-  ['term','lang','campus'].forEach(id=>el(id).onchange=refreshCourseTags);
+  ['lang','campus'].forEach(id=>el(id).onchange=refreshCourseTags);
   el('x_campus').onchange=()=>{ fillXMajors(); refreshExtraList(); };
   el('x_cat').onchange=()=>{ fillXMajors(); refreshExtraList(); };
   el('x_major').onchange=refreshExtraList;
@@ -172,18 +172,40 @@ async function boot(){
   gen();
 }
 /* 只读展示模式：隐藏筛选栏与导航，隐藏讲师名 */
-let SHARE=false;
+let SHARE=false, SHARE_TERMS=[], SHARE_VIEW_TERM='';
 function enterShareMode(t){
   SHARE=true;
+  SHARE_TERMS=[...SEL_TERMS]; SHARE_VIEW_TERM='';
   document.querySelector('.card.filters').style.display='none';
   const nav=document.getElementById('nav'); if(nav) nav.style.display='none';
   gen();
+}
+function gen(){
+  let list=selectedCourses();
+  if(SHARE && SHARE_VIEW_TERM) list=list.filter(c=>c.term===SHARE_VIEW_TERM);
+  EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
+  MULTI = new Set(EVENTS.map(e=>e.c.mode==='线上'?'线上':e.c.campus)).size>1;
+  buildColorMap();
+  render();
 }
 function fillMajors(){
   const cat=el('cat').value;
   const majors=[...new Set(COURSES.filter(c=>c.category===cat && c.major).map(c=>c.major))].sort();
   fillSelect(el('major'), majors, v=>v, v=>v, majors.length?'全部专业':'（无专业细分）');
 }
+/* 期多选标签 */
+function renderTermTags(){
+  const box=el('termTags'); if(!box) return;
+  box.innerHTML = ALL_TERMS.length ? ALL_TERMS.map(t=>{
+    const on=SEL_TERMS.has(t);
+    return `<button type="button" class="ghost sm termbtn" data-t="${esc(t)}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${esc(t)}</button>`;
+  }).join('') : '<span class="muted">无</span>';
+  box.querySelectorAll('.termbtn').forEach(b=>b.onclick=()=>{
+    const t=b.dataset.t; if(SEL_TERMS.has(t)) SEL_TERMS.delete(t); else SEL_TERMS.add(t);
+    renderTermTags(); SELECTED_IDS.clear(); refreshCourseTags(); refreshExtraList(); if(SHARE) gen();
+  });
+}
+function termLabel(){ return SEL_TERMS.size? [...SEL_TERMS].join('、') : '全部期'; }
 function fillXMajors(){
   const cat=el('x_cat').value, campus=el('x_campus').value;
   const majors=[...new Set(COURSES.filter(c=>(!cat||c.category===cat)&&(!campus||c.campus===campus)&&c.major).map(c=>c.major))].sort();
@@ -191,10 +213,10 @@ function fillXMajors(){
 }
 /* 主校区候选（未按课程多选过滤） */
 function baseCourses(){
-  const term=el('term').value, cat=el('cat').value, major=el('major').value,
+  const cat=el('cat').value, major=el('major').value,
         withLang=el('lang').value==='1', campus=el('campus').value;
   return COURSES.filter(c=>{
-    if(term && c.term!==term) return false;
+    if(SEL_TERMS.size && !SEL_TERMS.has(c.term)) return false;
     if(campus==='线上'){ if(c.mode!=='线上') return false; }
     else if(campus){ if(c.campus!==campus && c.mode!=='线上') return false; }
     if(c.category==='语言') return withLang;
@@ -206,7 +228,7 @@ function baseCourses(){
 /* 课程多选标签：必须先选期+校区，只列非语言课 */
 function refreshCourseTags(){
   const box=el('courseTags');
-  if(!el('term').value || !el('campus').value){
+  if(!SEL_TERMS.size || !el('campus').value){
     SELECTED_IDS.clear();
     box.innerHTML='<span class="muted">请先选择「期」和「校区」，再勾选课程（避免混入其它期/校区的同名课）</span>';
     return;
@@ -230,7 +252,9 @@ function refreshExtraList(){
   const box=el('x_list');
   const campus=el('x_campus').value, cat=el('x_cat').value, major=el('x_major').value, q=(el('x_q').value||'').trim().toLowerCase();
   if(!campus){ box.innerHTML='<span class="muted">请先选择校区（再按类别/搜索缩小范围）</span>'; el('x_info').textContent='已附加 '+EXTRA_IDS.size+' 门跨校区课程'; return; }
+  if(!SEL_TERMS.size){ box.innerHTML='<span class="muted">请先在上方选择「期」，跨校区课程会只在所选期里查找</span>'; el('x_info').textContent='已附加 '+EXTRA_IDS.size+' 门跨校区课程'; return; }
   let list=COURSES.filter(c=>{
+    if(SEL_TERMS.size && !SEL_TERMS.has(c.term)) return false;
     if(campus && c.campus!==campus) return false;
     if(cat && c.category!==cat) return false;
     if(major && c.major!==major) return false;
@@ -266,7 +290,7 @@ async function saveTpl(){
   if(!label){ toast('请填模板名', false); return; }
   let slug=el('tplSlug').value.trim().toLowerCase();
   if(slug && !/^[a-z0-9-]+$/.test(slug)){ toast('分享后缀只能用小写字母、数字、连字符', false); return; }
-  const rec={ label, slug:slug||null, term:el('term').value||null, category:el('cat').value||null, major:el('major').value||null,
+  const rec={ label, slug:slug||null, term:[...SEL_TERMS].join(',')||null, category:el('cat').value||null, major:el('major').value||null,
     campus:el('campus').value||null, with_lang:el('lang').value==='1',
     course_ids:JSON.stringify([...SELECTED_IDS]), extra_ids:JSON.stringify([...EXTRA_IDS]) };
   try{ await sbInsert('sched_timetable_templates', rec); toast('模板已保存'); el('tplLabel').value=''; el('tplSlug').value=''; await fillTplSelect(); }
@@ -292,7 +316,9 @@ async function loadTpl(){
   }
 }
 function applyTemplate(t){
-  el('term').value=t.term||''; el('cat').value=t.category||''; el('campus').value=t.campus||'';
+  SEL_TERMS = new Set((t.term||'').split(',').map(s=>s.trim()).filter(Boolean));
+  renderTermTags();
+  el('cat').value=t.category||''; el('campus').value=t.campus||'';
   el('lang').value=t.with_lang?'1':'0';
   fillMajors(); el('major').value=t.major||'';
   SELECTED_IDS=new Set(JSON.parse(t.course_ids||'[]').map(String));
@@ -320,18 +346,11 @@ function expand(c){
   }
   return out;
 }
-function gen(){
-  const list=selectedCourses();
-  EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
-  MULTI = new Set(EVENTS.map(e=>e.c.mode==='线上'?'线上':e.c.campus)).size>1;
-  buildColorMap();
-  render();
-}
 function campusTag(c){ return c.mode==='线上'?'线上':(c.campus||''); }
 function doPrint(){
   if(!EVENTS.length){ toast('先生成课表再打印', false); return; }
   const title=(el('major').value||el('cat').value||'全部')+' 课程安排';
-  const meta=[el('term').value||'全部期', el('campus').value||'全部校区'].filter(Boolean).join(' · ');
+  const meta=[termLabel(), el('campus').value||'全部校区'].filter(Boolean).join(' · ');
   const logo = window.TRANSFORM_LOGO ? '<img src="'+window.TRANSFORM_LOGO+'" alt="唯新">' : '';
   el('printHead').innerHTML = logo +
     '<div><div class="pt">唯新教育 · '+esc(title)+'</div>'+
@@ -344,14 +363,20 @@ function doPrint(){
 function render(){
   const box=el('calBody');
   const title = (el('major').value||el('cat').value||'全部')+' 课程安排';
-  let h='<div class="chead"><div><h2>'+esc(title)+'</h2><div class="sub">唯新教育 · '+esc(el('term').value||'全部期')+'</div></div></div>';
+  let h='<div class="chead"><div><h2>'+esc(title)+'</h2><div class="sub">唯新教育 · '+esc(termLabel())+'</div></div></div>';
+  // 分享模式：顶部给期切换小标签（在所选几期之间切）
+  if(SHARE && SHARE_TERMS.length>1){
+    h+='<div class="vt" style="margin-bottom:10px"><button class="'+(SHARE_VIEW_TERM===''?'on':'')+'" data-st="">全部</button>'+
+       SHARE_TERMS.map(t=>'<button class="'+(SHARE_VIEW_TERM===t?'on':'')+'" data-st="'+esc(t)+'">'+esc(t)+'</button>').join('')+'</div>';
+  }
   h+= legendHtml();
   h+='<div class="vt"><button class="'+(curView==='month'?'on':'')+'" data-v="month">月历</button>'+
      '<button class="'+(curView==='week'?'on':'')+'" data-v="week">周历</button>'+
      '<button class="'+(curView==='sum'?'on':'')+'" data-v="sum">课程详解</button></div>';
   h+= curView==='month' ? buildMonth() : curView==='week' ? buildCal() : buildSummary();
   box.innerHTML=h;
-  box.querySelectorAll('.vt button').forEach(b=>b.onclick=()=>{ curView=b.dataset.v; render(); });
+  box.querySelectorAll('.vt button[data-v]').forEach(b=>b.onclick=()=>{ curView=b.dataset.v; render(); });
+  box.querySelectorAll('.vt button[data-st]').forEach(b=>b.onclick=()=>{ SHARE_VIEW_TERM=b.dataset.st; gen(); });
 }
 function buildMonth(){
   if(!EVENTS.length) return '<div class="muted" style="font-family:inherit">该条件下暂无课程</div>';
