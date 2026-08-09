@@ -67,7 +67,11 @@
 #cal .mcell .md.sat{ color:var(--sat); } #cal .mcell .md.sun{ color:var(--sun); }
 #cal .ev.mini{ text-align:left; padding:2px 4px; }
 @media print{ #nav,.card.filters,#cal .vt{ display:none !important; } #cal{ border:none; } }
+/* 分享模式：URL 带 ?t= 时，页面一加载就隐藏后台界面（避免闪现） */
+html.shareview #nav, html.shareview .card.filters{ display:none !important; }
+html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a9590; font-size:13px; display:block; padding:24px; }
 </style>
+<script>if(new URLSearchParams(location.search).get('t')) document.documentElement.classList.add('shareview');</script>
 </head><body>
 <div id="nav"></div>
 <div class="wrap">
