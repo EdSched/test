@@ -125,7 +125,7 @@ async function boot(){
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
   // 跨校区控件
-  fillSelect(el('x_campus'), CAMPUSES, v=>v, v=>v, '选择校区');
+  fillSelect(el('x_campus'), ['高马','市谷','线上'], v=>v, v=>v, '选择校区');
   fillSelect(el('x_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   el('cat').onchange=()=>{ fillMajors(); SELECTED_IDS.clear(); refreshCourseTags(); };
   el('major').onchange=()=>{ SELECTED_IDS.clear(); refreshCourseTags(); };
