@@ -42,6 +42,8 @@ async function boot(){
   try{
     ROOMS    = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
     BOOKINGS = await sbGet('sched_bookings','select=*');
+    const cs = await sbGet('sched_courses','select=id,skip_dates');
+    window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(s=>s.trim())); });
     render();
   }catch(e){ el('boardBox').innerHTML = '<div class="b-err badge">'+esc(e.message)+'</div>'; }
 }
@@ -56,7 +58,8 @@ function render(){
   el('meta').textContent = WEEKDAYS[weekdayOf(date)] + ' · ' + rooms.length + ' 间教室';
 
   // 当天生效的占用（含 pending，pending 用虚线区分）
-  const todays = BOOKINGS.filter(b => bookingOnDate(b, date));
+  const todays = BOOKINGS.filter(b => bookingOnDate(b, date) &&
+    !(b.kind==='course' && b.course_id && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
 
   let h = '<table><thead><tr><th class="tcol">时段</th>';
   rooms.forEach(r => h += `<th>${esc(r.name)}<br><small class="muted">${r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人')}</small></th>`);
