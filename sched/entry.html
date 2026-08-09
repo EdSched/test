@@ -65,6 +65,7 @@
     <div id="tab-room" class="card hidden">
       <div class="grid2">
         <div class="field"><label>用途</label><select id="r_kind">
+          <option value="vip">VIP预约</option>
           <option value="temp">临时使用</option><option value="rental">对外出租</option>
           <option value="meeting">纯开会（借账号）</option></select></div>
         <div class="field"><label>重复方式</label><select id="r_rec">
@@ -145,7 +146,7 @@ async function boot(){
   { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
   EXISTING = await sbGet('sched_courses','select=id,name,campus,teacher,weekdays,start_time,end_time,start_date,end_date');
 
-  el('r_campus').onchange = fillRooms; fillRooms();
+  el('r_campus').onchange = fillRooms; el('r_kind').onchange = fillRooms; fillRooms();
   renderRoomWeekdayToggle();
   el('r_rec').onchange = onRecChange; onRecChange();
   el('r_um').onchange = refreshRoomAcc;
@@ -335,7 +336,8 @@ async function downloadAll(){
   }catch(e){ toast('导出失败：'+e.message, false); }
 }
 function fillRooms(){
-  const rs = ROOMS.filter(r=>r.campus===el('r_campus').value);
+  let rs = ROOMS.filter(r=>r.campus===el('r_campus').value);
+  if(el('r_kind') && el('r_kind').value==='vip') rs = rs.filter(r=>r.type==='VIP'||r.type==='会议室');
   fillSelect(el('r_room'), rs, r=>r.id, r=>r.name+'（'+r.capacity+'人）');
   checkRoomConflict();
   if(typeof refreshRoomAcc==='function') refreshRoomAcc();
