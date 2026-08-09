@@ -94,10 +94,10 @@
     <!-- 我的记录 -->
     <div id="tab-mine" class="card hidden">
       <div class="row" style="margin-bottom:10px">
-        <div class="field"><label>你的名字（用于筛选自己的记录）</label><input id="m_name"></div>
-        <div class="field"><label>&nbsp;</label><button class="ghost sm" id="m_load">刷新</button></div>
+        <div class="field"><label>名字筛选（选填，留空看全部）</label><input id="m_name"></div>
+        <div class="field"><label>&nbsp;</label><button class="ghost sm" id="m_load">刷新/查看全部</button></div>
       </div>
-      <div id="mineBox" class="muted">输入名字后点刷新</div>
+      <div id="mineBox" class="muted">点「刷新/查看全部」列出已录入的教室占用</div>
     </div>
   </div>
 </div>
@@ -129,6 +129,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on');
   ['course','room','mine'].forEach(t=>el('tab-'+t).classList.toggle('hidden', t!==b.dataset.t));
+  if(b.dataset.t==='mine' && typeof loadMine==='function') loadMine();
 });
 
 async function boot(){
@@ -463,18 +464,20 @@ async function saveRoom(){
   finally{ btn.disabled=false; btn.textContent='保存占用'; }
 }
 
-/* 我的记录 */
+/* 最近录入的占用（名字选填，默认列全部非课程占用） */
 async function loadMine(){
   const name=el('m_name').value.trim();
-  if(!name){ el('mineBox').innerHTML='<span class="muted">请输入名字</span>'; return; }
-  const rows = await sbGet('sched_bookings',
-    'select=*&created_by=eq.'+encodeURIComponent(name)+'&order=created_at.desc&limit=50');
+  let q='select=*&kind=in.(vip,temp,rental,meeting)&order=created_at.desc&limit=100';
+  if(name) q='select=*&kind=in.(vip,temp,rental,meeting)&created_by=eq.'+encodeURIComponent(name)+'&order=created_at.desc&limit=100';
+  const rows = await sbGet('sched_bookings', q);
   if(!rows.length){ el('mineBox').innerHTML='<span class="muted">暂无记录</span>'; return; }
   const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r.name);
-  let h='<table><thead><tr><th>日期</th><th>教室</th><th>用途</th><th>时段</th><th>账号</th><th>状态</th></tr></thead><tbody>';
-  rows.forEach(b=>{ h+=`<tr><td>${b.booking_date||''}</td><td>${esc(rmap[b.room_id]||'—')}</td>`+
-    `<td>${KIND_LABEL[b.kind]}</td><td>${b.start_time}-${b.end_time}</td>`+
-    `<td>${b.uses_meeting?'📶':''}</td><td>${b.status==='pending'?'<span class="badge b-warn">待确认</span>':'<span class="badge b-ok">已确认</span>'}</td></tr>`; });
+  let h='<table><thead><tr><th>用途</th><th>教室</th><th>日期/周期</th><th>时段</th><th>使用人</th><th>账号</th><th>状态</th></tr></thead><tbody>';
+  rows.forEach(b=>{
+    const when = b.recurrence==='weekly' ? (WEEKDAYS[b.weekday]+' '+(b.start_date||'')+'~'+(b.end_date||'')) : (b.booking_date||'');
+    h+=`<tr><td>${KIND_LABEL[b.kind]||b.kind}</td><td>${esc(rmap[b.room_id]||'—')}</td><td>${esc(when)}</td>`+
+       `<td>${b.start_time}-${b.end_time}</td><td>${esc(b.user_name||'')}</td><td>${b.uses_meeting?'📶':''}</td>`+
+       `<td>${b.status==='pending'?'<span class="badge b-warn">待确认</span>':'<span class="badge b-ok">已确认</span>'}</td></tr>`; });
   h+='</tbody></table>'; el('mineBox').innerHTML=h;
 }
 </script>
