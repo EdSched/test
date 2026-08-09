@@ -280,19 +280,53 @@ function tabRooms(){
 
 /* ---------- 会议账号 CRUD ---------- */
 function tabAccounts(){
+  const fixed=ACCOUNTS.filter(a=>a.kind==='固定'), temp=ACCOUNTS.filter(a=>a.kind!=='固定');
   let h='<div class="card"><h3 style="margin-top:2px">会议账号</h3>'+
-    '<div class="tip">教室绑定的是<b>腾讯会议账号本身（登录账号+密码）</b>。一个账号可开多个会议，但同一时段只能开一个——这就是系统检测账号冲突的依据。会议链接是跟着课程走的（在课程里填）。</div>'+
-    '<table><thead><tr><th>名称</th><th>类型</th><th>绑定教室</th><th>账号</th><th>密码</th><th></th></tr></thead><tbody>';
-  ACCOUNTS.forEach(a=>{ h+=`<tr><td>${esc(a.name)}</td><td>${esc(a.kind)}</td><td>${esc(rname(a.room_id))}</td>`+
-    `<td><input value="${esc(a.account_no||'')}" style="width:150px" placeholder="登录账号/手机号" data-no="${a.id}"></td>`+
+    '<div class="tip">账号 = 腾讯会议登录账号+密码。一个账号可开多个会议，但<b>同一时段只能开一个</b>，这是系统检测账号冲突的依据。会议链接跟着课程走（课程里填）。</div>'+
+    '<h4 style="margin:10px 0 6px">① 绑定教室的固定账号（大课教室）</h4>'+
+    '<table><thead><tr><th>绑定教室</th><th>名称</th><th>账号</th><th>密码</th><th></th></tr></thead><tbody>';
+  fixed.forEach(a=>{ h+=`<tr><td>${esc(rname(a.room_id))}</td>`+
+    `<td><input value="${esc(a.name||'')}" style="width:150px" data-fname="${a.id}"></td>`+
+    `<td><input value="${esc(a.account_no||'')}" style="width:170px" placeholder="登录账号/手机号" data-no="${a.id}"></td>`+
     `<td><input value="${esc(a.password||'')}" style="width:120px" placeholder="密码" data-pw="${a.id}"></td>`+
-    `<td><button class="sm ghost" data-savea="${a.id}">存</button></td></tr>`; });
-  h+='</tbody></table><p class="muted" style="font-size:12px">固定账号已按教室自动生成，请在此补真实登录账号与密码。</p></div>';
+    `<td><button class="sm ghost" data-savef="${a.id}">存</button></td></tr>`; });
+  h+='</tbody></table>';
+
+  h+='<h4 style="margin:16px 0 6px">② 临时/专用账号（自定义名字识别 + 用途说明）</h4>'+
+    '<table><thead><tr><th>名称</th><th>说明（营业用/谭老师外借…）</th><th>账号</th><th>密码</th><th></th></tr></thead><tbody>';
+  temp.forEach(a=>{ h+=`<tr><td><input value="${esc(a.name||'')}" style="width:130px" placeholder="如 谭老师外借1" data-tname="${a.id}"></td>`+
+    `<td><input value="${esc(a.note||'')}" style="width:180px" placeholder="用途说明" data-tnote="${a.id}"></td>`+
+    `<td><input value="${esc(a.account_no||'')}" style="width:170px" placeholder="登录账号/手机号" data-no="${a.id}"></td>`+
+    `<td><input value="${esc(a.password||'')}" style="width:120px" placeholder="密码" data-pw="${a.id}"></td>`+
+    `<td><button class="sm ghost" data-savet="${a.id}">存</button> <button class="sm danger" data-delt="${a.id}">删</button></td></tr>`; });
+  h+='</tbody></table>'+
+    '<div class="row" style="margin-top:10px">'+
+      '<div class="field"><label>新增名称</label><input id="na_name" placeholder="如 美术 / 营业用"></div>'+
+      '<div class="field"><label>说明</label><input id="na_note" placeholder="用途"></div>'+
+      '<div class="field"><label>账号</label><input id="na_no"></div>'+
+      '<div class="field"><label>密码</label><input id="na_pw"></div>'+
+      '<div class="field"><label>&nbsp;</label><button id="na_add">新增临时账号</button></div>'+
+    '</div></div>';
   render(h);
-  bind('[data-savea]', async id=>{
-    const no=document.querySelector(`[data-no="${id}"]`).value.trim();
-    const pw=document.querySelector(`[data-pw="${id}"]`).value.trim();
-    await sbUpdate('sched_meeting_accounts',id,{account_no:no||null,password:pw||null}); await reloadAll(); toast('已更新'); });
+  bind('[data-savef]', async id=>{
+    await sbUpdate('sched_meeting_accounts',id,{
+      name:document.querySelector(`[data-fname="${id}"]`).value.trim()||null,
+      account_no:document.querySelector(`[data-no="${id}"]`).value.trim()||null,
+      password:document.querySelector(`[data-pw="${id}"]`).value.trim()||null});
+    await reloadAll(); toast('已更新'); });
+  bind('[data-savet]', async id=>{
+    await sbUpdate('sched_meeting_accounts',id,{
+      name:document.querySelector(`[data-tname="${id}"]`).value.trim()||null,
+      note:document.querySelector(`[data-tnote="${id}"]`).value.trim()||null,
+      account_no:document.querySelector(`[data-no="${id}"]`).value.trim()||null,
+      password:document.querySelector(`[data-pw="${id}"]`).value.trim()||null});
+    await reloadAll(); show('accounts'); toast('已更新'); });
+  bind('[data-delt]', async id=>{ if(confirm('删除该临时账号？')){ await sbDelete('sched_meeting_accounts',id); await reloadAll(); show('accounts'); toast('已删除'); } });
+  el('na_add').onclick=async()=>{
+    const name=el('na_name').value.trim(); if(!name){ toast('请填名称', false); return; }
+    await sbInsert('sched_meeting_accounts',{ name, kind:'临时', note:el('na_note').value.trim()||null,
+      account_no:el('na_no').value.trim()||null, password:el('na_pw').value.trim()||null, active:true });
+    await reloadAll(); show('accounts'); toast('已新增'); };
 }
 
 /* ---------- 课程：筛选 + 编辑 + 删除 ---------- */
