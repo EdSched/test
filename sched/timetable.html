@@ -56,6 +56,12 @@
 <div class="wrap">
   <div class="card filters">
     <div class="row">
+      <div class="field"><label>模板</label><select id="tpl"><option value="">（不使用）</option></select></div>
+      <div class="field"><label>模板名</label><input id="tplLabel" placeholder="如 张三·理科化学"></div>
+      <div class="field"><label>&nbsp;</label><button class="ghost" id="tplSave">保存为模板</button></div>
+      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="tplDel">删除所选模板</button></div>
+    </div>
+    <div class="row" style="margin-top:8px">
       <div class="field"><label>期</label><select id="term"></select></div>
       <div class="field"><label>类别</label><select id="cat"></select></div>
       <div class="field"><label>专业</label><select id="major"></select></div>
@@ -64,9 +70,20 @@
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
       <div class="field"><label>&nbsp;</label><button class="ghost" id="print">打印 / 存PDF</button></div>
     </div>
-    <div class="field" style="margin-top:10px"><label>课程（可多选，不选=全部）</label>
+    <div class="field" style="margin-top:10px"><label>课程（可多选，不选=全部；语言课由上面开关控制，不在此列）</label>
       <div id="courseTags" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
-    <div class="tip" style="margin:10px 0 0">选定专业后，课表自动包含该专业<b>专业课</b> + 同类别<b>共通课</b>（+语言课）。可再勾选具体课程生成个性化课表。</div>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--blue)">+ 添加其他校区课程（学生跨校区上课时用）</summary>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>校区</label><select id="x_campus"></select></div>
+        <div class="field"><label>类别</label><select id="x_cat"></select></div>
+        <div class="field"><label>专业</label><select id="x_major"></select></div>
+        <div class="field" style="flex:1;min-width:160px"><label>搜索课名</label><input id="x_q" placeholder="关键词过滤"></div>
+      </div>
+      <div id="x_list" style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
+      <div class="muted" id="x_info" style="font-size:12px;margin-top:6px"></div>
+    </details>
+    <div class="tip" style="margin:10px 0 0">选定专业后，课表自动含该专业<b>专业课</b>+同类别<b>共通课</b>（+语言课）。可勾选具体课程、跨校区加课，并保存为模板复用。</div>
   </div>
   <div id="cal"></div>
 </div>
@@ -74,7 +91,7 @@
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
-let COURSES=[], EVENTS=[], curView='month', SELECTED_NAMES=new Set();
+let COURSES=[], EVENTS=[], curView='month', SELECTED_IDS=new Set(), EXTRA_IDS=new Set(), TEMPLATES=[], MULTI=false;
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
 const PALETTE=[
@@ -107,18 +124,32 @@ async function boot(){
   COURSES = await sbGet('sched_courses','select=*');
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
-  el('cat').onchange=()=>{ fillMajors(); SELECTED_NAMES.clear(); refreshCourseTags(); };
-  el('major').onchange=()=>{ SELECTED_NAMES.clear(); refreshCourseTags(); };
+  // 跨校区控件
+  fillSelect(el('x_campus'), CAMPUSES, v=>v, v=>v, '选择校区');
+  fillSelect(el('x_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
+  el('cat').onchange=()=>{ fillMajors(); SELECTED_IDS.clear(); refreshCourseTags(); };
+  el('major').onchange=()=>{ SELECTED_IDS.clear(); refreshCourseTags(); };
   ['term','lang','campus'].forEach(id=>el(id).onchange=refreshCourseTags);
+  el('x_campus').onchange=()=>{ fillXMajors(); refreshExtraList(); };
+  el('x_cat').onchange=()=>{ fillXMajors(); refreshExtraList(); };
+  el('x_major').onchange=refreshExtraList;
+  el('x_q').oninput=refreshExtraList;
   el('go').onclick=gen; el('print').onclick=()=>window.print();
-  fillMajors(); refreshCourseTags(); gen();
+  el('tplSave').onclick=saveTpl; el('tplDel').onclick=delTpl; el('tpl').onchange=loadTpl;
+  await fillTplSelect();
+  fillMajors(); fillXMajors(); refreshCourseTags(); refreshExtraList(); gen();
 }
 function fillMajors(){
   const cat=el('cat').value;
   const majors=[...new Set(COURSES.filter(c=>c.category===cat && c.major).map(c=>c.major))].sort();
   fillSelect(el('major'), majors, v=>v, v=>v, majors.length?'全部专业':'（无专业细分）');
 }
-/* 未按“课程多选”过滤的候选集 */
+function fillXMajors(){
+  const cat=el('x_cat').value, campus=el('x_campus').value;
+  const majors=[...new Set(COURSES.filter(c=>(!cat||c.category===cat)&&(!campus||c.campus===campus)&&c.major).map(c=>c.major))].sort();
+  fillSelect(el('x_major'), majors, v=>v, v=>v, majors.length?'全部专业':'（无专业）');
+}
+/* 主校区候选（未按课程多选过滤） */
 function baseCourses(){
   const term=el('term').value, cat=el('cat').value, major=el('major').value,
         withLang=el('lang').value==='1', campus=el('campus').value;
@@ -131,24 +162,83 @@ function baseCourses(){
     return true;
   });
 }
+/* 课程多选标签：只列非语言课 */
 function refreshCourseTags(){
-  const names=[...new Set(baseCourses().map(c=>c.name))].sort();
-  [...SELECTED_NAMES].forEach(n=>{ if(!names.includes(n)) SELECTED_NAMES.delete(n); });
+  const cand=baseCourses().filter(c=>c.category!=='语言');
+  const seen=new Set(), items=[];
+  cand.forEach(c=>{ if(!seen.has(String(c.id))){ seen.add(String(c.id)); items.push(c); } });
+  [...SELECTED_IDS].forEach(id=>{ if(!seen.has(id)) SELECTED_IDS.delete(id); });
   const box=el('courseTags');
-  box.innerHTML = names.length ? names.map(n=>{
-    const on=SELECTED_NAMES.has(n);
-    return `<button type="button" class="ghost sm tagbtn" data-n="${esc(n)}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${esc(n)}</button>`;
+  box.innerHTML = items.length ? items.map(c=>{
+    const on=SELECTED_IDS.has(String(c.id));
+    return `<button type="button" class="ghost sm tagbtn" data-id="${c.id}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${esc(c.name)}</button>`;
   }).join('') : '<span class="muted">（无课程）</span>';
   box.querySelectorAll('.tagbtn').forEach(b=>b.onclick=()=>{
-    const n=b.dataset.n;
-    if(SELECTED_NAMES.has(n)) SELECTED_NAMES.delete(n); else SELECTED_NAMES.add(n);
+    const id=b.dataset.id;
+    if(SELECTED_IDS.has(id)) SELECTED_IDS.delete(id); else SELECTED_IDS.add(id);
     refreshCourseTags(); gen();
   });
 }
+/* 跨校区滚动多选 */
+function refreshExtraList(){
+  const campus=el('x_campus').value, cat=el('x_cat').value, major=el('x_major').value, q=(el('x_q').value||'').trim().toLowerCase();
+  let list=COURSES.filter(c=>{
+    if(campus && c.campus!==campus) return false;
+    if(cat && c.category!==cat) return false;
+    if(major && c.major!==major) return false;
+    if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
+    return true;
+  }).slice(0,300);
+  const box=el('x_list');
+  box.innerHTML = list.length ? list.map(c=>{
+    const on=EXTRA_IDS.has(String(c.id));
+    return `<div class="xrow" data-id="${c.id}" style="cursor:pointer;padding:5px 8px;border-radius:5px;display:flex;justify-content:space-between;gap:8px;${on?'background:#e8f0ff':''}">`+
+      `<span>${on?'✓ ':''}${esc(c.name)} <small class="muted">${esc(c.campus)}·${esc(c.major||c.category)}·${weekdaysLabel(c.weekdays)} ${c.start_time||''}-${c.end_time||''}</small></span></div>`;
+  }).join('') : '<span class="muted">无匹配课程</span>';
+  el('x_info').textContent = '已附加 '+EXTRA_IDS.size+' 门跨校区课程';
+  box.querySelectorAll('.xrow').forEach(r=>r.onclick=()=>{
+    const id=r.dataset.id;
+    if(EXTRA_IDS.has(id)) EXTRA_IDS.delete(id); else EXTRA_IDS.add(id);
+    refreshExtraList(); gen();
+  });
+}
 function selectedCourses(){
-  let list=baseCourses();
-  if(SELECTED_NAMES.size) list=list.filter(c=>SELECTED_NAMES.has(c.name));
-  return list;
+  let base=baseCourses(), out;
+  if(SELECTED_IDS.size) out = base.filter(c=> c.category==='语言' || SELECTED_IDS.has(String(c.id)));
+  else out = base.slice();
+  EXTRA_IDS.forEach(id=>{ const c=COURSES.find(x=>String(x.id)===id); if(c && !out.includes(c)) out.push(c); });
+  return out;
+}
+/* 模板 */
+async function fillTplSelect(){
+  TEMPLATES = await sbGet('sched_timetable_templates','select=*&order=created_at.desc');
+  const sel=el('tpl'); sel.innerHTML='<option value="">（不使用）</option>'+TEMPLATES.map(t=>`<option value="${t.id}">${esc(t.label)}</option>`).join('');
+}
+async function saveTpl(){
+  const label=el('tplLabel').value.trim();
+  if(!label){ toast('请填模板名', false); return; }
+  const rec={ label, term:el('term').value||null, category:el('cat').value||null, major:el('major').value||null,
+    campus:el('campus').value||null, with_lang:el('lang').value==='1',
+    course_ids:JSON.stringify([...SELECTED_IDS]), extra_ids:JSON.stringify([...EXTRA_IDS]) };
+  try{ await sbInsert('sched_timetable_templates', rec); toast('模板已保存'); el('tplLabel').value=''; await fillTplSelect(); }
+  catch(e){ toast(e.message, false); }
+}
+async function loadTpl(){
+  const id=el('tpl').value; if(!id) return;
+  const t=TEMPLATES.find(x=>String(x.id)===String(id)); if(!t) return;
+  el('term').value=t.term||''; el('cat').value=t.category||''; el('campus').value=t.campus||'';
+  el('lang').value=t.with_lang?'1':'0';
+  fillMajors(); el('major').value=t.major||'';
+  SELECTED_IDS=new Set(JSON.parse(t.course_ids||'[]').map(String));
+  EXTRA_IDS=new Set(JSON.parse(t.extra_ids||'[]').map(String));
+  el('tplLabel').value=t.label;
+  refreshCourseTags(); refreshExtraList(); gen();
+}
+async function delTpl(){
+  const id=el('tpl').value; if(!id){ toast('请先选模板', false); return; }
+  if(!confirm('删除该模板？')) return;
+  try{ await sbDelete('sched_timetable_templates', id); toast('已删除'); await fillTplSelect(); }
+  catch(e){ toast(e.message, false); }
 }
 function expand(c){
   const out=[];
@@ -164,9 +254,11 @@ function expand(c){
 function gen(){
   const list=selectedCourses();
   EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
+  MULTI = new Set(EVENTS.map(e=>e.c.mode==='线上'?'线上':e.c.campus)).size>1;
   buildColorMap();
   render();
 }
+function campusTag(c){ return c.mode==='线上'?'线上':(c.campus||''); }
 function render(){
   const box=el('cal');
   const title = (el('major').value||el('cat').value||'全部')+' 课程安排';
@@ -202,7 +294,7 @@ function buildMonth(){
       const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
       const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
       html+='<div class="mcell"><div class="md '+dc+'">'+d+'</div>'+
-        evs.map(e=>`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
+        evs.map(e=>`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
     });
     html+='</div></div>';
   });
@@ -236,7 +328,7 @@ function buildCal(){
       html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
       dates.forEach(ds=>{
         const evs=map[ds+'|'+sl]||[];
-        html+='<div class="ecell">'+evs.map(e=>`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
+        html+='<div class="ecell">'+evs.map(e=>`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
       });
     });
     html+='</div></div>';
@@ -256,7 +348,7 @@ function buildSummary(){
     h+='<div class="grid" style="display:block">';
     h+='<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px">'+
        `<span class="ev" style="${styleOf(c.name)};padding:2px 10px">${esc(c.name)}</span>`+
-       `<span style="font-size:10px;color:var(--tm)">${items.length} 课次 · ${esc(c.teacher||'')} · ${esc(c.mode)}</span></div>`;
+       `<span style="font-size:10px;color:var(--tm)">${items.length} 课次 · ${esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span></div>`;
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">';
     items.forEach(e=>{ const dc=dowClass(e.date);
       h+='<div style="padding:8px 16px;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light)">'+
