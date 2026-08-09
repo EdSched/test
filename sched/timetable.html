@@ -46,6 +46,7 @@
 .e-common{ background:var(--k-common-bg); color:var(--k-common); }
 #cal .mcell{ min-height:78px; padding:4px; border-top:1px solid var(--border-light); border-left:1px solid var(--border-light); display:flex; flex-direction:column; gap:2px; overflow:hidden; }
 #cal .mcell.empty{ background:#faf8f4; }
+#cal .ev.off{ background:#eee !important; color:#999 !important; text-decoration:line-through; }
 /* 打印页眉：屏幕隐藏，打印显示 */
 #printHead{ display:none; }
 @media print{
@@ -272,9 +273,13 @@ function expand(c){
   const out=[];
   if(!c.start_date||!c.end_date||!c.weekdays||!c.start_time) return out;
   const wds=c.weekdays.split(',').map(Number);
+  const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
   let d=c.start_date, guard=0;
   while(d<=c.end_date && guard++<400){
-    if(wds.includes(weekdayOf(d))) out.push({date:d, s:c.start_time, e:c.end_time, c});
+    if(wds.includes(weekdayOf(d))){
+      if(skip.has(d)) out.push({date:d, s:c.start_time, e:c.end_time, c, off:true});   // 休讲
+      else out.push({date:d, s:c.start_time, e:c.end_time, c});
+    }
     d=addDays(d,1);
   }
   return out;
@@ -335,7 +340,7 @@ function buildMonth(){
       const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
       const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
       html+='<div class="mcell"><div class="md '+dc+'">'+d+'</div>'+
-        evs.map(e=>`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        evs.map(e=>e.off?`<div class="ev mini off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
     });
     html+='</div></div>';
   });
@@ -369,7 +374,7 @@ function buildCal(){
       html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
       dates.forEach(ds=>{
         const evs=map[ds+'|'+sl]||[];
-        html+='<div class="ecell">'+evs.map(e=>`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        html+='<div class="ecell">'+evs.map(e=>e.off?`<div class="ev off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
       });
     });
     html+='</div></div>';
@@ -392,10 +397,10 @@ function buildSummary(){
        `<span style="font-size:10px;color:var(--tm)">${items.length} 课次 · ${esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span></div>`;
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">';
     items.forEach(e=>{ const dc=dowClass(e.date);
-      h+='<div style="padding:8px 16px;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light)">'+
+      h+='<div style="padding:8px 16px;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light)'+(e.off?';opacity:.5':'')+'">'+
          `<div style="display:flex;gap:8px;align-items:center"><span style="font-size:12px;font-weight:500">${fmtMD(e.date)}</span>`+
          `<span style="font-size:11px" class="${dc==='sat'?'':''}">${DOW[dowIdx(e.date)]}</span></div>`+
-         `<div style="font-size:10px;color:var(--tm)">${e.s}–${e.e}</div></div>`; });
+         `<div style="font-size:10px;color:var(--tm)">${e.off?'休讲/放假':(e.s+'–'+e.e)}</div></div>`; });
     h+='</div></div>';
   });
   h+='</div>'; return h;
