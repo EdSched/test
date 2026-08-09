@@ -334,7 +334,7 @@ function tabRooms(){
   h+='</tbody></table>'+
     '<h4 style="margin:16px 0 8px">新增教室（临时租用等，可自定义名称）</h4>'+
     '<div class="row">'+
-      '<div class="field"><label>校区</label><select id="nr_campus"></select></div>'+
+      '<div class="field"><label>校区/地点</label><input id="nr_campus" style="width:120px" placeholder="如 高马 / 市谷 / 借XX学校"></div>'+
       '<div class="field"><label>楼层（选填）</label><input id="nr_floor" style="width:90px" placeholder="如 3階"></div>'+
       '<div class="field"><label>名称</label><input id="nr_name" placeholder="如 外借-新宿A"></div>'+
       '<div class="field"><label>类型</label><select id="nr_type"><option>大课</option><option>VIP</option><option>会议室</option></select></div>'+
@@ -344,7 +344,6 @@ function tabRooms(){
       '<div class="field"><label>&nbsp;</label><button id="nr_add">添加教室</button></div>'+
     '</div><p class="muted" style="font-size:12px;margin-top:6px">选“建固定会议账号”会同时生成一个绑定该教室的账号（可到会议账号页填登录名/密码）。</p></div>';
   render(h);
-  fillSelect(el('nr_campus'), ['高马','市谷','线上'], v=>v, v=>v);
   bind('[data-savecap]', async id=>{ const v=Number(document.querySelector(`[data-cap="${id}"]`).value);
     await sbUpdate('sched_rooms',id,{capacity:v}); await reloadAll(); toast('已更新'); });
   bind('[data-delroom]', async id=>{
@@ -357,7 +356,8 @@ function tabRooms(){
     await sbDelete('sched_rooms',id); await reloadAll(); show('rooms'); toast('已删除'); });
   el('nr_add').onclick=async()=>{
     const name=el('nr_name').value.trim(); if(!name){ toast('请填名称', false); return; }
-    const campus=el('nr_campus').value, type=el('nr_type').value;
+    const campus=el('nr_campus').value.trim(); if(!campus){ toast('请填校区/地点', false); return; }
+    const type=el('nr_type').value;
     const rec={ campus, floor:el('nr_floor').value.trim()||null, name, type,
       size_label: type==='大课'?(el('nr_size').value||null):null,
       capacity:Number(el('nr_cap').value)||0, sort:999, active:true };
