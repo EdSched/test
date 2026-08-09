@@ -234,7 +234,10 @@ function assignForm(courseId){
       if(noDate) await sbUpdate('sched_courses', c.id, {start_date:sd, end_date:ed});
       for(const o of existing) await sbDelete('sched_bookings',o.id);
       await sbInsert('sched_bookings',recs);
-      await reloadAll(); show('assign'); toast('已生成整学期占用（'+recs.length+' 天/周）');
+      await reloadAll();
+      el('asForm').innerHTML='';        // 关闭弹窗
+      if(el('assignTable')) renderAssignTable();  // 只刷新表格，保留筛选
+      toast('已生成整学期占用（'+recs.length+' 天/周）');
     }catch(e){ el('as_warn').className=''; el('as_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
   };
 }
