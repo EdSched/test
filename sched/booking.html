@@ -25,6 +25,19 @@
     </div>
     <div id="dateWarn"></div>
   </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <b>当天各教室占用一览</b>
+      <span class="legend" style="margin:0">
+        <span><i style="background:var(--course)"></i>排课</span>
+        <span><i style="background:var(--vip)"></i>VIP</span>
+        <span><i style="background:var(--temp)"></i>临时</span>
+        <span><i style="background:var(--rental)"></i>出租</span>
+        <span><i style="background:#f2faf4;border:1px solid #cde8d5"></i>空</span>
+      </span>
+    </div>
+    <div class="board" id="gridBox"><div class="muted">选校区+日期后显示</div></div>
+  </div>
   <div class="card" id="resBox"><div class="muted">设定条件后点「查空闲」</div></div>
 </div>
 
@@ -62,11 +75,45 @@ async function boot(){
   BOOKINGS = await sbGet('sched_bookings','select=*');
   { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
   el('find').onclick = find;
-  el('date').onchange = checkAdvance;
+  el('date').onchange = ()=>{ checkAdvance(); renderGrid(); };
+  el('campus').onchange = renderGrid;
   el('m_cancel').onclick = ()=>el('modal').classList.add('hidden');
   el('m_um').onchange = refreshAcc;
   el('m_submit').onclick = submit;
-  checkAdvance();
+  checkAdvance(); renderGrid();
+}
+/* 当天教室×时段可视化网格（直观看空） */
+function renderGrid(){
+  const campus=el('campus').value, date=el('date').value;
+  const rooms=ROOMS.filter(r=>r.campus===campus);
+  const box=el('gridBox');
+  if(!campus||!date||!rooms.length){ box.innerHTML='<div class="muted">该校区暂无教室</div>'; return; }
+  const todays=BOOKINGS.filter(b=>bookingOnDate(b,date) &&
+    !(b.kind==='course'&&b.course_id&&window.SKIPMAP&&window.SKIPMAP[b.course_id]&&window.SKIPMAP[b.course_id].has(date)));
+  const covered=(rid,slot)=>todays.some(b=>String(b.room_id)===String(rid)&&b.start_time<=slot&&slot<b.end_time);
+  let h='<table><thead><tr><th class="tcol">时段</th>';
+  rooms.forEach(r=>h+=`<th>${esc(r.name)}<br><small class="muted">${r.capacity}人</small></th>`);
+  h+='</tr></thead><tbody>';
+  SLOTS.forEach((slot,i)=>{
+    const prev=i>0?SLOTS[i-1]:null;
+    h+=`<tr><td class="tcol">${slot}</td>`;
+    rooms.forEach(r=>{
+      const starting=todays.filter(b=>String(b.room_id)===String(r.id)&&b.start_time===slot);
+      const isC=covered(r.id,slot);
+      const spanStart=!isC&&(!prev||covered(r.id,prev));
+      h+='<td class="cell'+(isC?'':' freecell')+'">';
+      if(spanStart) h+='<span class="freetag">空</span>';
+      starting.forEach(b=>{
+        const idx=t=>SLOTS.indexOf(t); let a=idx(b.start_time),z=idx(b.end_time); if(z<0)z=SLOTS.length; if(a<0)a=0;
+        const rows=Math.max(1,z-a);
+        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*22-3}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${b.start_time}-${b.end_time}</small></div>`;
+      });
+      h+='</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  box.innerHTML=h;
 }
 function advanceOk(){ return diffDays(todayStr(), el('date').value) >= MIN_ADVANCE; }
 function checkAdvance(){
@@ -164,7 +211,7 @@ async function submit(){
     status:'pending', created_by:user, note: el('m_note').value.trim()||null };
   const sb=el('m_submit'); if(sb.disabled) return; sb.disabled=true; sb.textContent='提交中…';
   try{ const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
-    el('modal').classList.add('hidden'); toast('已提交，等待管理员确认'); find();
+    el('modal').classList.add('hidden'); toast('已提交，等待管理员确认'); find(); renderGrid();
   }catch(err){ warn(esc(err.message)); }
   finally{ sb.disabled=false; sb.textContent='提交预约'; }
 }
