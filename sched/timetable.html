@@ -64,7 +64,9 @@
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
       <div class="field"><label>&nbsp;</label><button class="ghost" id="print">打印 / 存PDF</button></div>
     </div>
-    <div class="tip" style="margin:10px 0 0">选定专业后，课表自动包含该专业<b>专业课</b> + 同类别<b>共通课</b>（+语言课）。日历按真实日期展开每一节课。</div>
+    <div class="field" style="margin-top:10px"><label>课程（可多选，不选=全部）</label>
+      <div id="courseTags" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+    <div class="tip" style="margin:10px 0 0">选定专业后，课表自动包含该专业<b>专业课</b> + 同类别<b>共通课</b>（+语言课）。可再勾选具体课程生成个性化课表。</div>
   </div>
   <div id="cal"></div>
 </div>
@@ -72,7 +74,7 @@
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
-let COURSES=[], EVENTS=[], curView='month';
+let COURSES=[], EVENTS=[], curView='month', SELECTED_NAMES=new Set();
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
 const PALETTE=[
@@ -105,16 +107,19 @@ async function boot(){
   COURSES = await sbGet('sched_courses','select=*');
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('term'), terms, v=>v, v=>v, '全部期');
-  el('cat').onchange=fillMajors; fillMajors();
+  el('cat').onchange=()=>{ fillMajors(); SELECTED_NAMES.clear(); refreshCourseTags(); };
+  el('major').onchange=()=>{ SELECTED_NAMES.clear(); refreshCourseTags(); };
+  ['term','lang','campus'].forEach(id=>el(id).onchange=refreshCourseTags);
   el('go').onclick=gen; el('print').onclick=()=>window.print();
-  gen();
+  fillMajors(); refreshCourseTags(); gen();
 }
 function fillMajors(){
   const cat=el('cat').value;
   const majors=[...new Set(COURSES.filter(c=>c.category===cat && c.major).map(c=>c.major))].sort();
   fillSelect(el('major'), majors, v=>v, v=>v, majors.length?'全部专业':'（无专业细分）');
 }
-function selectedCourses(){
+/* 未按“课程多选”过滤的候选集 */
+function baseCourses(){
   const term=el('term').value, cat=el('cat').value, major=el('major').value,
         withLang=el('lang').value==='1', campus=el('campus').value;
   return COURSES.filter(c=>{
@@ -125,6 +130,25 @@ function selectedCourses(){
     if(major) return c.major===major || c.course_type==='共通课';
     return true;
   });
+}
+function refreshCourseTags(){
+  const names=[...new Set(baseCourses().map(c=>c.name))].sort();
+  [...SELECTED_NAMES].forEach(n=>{ if(!names.includes(n)) SELECTED_NAMES.delete(n); });
+  const box=el('courseTags');
+  box.innerHTML = names.length ? names.map(n=>{
+    const on=SELECTED_NAMES.has(n);
+    return `<button type="button" class="ghost sm tagbtn" data-n="${esc(n)}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${esc(n)}</button>`;
+  }).join('') : '<span class="muted">（无课程）</span>';
+  box.querySelectorAll('.tagbtn').forEach(b=>b.onclick=()=>{
+    const n=b.dataset.n;
+    if(SELECTED_NAMES.has(n)) SELECTED_NAMES.delete(n); else SELECTED_NAMES.add(n);
+    refreshCourseTags(); gen();
+  });
+}
+function selectedCourses(){
+  let list=baseCourses();
+  if(SELECTED_NAMES.size) list=list.filter(c=>SELECTED_NAMES.has(c.name));
+  return list;
 }
 function expand(c){
   const out=[];
