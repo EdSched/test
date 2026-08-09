@@ -93,6 +93,7 @@ function tabAssign(){
     '<div class="tip">线下课需分配容量足够的教室；纯线上课不占教室，只需指定会议账号。分配后自动生成整学期每周占用。</div>'+
     '<div class="row" style="margin-bottom:10px">'+
       '<div class="field"><label>搜索课程名/讲师</label><input id="af_q" placeholder="关键词"></div>'+
+      '<div class="field"><label>期</label><select id="af_term"></select></div>'+
       '<div class="field"><label>类别（专业/学科）</label><select id="af_cat"></select></div>'+
       '<div class="field"><label>校区</label><select id="af_campus"></select></div>'+
       '<div class="field"><label>状态</label><select id="af_status">'+
@@ -100,18 +101,22 @@ function tabAssign(){
       '<div class="field"><label>&nbsp;</label><span class="muted" id="af_count"></span></div>'+
     '</div><div id="assignTable"></div></div><div id="asForm"></div>';
   render(h);
+  const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
+  fillSelect(el('af_term'), terms, v=>v, v=>v, '全部期');
+  if(terms.length) el('af_term').value=terms[0]; // 默认最新期，过去的期不显示
   fillSelect(el('af_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   fillSelect(el('af_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
-  ['af_q','af_cat','af_campus','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=renderAssignTable);
+  ['af_q','af_term','af_cat','af_campus','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=renderAssignTable);
   renderAssignTable();
 }
 function renderAssignTable(){
   const q=(el('af_q').value||'').trim().toLowerCase();
-  const cat=el('af_cat').value, campus=el('af_campus').value, status=el('af_status').value;
+  const term=el('af_term').value, cat=el('af_cat').value, campus=el('af_campus').value, status=el('af_status').value;
   const assigned=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
   let list=COURSES.filter(c=>{
     const done=assigned.has(String(c.id));
     if(q && !((c.name||'').toLowerCase().includes(q) || (c.teacher||'').toLowerCase().includes(q))) return false;
+    if(term && c.term!==term) return false;
     if(cat && c.category!==cat) return false;
     if(campus && c.campus!==campus) return false;
     if(status==='todo' && done) return false;
