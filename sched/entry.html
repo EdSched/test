@@ -423,6 +423,8 @@ function checkRoomConflict(){
 }
 /* 保存占用 */
 async function saveRoom(){
+  const btn=el('r_save');
+  if(btn.disabled) return;                 // 防重复点击
   const s=el('r_st').value, e=el('r_et').value;
   if(e<=s){ toast('结束时间需晚于开始', false); return; }
   if(!el('r_room').value){ toast('请选择教室', false); return; }
@@ -446,10 +448,17 @@ async function saveRoom(){
     if(!el('r_date').value){ toast('请填日期', false); return; }
     recs = [Object.assign({}, base, {recurrence:'once', booking_date:el('r_date').value})];
   }
+  btn.disabled=true; btn.textContent='保存中…';
   try{
     const ins = await sbInsert('sched_bookings', recs);
-    ins.forEach(x=>BOOKINGS.push(x)); toast('占用已保存（'+ins.length+' 条）'); checkRoomConflict();
+    ins.forEach(x=>BOOKINGS.push(x));
+    toast('占用已保存（'+ins.length+' 条）');
+    // 清空本次输入，避免误以为没存又再点一次
+    el('r_user').value=''; el('r_note').value='';
+    el('r_conf').className='hidden'; el('r_near').innerHTML='';
+    refreshRoomAcc();
   }catch(err){ toast(err.message, false); }
+  finally{ btn.disabled=false; btn.textContent='保存占用'; }
 }
 
 /* 我的记录 */
