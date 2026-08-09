@@ -162,9 +162,11 @@ async function submit(){
     recurrence:'once', booking_date:date, start_time:s, end_time:e,
     uses_meeting:um, meeting_account_id:accId,
     status:'pending', created_by:user, note: el('m_note').value.trim()||null };
+  const sb=el('m_submit'); if(sb.disabled) return; sb.disabled=true; sb.textContent='提交中…';
   try{ const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
     el('modal').classList.add('hidden'); toast('已提交，等待管理员确认'); find();
   }catch(err){ warn(esc(err.message)); }
+  finally{ sb.disabled=false; sb.textContent='提交预约'; }
 }
 boot();
 </script>
