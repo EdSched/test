@@ -18,6 +18,7 @@
       <button class="on" data-t="pending">待确认预约 <span id="pendN" class="badge b-warn"></span></button>
       <button data-t="assign">排教室</button>
       <button data-t="conflict">冲突检查</button>
+      <button data-t="occupy">教室占用</button>
       <button data-t="rooms">教室</button>
       <button data-t="accounts">会议账号</button>
       <button data-t="courses">课程</button>
@@ -62,7 +63,7 @@ const aname=id=>{ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>show(b.dataset.t));
 function show(t){
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
-  ({pending:tabPending,assign:tabAssign,conflict:tabConflict,rooms:tabRooms,
+  ({pending:tabPending,assign:tabAssign,conflict:tabConflict,occupy:tabOccupy,rooms:tabRooms,
     accounts:tabAccounts,courses:tabCourses,codes:tabCodes}[t])();
 }
 
@@ -271,6 +272,56 @@ function runConflict(){
   h+= accIssues.length? '<table><thead><tr><th>账号</th><th>占用A</th><th>占用B</th></tr></thead><tbody>'+accIssues.map(x=>line(...x)).join('')+'</tbody></table>'
     : '<div class="badge b-ok">无账号冲突</div>';
   el('cf_res').innerHTML=h;
+}
+
+/* ---------- 教室占用总表（临时/VIP/出租/开会） ---------- */
+function tabOccupy(){
+  let h='<div class="card"><h3 style="margin-top:2px">教室占用（非课程：临时/VIP/出租/开会）</h3>'+
+    '<div class="row" style="margin-bottom:10px">'+
+      '<div class="field"><label>用途</label><select id="oc_kind"><option value="">全部</option>'+
+        '<option value="vip">VIP</option><option value="temp">临时使用</option><option value="rental">对外出租</option><option value="meeting">开会</option></select></div>'+
+      '<div class="field"><label>校区</label><select id="oc_campus"></select></div>'+
+      '<div class="field"><label>起始日期（含之后）</label><input type="date" id="oc_from" value="'+todayStr()+'"></div>'+
+      '<div class="field"><label>搜索使用人/备注</label><input id="oc_q" placeholder="关键词"></div>'+
+      '<div class="field"><label>&nbsp;</label><span class="muted" id="oc_count"></span></div>'+
+    '</div><div id="occupyTable"></div></div>';
+  render(h);
+  fillSelect(el('oc_campus'), ['高马','市谷'], v=>v, v=>v, '全部校区');
+  ['oc_kind','oc_campus','oc_from','oc_q'].forEach(id=>el(id)[id==='oc_q'?'oninput':'onchange']=renderOccupyTable);
+  renderOccupyTable();
+}
+function renderOccupyTable(){
+  const kind=el('oc_kind').value, campus=el('oc_campus').value, from=el('oc_from').value, q=(el('oc_q').value||'').trim().toLowerCase();
+  const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r);
+  let list=BOOKINGS.filter(b=>b.kind!=='course').filter(b=>{
+    if(kind && b.kind!==kind) return false;
+    if(campus){ const r=rmap[b.room_id]; if(!r||r.campus!==campus) return false; }
+    // 日期：once 看 booking_date；weekly 看 end_date 是否在 from 之后
+    if(from){ const d = b.recurrence==='weekly'? (b.end_date||b.start_date) : b.booking_date; if(d && d<from) return false; }
+    if(q && !((b.user_name||'').toLowerCase().includes(q)||(b.note||'').toLowerCase().includes(q)||(b.created_by||'').toLowerCase().includes(q))) return false;
+    return true;
+  }).sort((a,b)=>{
+    const da=a.booking_date||a.start_date||'', db=b.booking_date||b.start_date||''; return da.localeCompare(db);
+  });
+  el('oc_count').textContent='共 '+list.length+' 条';
+  let h='<table><thead><tr><th>用途</th><th>校区</th><th>教室</th><th>日期/周期</th><th>时段</th><th>使用人</th><th>账号</th><th>状态</th><th>备注</th><th></th></tr></thead><tbody>';
+  if(!list.length) h+='<tr><td colspan="10" class="muted">无匹配记录</td></tr>';
+  list.forEach(b=>{
+    const r=rmap[b.room_id];
+    const when = b.recurrence==='weekly'
+      ? (weekdaysLabel(String(b.weekday))+' '+(b.start_date||'')+'~'+(b.end_date||''))
+      : (b.booking_date||'');
+    h+=`<tr><td>${KIND_LABEL[b.kind]||esc(b.kind)}</td><td>${esc(r?r.campus:'')}</td><td>${esc(r?r.name:(b.room_id?('#'+b.room_id):'—'))}</td>`+
+      `<td>${esc(when)}</td><td>${b.start_time}-${b.end_time}</td><td>${esc(b.user_name||'')}</td>`+
+      `<td>${b.uses_meeting?('📶 '+esc(aname(b.meeting_account_id))):'—'}</td>`+
+      `<td>${b.status==='pending'?'<span class="badge b-warn">待确认</span>':'<span class="badge b-ok">已确认</span>'}</td>`+
+      `<td class="muted">${esc(b.note||'')}</td>`+
+      `<td><button class="sm danger" data-delo="${b.id}">删</button></td></tr>`;
+  });
+  h+='</tbody></table>';
+  el('occupyTable').innerHTML=h;
+  bind('[data-delo]', async id=>{ if(!confirm('删除该占用记录？')) return;
+    await sbDelete('sched_bookings',id); await reloadAll(); if(el('occupyTable')) renderOccupyTable(); toast('已删除'); });
 }
 
 /* ---------- 教室 CRUD ---------- */
