@@ -44,6 +44,11 @@
 .e-gbunka{ background:var(--k-gbunka-bg); color:var(--k-gbunka); }
 .e-grika{ background:var(--k-grika-bg); color:var(--k-grika); }
 .e-common{ background:var(--k-common-bg); color:var(--k-common); }
+#cal .mcell{ min-height:78px; padding:4px; border-top:1px solid var(--border-light); border-left:1px solid var(--border-light); display:flex; flex-direction:column; gap:2px; overflow:hidden; }
+#cal .mcell.empty{ background:#faf8f4; }
+#cal .mcell .md{ font-size:10px; color:var(--tm); font-weight:500; }
+#cal .mcell .md.sat{ color:var(--sat); } #cal .mcell .md.sun{ color:var(--sun); }
+#cal .ev.mini{ text-align:left; padding:2px 4px; }
 @media print{ #nav,.card.filters,#cal .vt{ display:none !important; } #cal{ border:none; } }
 </style>
 </head><body>
@@ -67,7 +72,7 @@
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
-let COURSES=[], EVENTS=[], curView='cal';
+let COURSES=[], EVENTS=[], curView='month';
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
 function clsOf(c){
@@ -82,7 +87,7 @@ function clsOf(c){
 function fmtMD(iso){ const [y,m,d]=iso.split('-').map(Number); return m+'/'+d; }
 function dowIdx(iso){ return new Date(iso+'T00:00:00').getDay(); } // 0=日
 function dowClass(iso){ const w=dowIdx(iso); return w===6?'sat':w===0?'sun':''; }
-function mondayOf(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.toISOString().slice(0,10); }
+function mondayOf(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 async function boot(){
   fillSelect(el('cat'), CATEGORIES.filter(c=>c!=='语言'));
@@ -138,11 +143,41 @@ function render(){
      '<div class="lg"><i class="e-rika"></i>大学院理科</div>'+
      '<div class="lg"><i class="e-gbunka"></i>学部文科</div>'+
      '<div class="lg"><i class="e-grika"></i>学部理科</div></div>';
-  h+='<div class="vt"><button class="'+(curView==='cal'?'on':'')+'" data-v="cal">日历视图</button>'+
-     '<button class="'+(curView==='sum'?'on':'')+'" data-v="sum">课程汇总</button></div>';
-  h+= curView==='cal' ? buildCal() : buildSummary();
+  h+='<div class="vt"><button class="'+(curView==='month'?'on':'')+'" data-v="month">月历</button>'+
+     '<button class="'+(curView==='week'?'on':'')+'" data-v="week">周历</button>'+
+     '<button class="'+(curView==='sum'?'on':'')+'" data-v="sum">课程详解</button></div>';
+  h+= curView==='month' ? buildMonth() : curView==='week' ? buildCal() : buildSummary();
   box.innerHTML=h;
   box.querySelectorAll('.vt button').forEach(b=>b.onclick=()=>{ curView=b.dataset.v; render(); });
+}
+function buildMonth(){
+  if(!EVENTS.length) return '<div class="muted" style="font-family:inherit">该条件下暂无课程</div>';
+  const byDate={}; EVENTS.forEach(e=>{ (byDate[e.date]=byDate[e.date]||[]).push(e); });
+  const months=[...new Set(EVENTS.map(e=>e.date.slice(0,7)))].sort();
+  let html='';
+  months.forEach(mon=>{
+    const [y,m]=mon.split('-').map(Number);
+    const startCol=(new Date(y,m-1,1).getDay()+6)%7;   // 0=周一
+    const days=new Date(y,m,0).getDate();
+    html+='<div class="wk"><div class="wkl">'+y+'年 '+m+'月</div>';
+    html+='<div class="grid" style="grid-template-columns:repeat(7,minmax(0,1fr))">';
+    ['周一','周二','周三','周四','周五','周六','周日'].forEach((d,i)=>{
+      const cls=i===5?'sat':i===6?'sun':'';
+      html+='<div class="hcell '+cls+'"><span class="dow">'+d+'</span></div>'; });
+    const cells=[]; for(let i=0;i<startCol;i++) cells.push(null);
+    for(let d=1;d<=days;d++) cells.push(d);
+    while(cells.length%7) cells.push(null);
+    cells.forEach(d=>{
+      if(d===null){ html+='<div class="mcell empty"></div>'; return; }
+      const ds=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
+      const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
+      html+='<div class="mcell"><div class="md '+dc+'">'+d+'</div>'+
+        evs.map(e=>`<div class="ev mini ${clsOf(e.c)}">${e.s} ${esc(e.c.name)}<small>${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
+    });
+    html+='</div></div>';
+  });
+  return html;
 }
 function buildCal(){
   if(!EVENTS.length) return '<div class="muted" style="font-family:inherit">该条件下暂无课程</div>';
@@ -172,7 +207,7 @@ function buildCal(){
       html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
       dates.forEach(ds=>{
         const evs=map[ds+'|'+sl]||[];
-        html+='<div class="ecell">'+evs.map(e=>`<div class="ev ${clsOf(e.c)}">${esc(e.c.name)}<small>${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
+        html+='<div class="ecell">'+evs.map(e=>`<div class="ev ${clsOf(e.c)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${esc(e.c.teacher||'')}</small></div>`).join('')+'</div>';
       });
     });
     html+='</div></div>';
