@@ -10,8 +10,7 @@
     <div class="row">
       <div class="field"><label>校区</label><select id="campus"></select></div>
       <div class="field"><label>日期</label><input type="date" id="date"></div>
-      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="prev">◀ 前一天</button></div>
-      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="next">后一天 ▶</button></div>
+      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="today">回到今天</button></div>
       <div class="field" style="margin-left:auto"><label>&nbsp;</label>
         <span class="muted" id="meta"></span></div>
     </div>
@@ -37,8 +36,7 @@ async function boot(){
   el('date').value = todayStr();
   el('campus').onchange = render;
   el('date').onchange = render;
-  el('prev').onclick = ()=>shiftDay(-1);
-  el('next').onclick = ()=>shiftDay(1);
+  el('today').onclick = ()=>{ el('date').value=todayStr(); render(); };
   try{
     ROOMS    = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
     BOOKINGS = await sbGet('sched_bookings','select=*');
@@ -47,31 +45,30 @@ async function boot(){
     render();
   }catch(e){ el('boardBox').innerHTML = '<div class="b-err badge">'+esc(e.message)+'</div>'; }
 }
-function shiftDay(n){
-  const d=new Date(el('date').value+'T00:00:00'); d.setDate(d.getDate()+n);
-  el('date').value = d.toISOString().slice(0,10); render();
-}
-
 function render(){
   const campus = el('campus').value, date = el('date').value;
   const rooms = ROOMS.filter(r => r.campus===campus);
   el('meta').textContent = WEEKDAYS[weekdayOf(date)] + ' · ' + rooms.length + ' 间教室';
 
-  // 当天生效的占用（含 pending，pending 用虚线区分）
   const todays = BOOKINGS.filter(b => bookingOnDate(b, date) &&
     !(b.kind==='course' && b.course_id && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
+  // 某教室在某时刻是否被占用（含跨时段中间格）
+  const covered = (roomId, slot) => todays.some(b => String(b.room_id)===String(roomId) &&
+    b.start_time<=slot && slot<b.end_time);
 
   let h = '<table><thead><tr><th class="tcol">时段</th>';
   rooms.forEach(r => h += `<th>${esc(r.name)}<br><small class="muted">${r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人')}</small></th>`);
   h += '</tr></thead><tbody>';
 
-  SLOTS.forEach(slot => {
-    const sEnd = slotEnd(slot);
+  SLOTS.forEach((slot,i) => {
+    const prev = i>0 ? SLOTS[i-1] : null;
     h += `<tr><td class="tcol">${slot}</td>`;
     rooms.forEach(r => {
-      // 找到在此教室、此 30 分格“开始”的占用块（只在起始格画，避免重复）
       const starting = todays.filter(b => String(b.room_id)===String(r.id) && b.start_time===slot);
-      h += '<td class="cell">';
+      const isCovered = covered(r.id, slot);
+      const spanStart = !isCovered && (!prev || covered(r.id, prev)); // 空档起点
+      h += '<td class="cell'+(isCovered?'':' freecell')+'">';
+      if(spanStart) h += '<span class="freetag">空</span>';
       starting.forEach(b => {
         const rows = spanRows(b.start_time, b.end_time);
         const pend = b.status==='pending';
