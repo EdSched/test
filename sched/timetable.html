@@ -46,6 +46,22 @@
 .e-common{ background:var(--k-common-bg); color:var(--k-common); }
 #cal .mcell{ min-height:78px; padding:4px; border-top:1px solid var(--border-light); border-left:1px solid var(--border-light); display:flex; flex-direction:column; gap:2px; overflow:hidden; }
 #cal .mcell.empty{ background:#faf8f4; }
+/* 打印页眉：屏幕隐藏，打印显示 */
+#printHead{ display:none; }
+@media print{
+  #nav,.card.filters,#cal .vt,#calBody{ display:none !important; }
+  #cal{ border:none; padding:0; }
+  #printHead{ display:flex; align-items:center; gap:16px; padding:0 0 12px; margin-bottom:16px; border-bottom:2px solid #2c4a8a; }
+  #printHead img{ height:56px; width:auto; }
+  #printHead .pt{ font-family:'Noto Serif SC',serif; font-size:20px; font-weight:600; color:#1a1814; }
+  #printHead .ps{ font-size:11px; color:#5a5650; margin-top:3px; letter-spacing:.03em; }
+  #printBlock{ display:block !important; }
+  .print-sec{ margin-bottom:20px; }
+  .print-sec > h3{ font-family:'Noto Serif SC',serif; font-size:15px; margin:0 0 10px; color:#2c4a8a; }
+  .wk{ break-inside:avoid; }
+  .course-block{ break-inside:avoid; }
+  @page{ margin:14mm; }
+}
 #cal .mcell .md{ font-size:10px; color:var(--tm); font-weight:500; }
 #cal .mcell .md.sat{ color:var(--sat); } #cal .mcell .md.sun{ color:var(--sun); }
 #cal .ev.mini{ text-align:left; padding:2px 4px; }
@@ -85,9 +101,14 @@
     </details>
     <div class="tip" style="margin:10px 0 0">选定专业后，课表自动含该专业<b>专业课</b>+同类别<b>共通课</b>（+语言课）。可勾选具体课程、跨校区加课，并保存为模板复用。</div>
   </div>
-  <div id="cal"></div>
+  <div id="cal">
+    <div id="printHead"></div>
+    <div id="calBody"></div>
+    <div id="printBlock" style="display:none"></div>
+  </div>
 </div>
 
+<script src="logo.js"></script>
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
@@ -134,7 +155,7 @@ async function boot(){
   el('x_cat').onchange=()=>{ fillXMajors(); refreshExtraList(); };
   el('x_major').onchange=refreshExtraList;
   el('x_q').oninput=refreshExtraList;
-  el('go').onclick=gen; el('print').onclick=()=>window.print();
+  el('go').onclick=gen; el('print').onclick=doPrint;
   el('tplSave').onclick=saveTpl; el('tplDel').onclick=delTpl; el('tpl').onchange=loadTpl;
   await fillTplSelect();
   fillMajors(); fillXMajors(); refreshCourseTags(); refreshExtraList(); gen();
@@ -266,8 +287,21 @@ function gen(){
   render();
 }
 function campusTag(c){ return c.mode==='线上'?'线上':(c.campus||''); }
+function doPrint(){
+  if(!EVENTS.length){ toast('先生成课表再打印', false); return; }
+  const title=(el('major').value||el('cat').value||'全部')+' 课程安排';
+  const meta=[el('term').value||'全部期', el('campus').value||'全部校区'].filter(Boolean).join(' · ');
+  const logo = window.TRANSFORM_LOGO ? '<img src="'+window.TRANSFORM_LOGO+'" alt="唯新">' : '';
+  el('printHead').innerHTML = logo +
+    '<div><div class="pt">唯新教育 · '+esc(title)+'</div>'+
+    '<div class="ps">'+esc(meta)+' ｜ 生成日期 '+todayStr()+'</div></div>';
+  el('printBlock').innerHTML =
+    '<div class="print-sec"><h3>日历（月历）</h3>'+buildMonth()+'</div>'+
+    '<div class="print-sec" style="break-before:page"><h3>课程详解</h3>'+buildSummary()+'</div>';
+  window.print();
+}
 function render(){
-  const box=el('cal');
+  const box=el('calBody');
   const title = (el('major').value||el('cat').value||'全部')+' 课程安排';
   let h='<div class="chead"><div><h2>'+esc(title)+'</h2><div class="sub">唯新教育 · '+esc(el('term').value||'全部期')+'</div></div></div>';
   h+= legendHtml();
@@ -352,7 +386,7 @@ function buildSummary(){
   let h='<div style="display:flex;flex-direction:column;gap:1rem">';
   keys.forEach(k=>{
     const {c,items}=groups[k]; items.sort((a,b)=>a.date.localeCompare(b.date));
-    h+='<div class="grid" style="display:block">';
+    h+='<div class="grid course-block" style="display:block">';
     h+='<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px">'+
        `<span class="ev" style="${styleOf(c.name)};padding:2px 10px">${esc(c.name)}</span>`+
        `<span style="font-size:10px;color:var(--tm)">${items.length} 课次 · ${esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span></div>`;
