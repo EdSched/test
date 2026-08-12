@@ -867,8 +867,8 @@ function exportStudents(){
 // ══════════════════════════════════
 // 列名映射：支持你的Excel格式（25年/26年两套）
 const COL_MAP = {
-  '学生姓名':'name', '氏名':'name',
-  '学生属性':'student_type',
+  '学生姓名':'name', '氏名':'name', '姓名':'name',
+  '学生属性':'student_type', '属性':'student_type',
   '来源':'source', '课程属性':'course_type',
   '困难点':'difficulty', '等级':'level',
   '日语成绩':'japanese_score', '日本語成绩':'japanese_score',
@@ -880,12 +880,13 @@ const COL_MAP = {
   '卒論题目':'thesis', '毕业论文':'thesis', '毕业论文方向':'thesis',
   'GPA/其他履历':'gpa', 'GPA':'gpa', 'GPA/其他':'gpa',
   '毕业时间':'graduation_date',
-  '期待入学时间':'target_enrollment', '進度/希望入学时间':'target_enrollment', '期待入学':'target_enrollment',
+  '期待入学时间':'target_enrollment', '進度/希望入学时间':'target_enrollment', '期待入学':'target_enrollment', '入学目标':'target_enrollment',
   '报名时间':'signup_date', '签约时间':'signup_date',
   '到期时间':'expiry_date', '截至日期':'expiry_date',
   '赴日时间':'japan_arrival',
   'テーマ':'research_plan',
   '状态':'status',
+  '备注':'notes', '備考':'notes',
 };
 // 专业 sheet 名 → key
 const SHEET_MAJOR_MAP = {
@@ -933,7 +934,13 @@ function handleImportFile(input) {
           const s = { major, status: 'active' };
           let hasName = false;
           for (const [col, val] of Object.entries(row)) {
-            const field = COL_MAP[col.trim()];
+            const c = col.trim();
+            if (c === '专业' && val) { // 导出的"专业"是标签，反查成 key
+              const key = (typeof MAJORS !== 'undefined') ? Object.keys(MAJORS).find(k => MAJORS[k] === String(val).trim()) : null;
+              if (key) s.major = key;
+              continue;
+            }
+            const field = COL_MAP[c];
             if (!field || !val) continue;
             s[field] = String(val).trim();
             if (field === 'name') hasName = true;
@@ -944,13 +951,16 @@ function handleImportFile(input) {
       }
 
       if (!rows.length) {
-        alert('未能解析到学生数据，请检查文件格式。\n支持格式：含「学生姓名」或「氏名」列的 Excel。');
+        alert('未能解析到学生数据，请检查文件格式。\n支持格式：含「姓名」「学生姓名」或「氏名」列的 Excel。');
         return;
       }
 
-      // Deduplicate against existing
-      const existingNames = new Set(cachedStudents.map(s => s.name));
-      importPendingRows = rows.map(r => ({ ...r, _exists: existingNames.has(r.name) }));
+      // 匹配已有学生（按姓名），记录其 id 以便更新
+      const existingByName = new Map(cachedStudents.map(s => [s.name, s]));
+      importPendingRows = rows.map(r => {
+        const ex = existingByName.get(r.name);
+        return { ...r, _exists: !!ex, _existingId: ex ? ex.id : null };
+      });
 
       showImportPreview();
     } catch (err) {
@@ -962,66 +972,92 @@ function handleImportFile(input) {
 
 function showImportPreview() {
   const newRows = importPendingRows.filter(r => !r._exists);
-  const skipRows = importPendingRows.filter(r => r._exists);
+  const updRows = importPendingRows.filter(r => r._exists);
   const preview = document.getElementById('importPreview');
+  const willUpdate = importMode === 'both';
+
+  const modeBtn = (m, label, desc) => `<div onclick="importMode='${m}';showImportPreview()" style="flex:1;cursor:pointer;border:1px solid ${importMode===m?'var(--accent)':'var(--border)'};background:${importMode===m?'var(--accent)':'var(--surface)'};color:${importMode===m?'#fff':'var(--text-2)'};border-radius:4px;padding:8px 12px;font-size:12px">
+    <div style="font-weight:600">${importMode===m?'✓ ':''}${label}</div><div style="font-size:10px;opacity:.85;margin-top:2px">${desc}</div></div>`;
 
   preview.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      ${modeBtn('both','新增 + 更新已存在','已有学生用表格数据覆盖，新学生新增')}
+      ${modeBtn('new','仅新增','已存在的跳过，只导入新学生')}
+    </div>
     <div style="display:flex;gap:16px;margin-bottom:14px">
       <div style="background:var(--ok-bg);border-radius:3px;padding:8px 16px;font-size:12px">
-        <strong style="color:var(--ok)">${newRows.length}</strong> <span style="color:var(--text-2)">条新记录将导入</span>
+        <strong style="color:var(--ok)">${newRows.length}</strong> <span style="color:var(--text-2)">条新增</span>
       </div>
-      <div style="background:var(--warn-bg);border-radius:3px;padding:8px 16px;font-size:12px">
-        <strong style="color:var(--warn)">${skipRows.length}</strong> <span style="color:var(--text-2)">条已存在将跳过</span>
+      <div style="background:${willUpdate?'var(--ok-bg)':'var(--warn-bg)'};border-radius:3px;padding:8px 16px;font-size:12px">
+        <strong style="color:${willUpdate?'var(--ok)':'var(--warn)'}">${updRows.length}</strong> <span style="color:var(--text-2)">条已存在将${willUpdate?'更新覆盖':'跳过'}</span>
       </div>
     </div>
-    ${newRows.length ? `
-    <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:3px">
+    ${willUpdate&&updRows.length?`<div style="font-size:11px;color:var(--text-3);margin-bottom:10px;background:var(--bg);border-radius:3px;padding:8px 10px">🔄 更新说明：按姓名匹配已有学生，用表格里<b>非空</b>的单元格覆盖对应字段（空单元格保留原值，不会清空）。专业列只在能识别时更新。</div>`:''}
+    ${(newRows.length||(willUpdate&&updRows.length)) ? `
+    <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:3px">
       <table class="student-table" style="margin:0">
         <thead><tr>
-          <th>姓名</th><th>专业</th><th>属性</th><th>来源</th><th>日语</th><th>英语</th><th>出身大学</th>
+          <th>姓名</th><th>处理</th><th>专业</th><th>报名时间</th><th>到期时间</th><th>日语</th><th>英语</th>
         </tr></thead>
         <tbody>
-          ${newRows.map(r => `<tr>
+          ${importPendingRows.filter(r=>!r._exists||willUpdate).slice(0,300).map(r => `<tr>
             <td class="student-name-cell">${r.name}</td>
+            <td style="font-size:11px;color:${r._exists?'var(--accent)':'var(--ok)'}">${r._exists?'更新':'新增'}</td>
             <td>${MAJORS[r.major] || r.major || '<span style="color:var(--warn)">未识别</span>'}</td>
-            <td style="font-size:11px">${r.student_type || ''}</td>
-            <td style="font-size:11px">${r.source || ''}</td>
+            <td style="font-size:11px">${r.signup_date || ''}</td>
+            <td style="font-size:11px">${r.expiry_date || ''}</td>
             <td style="font-size:11px">${r.japanese_score || ''}</td>
             <td style="font-size:11px">${r.english_score || ''}</td>
-            <td style="font-size:11px">${r.university || ''}</td>
           </tr>`).join('')}
         </tbody>
       </table>
-    </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--text-3)">
-      ⚠ 专业未识别的记录将以空白专业导入，可导入后手动编辑。
-    </div>` : '<div class="empty">所有记录均已存在，无需导入。</div>'}
+    </div>` : '<div class="empty">没有需要处理的记录。</div>'}
   `;
-  document.getElementById('importConfirmBtn').disabled = !newRows.length;
+  document.getElementById('importConfirmBtn').disabled = !(newRows.length || (willUpdate && updRows.length));
   document.getElementById('importModal').classList.add('open');
 }
 
+let importMode = 'both'; // both=新增+更新 | new=仅新增
+
 async function confirmImport() {
   const newRows = importPendingRows.filter(r => !r._exists);
-  if (!newRows.length) { closeModal('importModal'); return; }
+  const updRows = importPendingRows.filter(r => r._exists);
+  const doUpdate = importMode === 'both';
+  if (!newRows.length && !(doUpdate && updRows.length)) { closeModal('importModal'); return; }
   const btn = document.getElementById('importConfirmBtn');
-  btn.textContent = '导入中…'; btn.disabled = true;
-  const STUDENT_FIELDS = ['id','name','major','student_type','source','course_type','level','difficulty','japanese_score','english_score','university','faculty','gpa','thesis_topic','research_plan','target_school','graduation_date','target_enrollment','expiry_date','japan_arrival','status','notes'];
-  const records = newRows.map((r,i) => {
-    const rec = {};
-    STUDENT_FIELDS.forEach(f => rec[f] = r[f] || (f==='status'?'active':f==='id'?`${Date.now()}-${i}-${Math.random().toString(36).slice(2,5)}`:''));
-    return rec;
-  });
+  btn.textContent = '处理中…'; btn.disabled = true;
+  // 可导入/更新的字段（与列映射一致；major 单独处理）
+  const FIELDS = ['student_type','source','course_type','level','difficulty','japanese_score','english_score','university','faculty','gpa','thesis','research_plan','target_school','graduation_date','target_enrollment','signup_date','expiry_date','japan_arrival','status','notes'];
   try {
-    // batch insert in chunks of 50
+    // ① 新增
+    const records = newRows.map((r, i) => {
+      const rec = { id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`, name: r.name, major: r.major || '', status: r.status || 'active' };
+      FIELDS.forEach(f => { if (r[f]) rec[f] = r[f]; });
+      return rec;
+    });
     for (let i = 0; i < records.length; i += 50) {
       const chunk = records.slice(i, i + 50);
       const res = await sb('/rest/v1/students', 'POST', chunk);
       cachedStudents.push(...(Array.isArray(res) ? res : chunk));
     }
+    // ② 更新已存在（按 id，只覆盖非空字段）
+    let updated = 0;
+    if (doUpdate) {
+      for (const r of updRows) {
+        if (!r._existingId) continue;
+        const patch = {};
+        FIELDS.forEach(f => { if (r[f] !== undefined && r[f] !== '') patch[f] = r[f]; });
+        if (r.major && typeof MAJORS !== 'undefined' && MAJORS[r.major]) patch.major = r.major; // 专业能识别才更新
+        if (!Object.keys(patch).length) continue;
+        await sb(`/rest/v1/students?id=eq.${r._existingId}`, 'PATCH', patch);
+        const idx = cachedStudents.findIndex(s => s.id === r._existingId);
+        if (idx >= 0) Object.assign(cachedStudents[idx], patch);
+        updated++;
+      }
+    }
     closeModal('importModal');
     renderStudentsPage(document.getElementById('mainContent'));
-    alert(`成功导入 ${records.length} 名学生！`);
+    alert(`完成！新增 ${records.length} 名${doUpdate ? `，更新 ${updated} 名已有学生` : ''}。`);
   } catch (e) {
     alert('导入失败：' + e.message);
     btn.textContent = '确认导入'; btn.disabled = false;
