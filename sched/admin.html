@@ -149,9 +149,11 @@ function assignForm(courseId){
   const online=c.mode==='线上';
   const existing=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
   const ex=existing[0]||null;  // 重排时回显
-  let cand=ROOMS.filter(r=>r.campus===c.campus && r.active);
-  if(c.est_students) cand=cand.filter(r=>r.capacity>=c.est_students);
-  // 教室须对课程每个上课日都空闲（排除本课程自身已排的占用）
+  function candList(allCampus){
+    let list=ROOMS.filter(r=>r.active && (allCampus || r.campus===c.campus));
+    if(c.est_students) list=list.filter(r=>r.capacity>=c.est_students);
+    return list;
+  }
   const roomFree=r=> wdays.every(wd => !BOOKINGS.some(b=>
       b.status!=='pending' && b.recurrence==='weekly' &&
       String(b.course_id)!==String(c.id) &&
@@ -159,6 +161,14 @@ function assignForm(courseId){
       overlap(c.start_time,c.end_time,b.start_time,b.end_time) &&
       !(c.end_date&&b.start_date&&c.end_date<b.start_date) &&
       !(c.start_date&&b.end_date&&c.start_date>b.end_date) ));
+  function roomOptions(allCampus){
+    const cand=candList(allCampus);
+    let o = cand.length? '' : '<option value="">无满足容量的教室</option>';
+    cand.forEach(r=>{ const free=roomFree(r); const sel=ex&&String(ex.room_id)===String(r.id)?' selected':'';
+      const camp = r.campus!==c.campus ? ('['+esc(r.campus)+'] ') : '';
+      o+=`<option value="${r.id}"${(free||sel)?'':' disabled'}${sel}>${camp}${esc(r.name)}（${r.capacity}人）${free?'':' — 有上课日该时段已占'}</option>`; });
+    return o;
+  }
   let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px">'+
     '<div class="card" style="width:520px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">'+(ex?'重排':'排')+'「'+esc(c.name)+'」教室</h3>'+
     `<div class="muted" style="margin-bottom:8px">${esc(c.campus)} · ${weekdaysLabel(c.weekdays)} · ${c.start_time}-${c.end_time} · 预估${c.est_students||'?'}人 · ${c.mode}</div>`;
@@ -172,11 +182,9 @@ function assignForm(courseId){
     h+=`<div class="field" style="margin-bottom:8px"><label>日期区间</label><div>${c.start_date} ~ ${c.end_date}</div></div>`;
   }
   if(!online){
-    h+='<div class="field"><label>选择教室（仅列容量足够）</label><select id="as_room">';
-    if(!cand.length) h+='<option value="">无满足容量的教室</option>';
-    cand.forEach(r=>{ const free=roomFree(r); const sel=ex&&String(ex.room_id)===String(r.id)?' selected':'';
-      h+=`<option value="${r.id}"${(free||sel)?'':' disabled'}${sel}>${esc(r.name)}（${r.capacity}人）${free?'':' — 有上课日该时段已占'}</option>`; });
-    h+='</select></div>';
+    h+='<div class="field"><label>选择教室（仅列容量足够）</label><select id="as_room">'+roomOptions(false)+'</select></div>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer">'+
+      '<input type="checkbox" id="as_all"> 显示其它校区/租借的教室（本校区教室不够时用）</label>';
   }
   const exUm = ex? ex.uses_meeting : online;
   h+='<div class="field" style="margin-top:8px"><label>是否占用会议账号'+(online?'（线上课必占）':'（线下直播才占）')+'</label>'+
@@ -188,34 +196,47 @@ function assignForm(courseId){
   el('asForm').innerHTML=h;
   el('as_cancel').onclick=()=>el('asForm').innerHTML='';
 
+  function acctConflictDays(accId, sd, ed){
+    return wdays.filter(wd => BOOKINGS.some(b=>
+      b.status!=='pending' && b.uses_meeting && String(b.meeting_account_id)===String(accId) &&
+      String(b.course_id)!==String(c.id) && b.recurrence==='weekly' && Number(b.weekday)===wd &&
+      overlap(c.start_time,c.end_time,b.start_time,b.end_time) &&
+      !(ed&&b.start_date&&ed<b.start_date) && !(sd&&b.end_date&&sd>b.end_date) ));
+  }
   function refreshAcc(){
     const um = online ? true : el('as_um').value==='true';
     el('as_accWrap').classList.toggle('hidden', !um);
     if(!um){ el('as_accBox').innerHTML=''; return; }
     const sd = noDate ? (el('as_sd')?.value||c.start_date) : c.start_date;
     const ed = noDate ? (el('as_ed')?.value||c.end_date) : c.end_date;
-    let boundAcc=null;
-    if(!online){ const r=ROOMS.find(x=>String(x.id)===String(el('as_room').value)); boundAcc=r?r.meeting_account_id:null; }
-    // 线上课或无绑定：默认第一个临时账号
+    if(online){
+      // 线上课：手动从“有账号的教室账号”里挑（+临时账号），标各账号该时段空/占
+      const roomAccs = ACCOUNTS.filter(a=>a.kind==='固定' && a.account_no).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+      const tempAccs = ACCOUNTS.filter(a=>a.kind==='临时');
+      const cand = roomAccs.concat(tempAccs);
+      const cur = (ex&&ex.meeting_account_id) || (cand[0]&&cand[0].id);
+      const opt = a=>{ const busy=acctConflictDays(a.id,sd,ed).length>0;
+        return `<option value="${a.id}"${String(cur)===String(a.id)?' selected':''}${busy?' disabled':''}>${esc(a.name)}${busy?'（该时段已占）':'（空闲）'}</option>`; };
+      el('as_accBox').innerHTML='<div class="muted" style="font-size:12px;margin-bottom:4px">线上课需手动指定腾讯账号（用对应教室的账号）：</div>'+
+        '<select id="as_acc">'+cand.map(opt).join('')+'</select>';
+      return;
+    }
+    // 线下课：教室固定账号自动绑定，冲突才改临时
+    const r=ROOMS.find(x=>String(x.id)===String(el('as_room').value));
+    const boundAcc = r?r.meeting_account_id:null;
     const tempAccs=ACCOUNTS.filter(a=>a.kind==='临时');
     let chosen = (ex&&ex.meeting_account_id) || boundAcc || (tempAccs[0]&&tempAccs[0].id);
-    // 冲突检测（对每个上课日）：该账号在这些周内是否与别的占用撞
-    const conflictDays = wdays.filter(wd => BOOKINGS.some(b=>
-      b.status!=='pending' && b.uses_meeting && String(b.meeting_account_id)===String(chosen) &&
-      String(b.course_id)!==String(c.id) && b.recurrence==='weekly' && Number(b.weekday)===wd &&
-      overlap(c.start_time,c.end_time,b.start_time,b.end_time) &&
-      !(ed&&b.start_date&&ed<b.start_date) && !(sd&&b.end_date&&sd>b.end_date) ));
+    const conflictDays = acctConflictDays(chosen, sd, ed);
     if(conflictDays.length){
-      // 冲突 → 显示提示 + 下拉可改临时账号
       el('as_accBox').innerHTML='<div class="badge b-err" style="margin-bottom:6px">固定账号 '+esc(aname(boundAcc))+' 在 '+conflictDays.map(d=>WEEKDAYS[d]).join('/')+' 该时段已被占用，请改用临时账号</div>'+
         '<select id="as_acc">'+tempAccs.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')+'</select>';
     }else{
-      // 无冲突 → 直接绑定，只读显示 + 隐藏 input 存值
       el('as_accBox').innerHTML='<div>'+esc(aname(chosen))+' <span class="badge b-ok">自动绑定</span></div>'+
         '<input type="hidden" id="as_acc" value="'+chosen+'">';
     }
   }
-  if(!online){ el('as_um').onchange=refreshAcc; el('as_room').onchange=refreshAcc; }
+  if(!online){ el('as_um').onchange=refreshAcc; el('as_room').onchange=refreshAcc;
+    el('as_all').onchange=()=>{ el('as_room').innerHTML=roomOptions(el('as_all').checked); refreshAcc(); }; }
   refreshAcc();
 
   el('as_do').onclick=async()=>{
