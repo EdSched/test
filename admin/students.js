@@ -899,6 +899,15 @@ const SHEET_MAJOR_MAP = {
 
 let importPendingRows = [];
 
+// Excel 日期序列号（自1899-12-30起的天数）→ "YYYY/M/D" 文本
+function excelSerialToDate(serial) {
+  if (!serial || serial < 1 || serial > 60000) return String(serial);
+  const ms = Math.round((serial - 25569) * 86400 * 1000); // 25569 = 1970-01-01 的 Excel 序列号
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return String(serial);
+  return `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+}
+
 function detectMajorFromSheet(sheetName) {
   const name = sheetName.toLowerCase();
   for (const [key, val] of Object.entries(SHEET_MAJOR_MAP)) {
@@ -942,7 +951,12 @@ function handleImportFile(input) {
             }
             const field = COL_MAP[c];
             if (!field || !val) continue;
-            s[field] = String(val).trim();
+            const DATE_FIELDS = ['signup_date', 'expiry_date', 'graduation_date', 'japan_arrival', 'target_enrollment'];
+            if (DATE_FIELDS.includes(field) && /^\d{4,6}(\.\d+)?$/.test(String(val).trim())) {
+              s[field] = excelSerialToDate(Number(val)); // Excel 日期序列号 → 文本
+            } else {
+              s[field] = String(val).trim();
+            }
             if (field === 'name') hasName = true;
           }
           if (!hasName || !s.name || s.name === '氏名') continue;
