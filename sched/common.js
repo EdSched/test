@@ -81,6 +81,24 @@ function weekdayOf(dateStr){ // 1=周一...7=周日
 }
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
+/* 解析腾讯会议邀请文字，抽取链接/会议号/起止日/时段/周几 */
+function parseTencent(text){
+  const t=String(text||'');
+  const out={ link:null, id:null, subject:null, start_date:null, end_date:null, start_time:null, end_time:null, weekday:null };
+  let m=t.match(/https?:\/\/meeting\.tencent\.com\/\S+/);
+  if(m) out.link=m[0].replace(/[)）。,，、\s]+$/,'');
+  m=t.match(/腾讯会议[:：]?\s*([\d\-\s]{9,})/); if(m) out.id=m[1].replace(/\s/g,'').trim();
+  m=t.match(/会议主题[:：]\s*(.+)/); if(m) out.subject=m[1].trim();
+  m=t.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\s+(\d{1,2}:\d{2})\s*[-~至]\s*(\d{1,2}:\d{2})/);
+  if(m){ out.start_date=m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+    out.start_time=m[4].padStart(5,'0'); out.end_time=m[5].padStart(5,'0'); }
+  m=t.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\s*[-~至]\s*(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+  if(m){ out.start_date=m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+    out.end_date=m[4]+'-'+String(m[5]).padStart(2,'0')+'-'+String(m[6]).padStart(2,'0'); }
+  m=t.match(/周([一二三四五六日天])/); if(m){ const map={'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':7,'天':7}; out.weekday=map[m[1]]; }
+  return out;
+}
+
 /* 本地时区日期格式化（避免 toISOString 的 UTC 偏移，日本 UTC+9 会差一天） */
 function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
