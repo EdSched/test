@@ -459,7 +459,8 @@ function buildSummary(){
     h+='<div class="grid course-block" style="display:block">';
     h+='<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px">'+
        `<span class="ev" style="${styleOf(c.name)};padding:2px 10px">${esc(c.name)}</span>`+
-       `<span style="font-size:10px;color:var(--tm)">${items.length} 课次${SHARE?'':' · '+esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span></div>`;
+       `<span style="font-size:10px;color:var(--tm)">${items.length} 课次${SHARE?'':' · '+esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span>`+
+       (c.meeting_link?` <a href="${esc(c.meeting_link)}" target="_blank" style="font-size:11px;color:#2c7a4a;margin-left:6px">🎦 进入会议${c.meeting_id?('（'+esc(c.meeting_id)+'）'):''}</a>`:'')+`</div>`;
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">';
     items.forEach(e=>{ const dc=dowClass(e.date);
       h+='<div style="padding:8px 16px;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light)'+(e.off?';opacity:.5':'')+'">'+
