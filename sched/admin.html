@@ -257,10 +257,50 @@ function assignForm(courseId){
       for(const o of existing) await sbDelete('sched_bookings',o.id);
       await sbInsert('sched_bookings',recs);
       await reloadAll();
-      el('asForm').innerHTML='';        // 关闭弹窗
-      if(el('assignTable')) renderAssignTable();  // 只刷新表格，保留筛选
-      toast('已生成整学期占用（'+recs.length+' 天/周）');
+      if(el('assignTable')) renderAssignTable();
+      if(um){ meetingLinkStep(c, accId); }   // 占账号 → 进入设定会议链接步骤
+      else { el('asForm').innerHTML=''; toast('已生成整学期占用（'+recs.length+' 天/周）'); }
     }catch(e){ el('as_warn').className=''; el('as_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
+  };
+}
+/* 排完教室后：粘贴腾讯会议文字，解析并回填链接/会议号 */
+function meetingLinkStep(c, accId){
+  const acc = ACCOUNTS.find(a=>String(a.id)===String(accId));
+  let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px">'+
+    '<div class="card" style="width:560px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">设定会议链接 · 「'+esc(c.name)+'」</h3>'+
+    '<div class="tip">已排好教室、账号'+(acc?('：<b>'+esc(acc.name)+'</b>'):'')+'。把<b>腾讯会议 App 生成的邀请文字</b>整段粘贴进来，自动读出链接、会议号、时间。</div>'+
+    '<div class="field"><label>腾讯会议邀请文字</label><textarea id="mk_txt" rows="7" placeholder="会议主题：...\n会议时间：2026/07/12 16:00-18:00 ...\n重复周期：2026/07/12-2026/09/13 ... 每周 (周日)\n点击链接入会：https://meeting.tencent.com/dm/xxxx\n#腾讯会议：537-7181-4387"></textarea></div>'+
+    '<div><button class="ghost sm" id="mk_parse">解析</button></div>'+
+    '<div id="mk_prev" style="margin-top:8px"></div>'+
+    '<div id="mk_warn" class="hidden" style="margin-top:8px"></div>'+
+    '<div style="margin-top:12px"><button id="mk_save" disabled>保存会议信息</button> <button class="ghost" id="mk_skip">暂不设定</button></div>'+
+    '</div></div>';
+  el('asForm').innerHTML=h;
+  let parsed=null;
+  el('mk_skip').onclick=()=>{ el('asForm').innerHTML=''; toast('教室已排（会议链接稍后可在课程编辑里补）'); };
+  el('mk_parse').onclick=()=>{
+    parsed=parseTencent(el('mk_txt').value);
+    if(!parsed.link && !parsed.id){ el('mk_prev').innerHTML='<span class="badge b-err">没识别到腾讯链接或会议号，请检查粘贴内容</span>'; el('mk_save').disabled=true; return; }
+    el('mk_prev').innerHTML='<table><tbody>'+
+      `<tr><td class="muted">会议链接</td><td>${parsed.link?esc(parsed.link):'<span class="muted">—</span>'}</td></tr>`+
+      `<tr><td class="muted">会议号</td><td>${parsed.id?esc(parsed.id):'<span class="muted">—</span>'}</td></tr>`+
+      `<tr><td class="muted">时段</td><td>${parsed.start_time?parsed.start_time+'-'+parsed.end_time:'<span class="muted">—</span>'}</td></tr>`+
+      `<tr><td class="muted">周期</td><td>${parsed.start_date?(parsed.start_date+' ~ '+(parsed.end_date||'?')):'<span class="muted">—</span>'}${parsed.weekday?(' 每周'+WEEKDAYS[parsed.weekday]):''}</td></tr>`+
+      '</tbody></table>';
+    // 时段/周几与课程不一致时给个提示
+    const warn=[];
+    if(parsed.start_time && parsed.start_time!==c.start_time) warn.push('腾讯时段('+parsed.start_time+')与课程('+c.start_time+')不一致');
+    if(parsed.weekday && c.weekdays && !c.weekdays.split(',').map(Number).includes(parsed.weekday)) warn.push('腾讯周几(周'+WEEKDAYS[parsed.weekday]+')不在课程上课日内');
+    el('mk_prev').innerHTML += warn.length?('<div class="badge b-warn" style="margin-top:6px">⚠ '+warn.join('；')+'（仍可保存，仅提醒）</div>'):'';
+    el('mk_save').disabled=false;
+  };
+  el('mk_save').onclick=async()=>{
+    if(!parsed) return;
+    try{
+      await sbUpdate('sched_courses', c.id, { meeting_link:parsed.link||null, meeting_id:parsed.id||null });
+      await reloadAll(); if(el('assignTable')) renderAssignTable();
+      el('asForm').innerHTML=''; toast('会议信息已保存，学生课表可点链接');
+    }catch(e){ el('mk_warn').className=''; el('mk_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
   };
 }
 
