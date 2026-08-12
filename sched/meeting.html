@@ -1,55 +1,70 @@
 <!DOCTYPE html>
 <html lang="zh"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>会议账号可用性 · 唯新</title>
+<title>腾讯会议账号占用 · 唯新</title>
 <link rel="stylesheet" href="style.css">
 </head><body>
 <div id="nav"></div>
 <div class="wrap">
-  <div class="tip">判断某账号能否开会，<b>只看账号列有没有被占</b>——教室被出租但没用会议、或教室没排课时，账号依然可借。</div>
+  <div class="tip">选一天，直接看每个腾讯账号哪些时段被占、被谁占。<b>只统计占用会议账号的安排</b>（线上课、需账号的直播/预约等）。</div>
   <div class="card">
     <div class="row">
       <div class="field"><label>日期</label><input type="date" id="date"></div>
-      <div class="field"><label>开始</label><select id="st"></select></div>
-      <div class="field"><label>结束</label><select id="et"></select></div>
-      <div class="field"><label>&nbsp;</label><button id="go">查可用账号</button></div>
+      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="today">回到今天</button></div>
+      <div class="field"><label>&nbsp;</label><span class="muted" id="meta"></span></div>
     </div>
   </div>
-  <div class="card" id="box"><div class="muted">设定时段后查询</div></div>
+  <div class="card"><div class="board" id="gridBox"></div></div>
 </div>
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('meeting.html');
 let ROOMS=[], ACCOUNTS=[], BOOKINGS=[];
 async function boot(){
-  fillSelect(el('st'), SLOTS); fillSelect(el('et'), SLOTS);
   el('date').value = todayStr();
   ROOMS    = await sbGet('sched_rooms','select=*');
   ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
   BOOKINGS = await sbGet('sched_bookings','select=*');
   { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
-  el('go').onclick = run;
+  el('date').onchange = render;
+  el('today').onclick = ()=>{ el('date').value=todayStr(); render(); };
+  render();
 }
-function run(){
-  const date=el('date').value, s=el('st').value, e=el('et').value;
-  if(e<=s){ toast('结束需晚于开始', false); return; }
-  const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r.name);
-  const fixed = ACCOUNTS.filter(a=>a.kind==='固定'), temp=ACCOUNTS.filter(a=>a.kind==='临时');
-  const render = list => list.map(a=>{
-    const conf = accountConflicts(BOOKINGS, a.id, date, s, e, null);
-    const free = conf.length===0;
-    const bind = a.room_id ? ('绑定 '+(rmap[a.room_id]||'')) : '通用';
-    let by = conf.map(c=>{ const who=c.title||KIND_LABEL[c.kind]; const rm=c.room_id?('@'+(rmap[c.room_id]||'')):''; return who+rm+' '+c.start_time+'-'+c.end_time; }).join('；');
-    return `<tr><td>${esc(a.name)}</td><td>${bind}</td>`+
-      (free?'<td><span class="badge b-ok">可开会</span></td><td>—</td>'
-           :`<td><span class="badge b-err">占用</span></td><td class="muted">${esc(by)}</td>`)+'</tr>';
-  }).join('');
-  el('box').innerHTML =
-    `<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} ${s}-${e}</div>`+
-    '<h4 style="margin:6px 0">固定账号（随教室）</h4>'+
-    '<table><thead><tr><th>账号</th><th>归属</th><th>状态</th><th>占用详情</th></tr></thead><tbody>'+render(fixed)+'</tbody></table>'+
-    '<h4 style="margin:14px 0 6px">临时账号（通用）</h4>'+
-    '<table><thead><tr><th>账号</th><th>归属</th><th>状态</th><th>占用详情</th></tr></thead><tbody>'+render(temp)+'</tbody></table>';
+function render(){
+  const date = el('date').value;
+  // 只看占用账号的记录（含固定+临时，凡 uses_meeting）
+  const accts = ACCOUNTS.slice().sort((a,b)=>{
+    const ka=a.kind==='固定'?0:1, kb=b.kind==='固定'?0:1;
+    return ka-kb || (a.name||'').localeCompare(b.name||'');
+  });
+  const todays = BOOKINGS.filter(b => b.uses_meeting && b.meeting_account_id && bookingOnDate(b, date) &&
+    !(b.kind==='course' && b.course_id && window.SKIPMAP && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
+  el('meta').textContent = WEEKDAYS[weekdayOf(date)] + ' · ' + accts.length + ' 个账号 · 当天占用 ' + todays.length + ' 次';
+  const covered=(accId,slot)=>todays.some(b=>String(b.meeting_account_id)===String(accId)&&b.start_time<=slot&&slot<b.end_time);
+
+  let h='<table><thead><tr><th class="tcol">时段</th>';
+  accts.forEach(a=>h+=`<th>${esc(a.name)}<br><small class="muted">${a.kind}</small></th>`);
+  h+='</tr></thead><tbody>';
+  SLOTS.forEach((slot,i)=>{
+    const prev=i>0?SLOTS[i-1]:null;
+    h+=`<tr><td class="tcol">${slot}</td>`;
+    accts.forEach(a=>{
+      const starting=todays.filter(b=>String(b.meeting_account_id)===String(a.id)&&b.start_time===slot);
+      const isC=covered(a.id,slot);
+      const spanStart=!isC&&(!prev||covered(a.id,prev));
+      h+='<td class="cell">';
+      if(spanStart) h+='<span class="freetag">空</span>';
+      starting.forEach(b=>{
+        const ai=t=>SLOTS.indexOf(t); let z=ai(b.end_time); if(z<0)z=SLOTS.length; let st=ai(b.start_time); if(st<0)st=0;
+        const rows=Math.max(1,z-st);
+        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*22-3}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${esc(b.user_name||b.student_name||'')} ${b.start_time}-${b.end_time}</small></div>`;
+      });
+      h+='</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  el('gridBox').innerHTML=h;
 }
 boot();
 </script>
