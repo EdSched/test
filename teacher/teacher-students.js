@@ -1337,7 +1337,7 @@ async function renderTeacherFocus(box) {
 function focusRender() {
   const box = document.getElementById('sm_content') || document.getElementById('mainContent');
   if (!box) return;
-  const rows = focusStudents.map(s => { const months = focusMonthsUntil(s.target_enrollment); return { s, months, bucket: focusBucket(months) }; });
+  const rows = focusStudents.map(s => { const months = focusMonthsUntil(s.expiry_date); return { s, months, bucket: focusBucket(months) }; });
   const q = focusSearch.trim();
   let filtered = rows.filter(r => {
     if (q) return tpNameMatch(r.s.name, q) || (r.s.university || '').includes(q);
@@ -1354,12 +1354,12 @@ function focusRender() {
   const chip = (k, l) => `<div class="filter-chip ${focusUrgency === k ? 'active' : ''}" onclick="focusUrgency='${k}';focusSearch='';focusRender()" style="padding:3px 10px;font-size:10px;cursor:pointer">${l}</div>`;
   const cards = filtered.length ? filtered.map(r => {
     const u = r.bucket ? FOCUS_URG[r.bucket] : null;
-    const badge = u ? `<span style="font-size:10px;padding:1px 8px;border-radius:10px;background:${u.bg};color:${u.c};white-space:nowrap">${u.t}${r.months != null && r.months >= 0 ? '·' + r.months + '个月' : (r.months != null ? '·超' + (-r.months) + '月' : '')}</span>` : '<span style="font-size:10px;color:var(--text-3)">无入学目标</span>';
+    const badge = u ? `<span style="font-size:10px;padding:1px 8px;border-radius:10px;background:${u.bg};color:${u.c};white-space:nowrap">${u.t}${r.months != null && r.months >= 0 ? '·' + r.months + '个月' : (r.months != null ? '·超' + (-r.months) + '月' : '')}</span>` : '<span style="font-size:10px;color:var(--text-3)">无到期时间</span>';
     return `<div onclick="focusOpenSummary('${r.s.id}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px 14px;margin-bottom:7px" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
       <span style="font-size:13px;font-weight:600">${tsaEsc(r.s.name)}</span>
       <span style="font-size:11px;color:var(--text-3)">${MAJORS[r.s.major] || r.s.major || ''}</span>
       ${badge}
-      <span style="font-size:10px;color:var(--text-3)">入学目标 ${tsaEsc(r.s.target_enrollment) || '—'}</span>
+      <span style="font-size:10px;color:var(--text-3)">到期 ${tsaEsc(r.s.expiry_date) || '—'}</span>
       <span style="margin-left:auto;font-size:11px;color:var(--accent)">查看概要 ›</span>
     </div>`;
   }).join('') : '<div class="empty">当前筛选下没有学生</div>';
@@ -1369,7 +1369,7 @@ function focusRender() {
       ${chip('all', '全部')}${chip('half', '半年内')}${chip('q3', '三个月内')}${chip('near', '临近')}${chip('expired', '已过期')}
       <input placeholder="搜索姓名查看概要…" value="${tsaEsc(focusSearch)}" oninput="focusSearch=this.value;focusRender()" style="margin-left:auto;font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:2px;background:var(--bg);font-family:inherit;width:170px">
     </div>
-    <div style="font-size:10px;color:var(--text-3);margin-bottom:8px">共 ${filtered.length} 人 · 点学生查看完整学习概要（可打印）。到期依据「入学目标」自动推算。</div>
+    <div style="font-size:10px;color:var(--text-3);margin-bottom:8px">共 ${filtered.length} 人 · 点学生查看完整学习概要（可打印）。到期依据「到期时间」自动推算。</div>
     <div>${cards}</div>`;
 }
 
@@ -1397,7 +1397,7 @@ async function focusOpenSummary(sid) {
     sb(`/rest/v1/student_contact_logs?student_name=eq.${enc(s.name)}&select=*&order=created_at.desc`).catch(() => []),
   ]);
 
-  const months = focusMonthsUntil(s.target_enrollment);
+  const months = focusMonthsUntil(s.expiry_date);
   const u = focusBucket(months) ? FOCUS_URG[focusBucket(months)] : null;
   const kv = (k, v) => v ? `<div style="font-size:12px;padding:3px 0"><span style="color:#888;display:inline-block;width:78px">${k}</span>${tsaEsc(v)}</div>` : '';
   const lvl = { 1: '🔴 冲刺', 2: '🟡 匹配', 3: '🟢 保底' };
@@ -1434,7 +1434,7 @@ async function focusOpenSummary(sid) {
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:2px solid #1a3a5a;padding-bottom:12px">
       <div>
         <div style="font-family:'Noto Serif SC',serif;font-size:20px;font-weight:600">${tsaEsc(s.name)}<span style="font-size:13px;color:#888;font-weight:400;margin-left:10px">${MAJORS[s.major] || s.major || ''}</span></div>
-        <div style="font-size:12px;color:#666;margin-top:3px">入学目标 ${tsaEsc(s.target_enrollment) || '—'} ${u ? `<span style="padding:1px 8px;border-radius:10px;background:${u.bg};color:${u.c};margin-left:6px">${u.t}${months != null && months >= 0 ? '·还有' + months + '个月' : ''}</span>` : ''}</div>
+        <div style="font-size:12px;color:#666;margin-top:3px">到期 ${tsaEsc(s.expiry_date) || '—'}${s.target_enrollment?' · 入学目标 '+tsaEsc(s.target_enrollment):''} ${u ? `<span style="padding:1px 8px;border-radius:10px;background:${u.bg};color:${u.c};margin-left:6px">${u.t}${months != null && months >= 0 ? '·还有' + months + '个月' : ''}</span>` : ''}</div>
       </div>
       <div style="display:flex;gap:8px" class="focus-noprint">
         <button onclick="window.print()" style="font-size:12px;background:#1a3a5a;color:#fff;border:none;border-radius:3px;padding:7px 14px;cursor:pointer;font-family:inherit">🖨 打印 / 存PDF</button>
