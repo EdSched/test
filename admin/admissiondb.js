@@ -710,6 +710,17 @@ function openShareToStudents() {
   modal.id = 'shareModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   const yr = new Date().getFullYear();
+  // 发布目标改用「学生实际绑定的专业」（与学生档案同一套动态专业），默认选中与出愿分类最匹配的那个
+  const studentMajorKeys = (typeof majorFilterKeys === 'function') ? majorFilterKeys() : [];
+  const _mlabel = k => (typeof majorLabel === 'function' ? majorLabel(k) : k) || k;
+  const admFirst = adbSelectedMajors[0] || '';
+  const admFirstLabel = (typeof ADMISSION_MAJORS !== 'undefined' && ADMISSION_MAJORS[admFirst]) || admFirst;
+  let defBooking = studentMajorKeys.find(k => k === admFirst)
+    || studentMajorKeys.find(k => { const l = _mlabel(k); return l && admFirstLabel && (l.includes(admFirstLabel) || admFirstLabel.includes(l)); })
+    || (studentMajorKeys[0] || '');
+  const bookingOpts = studentMajorKeys.length
+    ? studentMajorKeys.map(k => `<option value="${k}"${k === defBooking ? ' selected' : ''}>${_mlabel(k)}</option>`).join('')
+    : '<option value="">（无可用专业，请先在学生档案建立专业）</option>';
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:6px;padding:20px;max-width:460px;width:100%">
       <div style="font-size:14px;font-weight:600;margin-bottom:14px">📤 共享学校列表给学生</div>
@@ -720,22 +731,8 @@ function openShareToStudents() {
       </div>
       <div class="form-group">
         <label class="form-label">发布到哪个学生页面 *</label>
-        <select id="share_booking_major">
-          <option value="shakai_group">社会人文（社会学/新传/福祉合并页）</option>
-          <option value="shakai">社会学</option>
-          <option value="keizai">経済学</option>
-          <option value="keiei">経営学</option>
-          <option value="shinpan">新闻传播学</option>
-          <option value="fukushi">社会福祉学</option>
-          <option value="nihongo">日本语教育</option>
-          <option value="hyosho">表象文化・文学・哲学</option>
-          <option value="seiji">政治学</option>
-          <option value="toyo">東洋史</option>
-          <option value="bunka">文化人类学</option>
-          <option value="mot">MOT</option>
-          <option value="tokei">統計・計量</option>
-        </select>
-        <div style="font-size:10px;color:var(--text-3);margin-top:3px">学生只会在对应页面看到这份列表</div>
+        <select id="share_booking_major">${bookingOpts}</select>
+        <div style="font-size:10px;color:var(--text-3);margin-top:3px">已按出愿分类自动匹配学生专业，如不对可手动改；学生只会在对应专业页面看到这份列表</div>
       </div>
       <div class="form-group">
         <label class="form-label">出愿季度</label>
