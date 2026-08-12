@@ -6,43 +6,76 @@
 </head><body>
 <div id="nav"></div>
 <div class="wrap">
-  <div class="tip">选一天，直接看每个腾讯账号哪些时段被占、被谁占。<b>只统计占用会议账号的安排</b>（线上课、需账号的直播/预约等）。</div>
+  <div class="tip">选日期和时段，快速看<b>哪些腾讯账号此时段空闲</b>；也可切换网格看全天占用。</div>
   <div class="card">
     <div class="row">
       <div class="field"><label>日期</label><input type="date" id="date"></div>
-      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="today">回到今天</button></div>
-      <div class="field"><label>&nbsp;</label><span class="muted" id="meta"></span></div>
+      <div class="field"><label>开始</label><select id="st"></select></div>
+      <div class="field"><label>结束</label><select id="et"></select></div>
+      <div class="field"><label>&nbsp;</label><button id="go">查空闲账号</button></div>
+      <div class="field"><label>&nbsp;</label>
+        <span class="vt2"><button class="ghost sm on" id="v_list">列表</button><button class="ghost sm" id="v_grid">网格(全天)</button></span></div>
     </div>
   </div>
-  <div class="card"><div class="board" id="gridBox"></div></div>
+  <div class="card" id="box"><div class="muted">选好时段点「查空闲账号」</div></div>
 </div>
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('meeting.html');
-let ROOMS=[], ACCOUNTS=[], BOOKINGS=[];
+let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], VIEW='list';
 async function boot(){
+  fillSelect(el('st'), SLOTS); fillSelect(el('et'), SLOTS);
   el('date').value = todayStr();
+  const idx=SLOTS.indexOf('18:00'); if(idx>0){ el('st').value='18:00'; el('et').value='21:00'; }
   ROOMS    = await sbGet('sched_rooms','select=*');
   ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
   BOOKINGS = await sbGet('sched_bookings','select=*');
   { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
+  el('go').onclick = ()=>{ VIEW='list'; setView(); render(); };
+  el('v_list').onclick = ()=>{ VIEW='list'; setView(); render(); };
+  el('v_grid').onclick = ()=>{ VIEW='grid'; setView(); render(); };
   el('date').onchange = render;
-  el('today').onclick = ()=>{ el('date').value=todayStr(); render(); };
   render();
 }
+function setView(){ el('v_list').classList.toggle('on',VIEW==='list'); el('v_grid').classList.toggle('on',VIEW==='grid'); }
+function acctName(a){ return a.name + (a.note?('（'+a.note+'）'):''); }
+function occInfo(b){ return (b.title||KIND_LABEL[b.kind]||'') + ' ' + (b.user_name||b.student_name||'') + ' ' + b.start_time+'-'+b.end_time; }
+
 function render(){
-  const date = el('date').value;
-  // 只看占用账号的记录（含固定+临时，凡 uses_meeting）
-  const accts = ACCOUNTS.slice().sort((a,b)=>{
-    const ka=a.kind==='固定'?0:1, kb=b.kind==='固定'?0:1;
-    return ka-kb || (a.name||'').localeCompare(b.name||'');
+  return VIEW==='grid' ? renderGrid() : renderList();
+}
+function renderList(){
+  const date=el('date').value, s=el('st').value, e=el('et').value;
+  if(e<=s){ el('box').innerHTML='<span class="muted">结束需晚于开始</span>'; return; }
+  const accts = ACCOUNTS.slice().sort((a,b)=>(a.kind==='固定'?0:1)-(b.kind==='固定'?0:1)||(a.name||'').localeCompare(b.name||''));
+  const free=[], busy=[];
+  accts.forEach(a=>{
+    const conf=accountConflicts(BOOKINGS, a.id, date, s, e, null);
+    if(conf.length) busy.push({a,conf}); else free.push(a);
   });
+  let h=`<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} ${s}-${e}</div>`;
+  h+='<h4 style="margin:4px 0 8px">✅ 空闲账号（'+free.length+'）</h4>';
+  if(free.length){
+    h+='<div style="display:flex;flex-wrap:wrap;gap:8px">'+free.map(a=>
+      `<span class="badge b-ok" style="padding:6px 12px;font-size:13px">${esc(acctName(a))}</span>`).join('')+'</div>';
+  }else h+='<span class="muted">该时段没有空闲账号</span>';
+  h+='<h4 style="margin:16px 0 8px">⛔ 已占用（'+busy.length+'）</h4>';
+  if(busy.length){
+    h+='<table><thead><tr><th>账号</th><th>被占情况</th></tr></thead><tbody>';
+    busy.forEach(({a,conf})=>{ h+=`<tr><td>${esc(acctName(a))}</td><td class="muted">`+
+      conf.map(b=>esc(occInfo(b))).join('<br>')+'</td></tr>'; });
+    h+='</tbody></table>';
+  }else h+='<span class="muted">无</span>';
+  el('box').innerHTML=h;
+}
+function renderGrid(){
+  const date = el('date').value;
+  const accts = ACCOUNTS.slice().sort((a,b)=>(a.kind==='固定'?0:1)-(b.kind==='固定'?0:1)||(a.name||'').localeCompare(b.name||''));
   const todays = BOOKINGS.filter(b => b.uses_meeting && b.meeting_account_id && bookingOnDate(b, date) &&
     !(b.kind==='course' && b.course_id && window.SKIPMAP && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
-  el('meta').textContent = WEEKDAYS[weekdayOf(date)] + ' · ' + accts.length + ' 个账号 · 当天占用 ' + todays.length + ' 次';
   const covered=(accId,slot)=>todays.some(b=>String(b.meeting_account_id)===String(accId)&&b.start_time<=slot&&slot<b.end_time);
-
-  let h='<table><thead><tr><th class="tcol">时段</th>';
+  let h=`<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} · 全天占用一览</div>`;
+  h+='<div class="board"><table><thead><tr><th class="tcol">时段</th>';
   accts.forEach(a=>h+=`<th>${esc(a.name)}<br><small class="muted">${a.kind}</small></th>`);
   h+='</tr></thead><tbody>';
   SLOTS.forEach((slot,i)=>{
@@ -50,21 +83,17 @@ function render(){
     h+=`<tr><td class="tcol">${slot}</td>`;
     accts.forEach(a=>{
       const starting=todays.filter(b=>String(b.meeting_account_id)===String(a.id)&&b.start_time===slot);
-      const isC=covered(a.id,slot);
-      const spanStart=!isC&&(!prev||covered(a.id,prev));
-      h+='<td class="cell">';
-      if(spanStart) h+='<span class="freetag">空</span>';
-      starting.forEach(b=>{
-        const ai=t=>SLOTS.indexOf(t); let z=ai(b.end_time); if(z<0)z=SLOTS.length; let st=ai(b.start_time); if(st<0)st=0;
+      const isC=covered(a.id,slot); const spanStart=!isC&&(!prev||covered(a.id,prev));
+      h+='<td class="cell">'; if(spanStart) h+='<span class="freetag">空</span>';
+      starting.forEach(b=>{ const ai=t=>SLOTS.indexOf(t); let z=ai(b.end_time); if(z<0)z=SLOTS.length; let st=ai(b.start_time); if(st<0)st=0;
         const rows=Math.max(1,z-st);
-        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*22-3}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${esc(b.user_name||b.student_name||'')} ${b.start_time}-${b.end_time}</small></div>`;
-      });
+        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*22-3}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${esc(b.user_name||b.student_name||'')} ${b.start_time}-${b.end_time}</small></div>`; });
       h+='</td>';
     });
     h+='</tr>';
   });
-  h+='</tbody></table>';
-  el('gridBox').innerHTML=h;
+  h+='</tbody></table></div>';
+  el('box').innerHTML=h;
 }
 boot();
 </script>
