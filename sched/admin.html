@@ -43,6 +43,7 @@ async function doEnter(){
     const ok = rec && (hasPerm(rec,'manage') || rec.role==='admin');
     if(!ok){ el('gerr').textContent='口令无效或非管理员'; el('gerr').classList.remove('hidden'); return; }
     ROLE=rec;
+    sessionStorage.setItem('sched_role', JSON.stringify(rec));  // 全站共享登录身份
     el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
     await reloadAll(); show('pending');
   }catch(e){ el('gerr').textContent=e.message; el('gerr').classList.remove('hidden'); }
