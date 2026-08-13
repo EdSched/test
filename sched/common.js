@@ -287,16 +287,19 @@ async function checkCode(code, needRole){
 
 /* ---------- 顶部导航（按角色权限生成；带 code 时链接自动带上 ?k=）---------- */
 function renderNav(active, roleRec){
+  if(new URLSearchParams(location.search).get('embed')==='1') return '';  // 被 admin iframe 嵌入时隐藏导航
   const code = currentCode();
   const kq = code ? ('?k='+encodeURIComponent(code)) : '';
   // 有角色记录 → 按权限生成；否则显示全部（管理员/开发用）
   let items;
   if(roleRec){
+    const ADMIN_ONLY = new Set(['assign','approve','meeting_arrange','conflict','manage']);
     const ps = permSet(roleRec);
     const seen = new Set();
     items = [];
     PERM_DEFS.forEach(([perm,label,page])=>{
       if(!ps.has(perm)) return;
+      if(ADMIN_ONLY.has(perm)) return;                 // admin 专属功能不进导航（避免跳 admin）
       const base = page.split('?')[0];
       if(seen.has(base)) return; seen.add(base);       // 同页去重（如两种录入都指向 booking）
       items.push([base, label]);
