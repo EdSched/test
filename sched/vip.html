@@ -7,7 +7,8 @@
   .topbar{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
   .topbar h2{ font-size:18px; margin:0; }
   .seg{ display:inline-flex; gap:4px; margin-left:auto; }
-  .seg button{ padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; font-size:13px; }
+  .seg button{ padding:6px 14px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; cursor:pointer; font-size:13px; }
+  .seg button:hover{ background:#f0f3f7; }
   .seg button.on{ background:var(--blue); color:#fff; border-color:var(--blue); }
 </style>
 </head><body>
@@ -168,30 +169,12 @@ function urgentMsg(roomId){
 }
 function renderGrid(){
   const campus=el('campus').value, date=el('date').value;
-  const rooms=ROOMS.filter(r=>r.campus===campus && isVIP(r));
+  const rooms=ROOMS.filter(r=>r.campus===campus && isVIP(r)).map(r=>({id:r.id,name:r.name,sub:r.capacity+'人'}));
   const box=el('gridBox');
   if(!rooms.length){ box.innerHTML='<div class="muted">该校区暂无 VIP 教室</div>'; return; }
   const todays=BOOKINGS.filter(b=>bookingOnDate(b,date) &&
     !(b.kind==='course'&&b.course_id&&window.SKIPMAP&&window.SKIPMAP[b.course_id]&&window.SKIPMAP[b.course_id].has(date)));
-  const covered=(rid,slot)=>todays.some(b=>String(b.room_id)===String(rid)&&b.start_time<=slot&&slot<b.end_time);
-  let h='<table><thead><tr><th class="tcol">时段</th>';
-  rooms.forEach(r=>h+=`<th>${esc(r.name)}<br><small class="muted">${r.capacity}人</small></th>`);
-  h+='</tr></thead><tbody>';
-  SLOTS.forEach((slot,i)=>{
-    const prev=i>0?SLOTS[i-1]:null;
-    h+=`<tr><td class="tcol">${slot}</td>`;
-    rooms.forEach(r=>{
-      const starting=todays.filter(b=>String(b.room_id)===String(r.id)&&b.start_time===slot);
-      const isC=covered(r.id,slot); const spanStart=!isC&&(!prev||covered(r.id,prev));
-      h+='<td class="cell">'; if(spanStart) h+='<span class="freetag">空</span>';
-      starting.forEach(b=>{ const ai=t=>SLOTS.indexOf(t); let z=ai(b.end_time); if(z<0)z=SLOTS.length; let st=ai(b.start_time); if(st<0)st=0;
-        const rows=Math.max(1,z-st);
-        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*24-2}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${b.start_time}-${b.end_time}</small></div>`; });
-      h+='</td>';
-    });
-    h+='</tr>';
-  });
-  h+='</tbody></table>'; box.innerHTML=h;
+  box.innerHTML = renderOccupancyGrid(rooms, todays, 'room_id');
 }
 function openModal(roomId){
   if(!advanceOk()){ toast('3天内请用紧急预约', false); return; }
