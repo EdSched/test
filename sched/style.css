@@ -2,7 +2,7 @@
 * { box-sizing: border-box; }
 :root{
   --blue:#2f6b4f; --blue-d:#245740; --bg:#f4f6f9; --line:#e2e6ec;
-  --ink:#1f2733; --sub:#6b7480; --ok:#0f9d58; --warn:#e0a800; --err:#e97457ee;
+  --ink:#1f2733; --sub:#6b7480; --ok:#0f9d58; --warn:#e0a800; --err:#e97457;
   --course:#dbeafe; --vip:#fde2e2; --temp:#fff3cd; --rental:#e6f4ea; --meeting:#ede7f6;
 }
 body{ margin:0; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
@@ -45,6 +45,9 @@ th{ background:#f7f9fc; font-weight:600; color:var(--sub); white-space:nowrap; }
   border-radius:6px; font-size:13px; margin-bottom:12px; }
 .muted{ color:var(--sub); }
 .hidden{ display:none !important; }
+.permchip{ display:inline-block; padding:3px 9px; margin:2px; border:1px solid var(--line);
+  border-radius:14px; font-size:12px; cursor:pointer; background:#fff; color:var(--sub); user-select:none; }
+.permchip.on{ background:var(--blue); color:#fff; border-color:var(--blue); }
 
 /* 看板网格 */
 .board{ overflow:auto; }
@@ -92,3 +95,5 @@ th{ background:#f7f9fc; font-weight:600; color:var(--sub); white-space:nowrap; }
 .hub a:hover{ border-color:var(--blue); box-shadow:0 2px 8px rgba(37,99,235,.08); }
 .hub a b{ display:block; font-size:15px; margin-bottom:4px; }
 .hub a span{ font-size:12px; color:var(--sub); }
+.hub a.alert-card{ background:#eef4f0; border-color:#cfe3d6; }
+.hub a.alert-card b{ color:var(--blue); }
