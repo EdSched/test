@@ -4,6 +4,10 @@
 <title>管理后台 · 唯新</title>
 <link rel="stylesheet" href="style.css">
 </head><body>
+<header class="top"><div class="wrap" style="display:flex;align-items:center">
+  <h1 style="margin:0;font-size:17px">唯新 · 教学资源调度 <span style="font-size:13px;color:var(--sub);font-weight:400">管理后台</span></h1>
+  <button class="ghost sm" id="logout" style="margin-left:auto">退出登录</button>
+</div></header>
 <div class="wrap">
   <div id="gate" class="gate card">
     <h3>管理员口令</h3>
@@ -33,6 +37,7 @@ let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[], ROLE=null;
 
 /* 口令登录（口令即 access_codes 的 code，需 manage 权限）。admin-9527 可直接进 */
 el('enter').onclick = doEnter;
+el('logout').onclick = ()=>{ try{ sessionStorage.removeItem('sched_role'); }catch(e){} el('main').classList.add('hidden'); el('gate').classList.remove('hidden'); el('code').value=''; };
 el('code').addEventListener('keydown',e=>{ if(e.key==='Enter') doEnter(); });
 async function doEnter(){
   const code=el('code').value.trim(); if(!code) return;
@@ -489,7 +494,7 @@ function tabAccounts(){
 function tabCourses(){
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   const majors=[...new Set(COURSES.map(c=>c.major).filter(Boolean))].sort();
-  let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）</h3>'+
+  let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）<button class="sm" id="cf_new" style="margin-left:10px">+ 新增课程</button></h3>'+
     '<div class="row" style="margin-bottom:10px">'+
       '<div class="field"><label>搜索课名/讲师</label><input id="cf_q" placeholder="关键词"></div>'+
       '<div class="field"><label>期</label><select id="cf_term"><option value="">全部期</option>'+terms.map(t=>`<option>${esc(t)}</option>`).join('')+'</select></div>'+
@@ -503,6 +508,7 @@ function tabCourses(){
   fillSelect(el('cf_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   fillSelect(el('cf_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
   ['cf_q','cf_term','cf_cat','cf_major','cf_type','cf_campus'].forEach(id=>el(id)[id==='cf_q'?'oninput':'onchange']=renderCoursesTable);
+  el('cf_new').onclick=()=>courseEdit(null);
   renderCoursesTable();
 }
 function renderCoursesTable(){
@@ -565,13 +571,16 @@ function dupScan(list){
   el('cf_selinfo').textContent='发现 '+dups.length+' 组重复，已勾选其中 '+mark+' 门冗余（各组保留最早一门），可点「删除所选」';
 }
 function courseEdit(id){
-  const c=COURSES.find(x=>String(x.id)===String(id));
+  const isNew = (id===null || id===undefined || id==='');
+  const c = isNew
+    ? { id:null, name:'', teacher:'', category:CATEGORIES[0], campus:'高马', major:'', course_type:'', term:'', mode:'线下', start_time:'18:00', end_time:'21:00', start_date:'', end_date:'', sessions:'', est_students:'', weekdays:'', meeting_link:'', skip_dates:'' }
+    : COURSES.find(x=>String(x.id)===String(id));
   const wd=(c.weekdays||'').split(',').map(Number);
   const slotOpts=(sel)=>SLOTS.map(t=>`<option${t===sel?' selected':''}>${t}</option>`).join('');
   const catOpts=CATEGORIES.map(x=>`<option${x===c.category?' selected':''}>${x}</option>`).join('');
   const campOpts=['高马','市谷','线上'].map(x=>`<option${x===c.campus?' selected':''}>${x}</option>`).join('');
   let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px">'+
-    '<div class="card" style="width:560px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">编辑课程</h3>'+
+    '<div class="card" style="width:560px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">'+(isNew?'新增课程':'编辑课程')+'</h3>'+
     '<div class="grid2">'+
     `<div class="field"><label>课程名（统一命名）</label><input id="e_name" value="${esc(c.name)}"></div>`+
     `<div class="field"><label>讲师</label><input id="e_teacher" value="${esc(c.teacher||'')}"></div>`+
@@ -641,7 +650,13 @@ function courseEdit(id){
       weekdays:days, sessions:el('e_sess').value?Number(el('e_sess').value):null,
       est_students:el('e_est').value?Number(el('e_est').value):null, meeting_link:el('e_link').value.trim()||null,
       skip_dates: SKIP.length? SKIP.join(',') : null };
+    if(!patch.name){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">请填课程名</span>'; return; }
     try{
+      if(isNew){
+        await sbInsert('sched_courses', patch);
+        await reloadAll(); show('courses'); toast('课程已新增');
+        return;
+      }
       await sbUpdate('sched_courses', c.id, patch);
       // 若已排教室，同步把休讲日/结课日写进对应占用，看板才准
       const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
@@ -651,7 +666,17 @@ function courseEdit(id){
   };
 }
 
-/* ---------- 口令 CRUD ---------- */
+/* 角色主功能落地页：按权限决定链接进入哪个页面 */
+function landingFor(role){
+  const ps = new Set((role.perms?role.perms.split(','):[]).map(s=>s.trim()).filter(Boolean));
+  if(ps.has('manage')) return 'admin.html';
+  if(ps.has('course')) return 'entry.html';
+  if(ps.has('entry_room')||ps.has('entry_room_full')) return 'booking.html';
+  if(ps.has('board')) return 'board.html';
+  if(ps.has('meeting_view')) return 'meeting.html';
+  return 'timetable.html';
+}
+/* ---------- 角色权限 ---------- */
 function tabCodes(){
   const base = location.origin + location.pathname.replace(/admin\.html$/,'') ;
   let h='<div class="card"><h3 style="margin-top:2px">角色权限</h3>'+
@@ -666,7 +691,7 @@ function tabCodes(){
         const nm = perm==='entry_room'?'录入(仅临时)':perm==='entry_room_full'?'录入(全部)':label;
         return `<span class="permchip${on?' on':''}" data-perm="${perm}" data-cid="${c.id}">${on?'✓ ':''}${esc(nm)}</span>`;
       }).join(' ');
-    const link = base+'index.html?k='+encodeURIComponent(c.code);
+    const link = base+landingFor(c)+'?k='+encodeURIComponent(c.code);
     h+=`<tr><td><b>${esc(c.label||c.role||'')}</b><br><small class="muted">${esc(c.role||'')}</small></td>`+
       `<td style="max-width:520px">${chips}</td>`+
       `<td style="max-width:220px"><input readonly value="${esc(link)}" style="width:190px;font-size:11px" data-link="${c.id}"> <button class="sm ghost" data-copy="${c.id}">复制</button></td>`+
