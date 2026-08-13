@@ -56,37 +56,8 @@ function render(){
   const covered = (roomId, slot) => todays.some(b => String(b.room_id)===String(roomId) &&
     b.start_time<=slot && slot<b.end_time);
 
-  let h = '<table><thead><tr><th class="tcol">时段</th>';
-  rooms.forEach(r => h += `<th>${esc(r.name)}<br><small class="muted">${r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人')}</small></th>`);
-  h += '</tr></thead><tbody>';
-
-  SLOTS.forEach((slot,i) => {
-    const prev = i>0 ? SLOTS[i-1] : null;
-    h += `<tr><td class="tcol">${slot}</td>`;
-    rooms.forEach(r => {
-      const starting = todays.filter(b => String(b.room_id)===String(r.id) && b.start_time===slot);
-      const isCovered = covered(r.id, slot);
-      const spanStart = !isCovered && (!prev || covered(r.id, prev)); // 空档起点
-      h += '<td class="cell'+(isCovered?'':' freecell')+'">';
-      if(spanStart) h += '<span class="freetag">空</span>';
-      starting.forEach(b => {
-        const rows = spanRows(b.start_time, b.end_time);
-        const pend = b.status==='pending';
-        h += `<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*24-2}px;${pend?'border:1px dashed #d93025;opacity:.85':''}">`
-          + `${esc(b.title||KIND_LABEL[b.kind]||'')} ${b.uses_meeting?'<span class="mic">📶</span>':''}`
-          + `<small>${esc(b.user_name||'')} ${b.start_time}-${b.end_time}${pend?' · 待确认':''}</small></div>`;
-      });
-      h += '</td>';
-    });
-    h += '</tr>';
-  });
-  h += '</tbody></table>';
-  el('boardBox').innerHTML = h;
-}
-function spanRows(s,e){ // 跨多少个 30 分格
-  const idx = t => SLOTS.indexOf(t);
-  let a=idx(s), b=idx(e); if(b<0) b=SLOTS.length; if(a<0) a=0;
-  return Math.max(1, b-a);
+  const gridRooms = rooms.map(r=>({ id:r.id, name:r.name, sub:(r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人')) }));
+  el('boardBox').innerHTML = renderOccupancyGrid(gridRooms, todays, 'room_id');
 }
 boot();
 </script>
