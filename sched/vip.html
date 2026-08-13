@@ -186,7 +186,7 @@ function renderGrid(){
       h+='<td class="cell">'; if(spanStart) h+='<span class="freetag">空</span>';
       starting.forEach(b=>{ const ai=t=>SLOTS.indexOf(t); let z=ai(b.end_time); if(z<0)z=SLOTS.length; let st=ai(b.start_time); if(st<0)st=0;
         const rows=Math.max(1,z-st);
-        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*22-3}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${b.start_time}-${b.end_time}</small></div>`; });
+        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*24-2}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${b.start_time}-${b.end_time}</small></div>`; });
       h+='</td>';
     });
     h+='</tr>';
