@@ -99,6 +99,44 @@ function parseTencent(text){
   return out;
 }
 
+/* 通用占用网格（rowspan 版，色块与时段严格对齐，不漂移）
+   rooms: [{id,name,sub}]；items: 占用记录数组；keyField: 'room_id' 或 'meeting_account_id' */
+function renderOccupancyGrid(rooms, items, keyField){
+  const idxOf=t=>{ const i=SLOTS.indexOf(t); return i<0?SLOTS.length:i; };
+  // 每列一个“跳过计数”：>0 表示这格被上面的 rowspan 占了，不输出
+  const skip = rooms.map(()=>0);
+  let h='<table><thead><tr><th class="tcol">时段</th>';
+  rooms.forEach(r=>h+=`<th>${esc(r.name)}${r.sub?('<br><small class="muted">'+esc(r.sub)+'</small>'):''}</th>`);
+  h+='</tr></thead><tbody>';
+  SLOTS.forEach((slot,si)=>{
+    h+=`<tr><td class="tcol">${slot}</td>`;
+    rooms.forEach((r,ci)=>{
+      if(skip[ci]>0){ skip[ci]--; return; }               // 被上方占用块吃掉
+      const b = items.find(x=>String(x[keyField])===String(r.id) && x.start_time===slot);
+      if(b){
+        let span = Math.max(1, idxOf(b.end_time)-idxOf(b.start_time));
+        if(si+span>SLOTS.length) span=SLOTS.length-si;
+        skip[ci]=span-1;
+        const who = b.user_name||b.student_name||'';
+        const pend = b.status==='pending';
+        const mic = b.uses_meeting ? ' <span class="mic">📶</span>' : '';
+        h+=`<td class="occ ${KIND_CLASS[b.kind]||''}${pend?' occ-pend':''}" rowspan="${span}">`+
+           `<div class="occ-in">${esc(b.title||KIND_LABEL[b.kind]||'')}${mic}`+
+           `<small>${esc(who)} ${b.start_time}-${b.end_time}${pend?' · 待确认':''}</small></div></td>`;
+      }else{
+        // 空格：连续空档起点标“空”
+        const prevSlot = si>0?SLOTS[si-1]:null;
+        const prevCovered = prevSlot ? items.some(x=>String(x[keyField])===String(r.id) && x.start_time<=prevSlot && prevSlot<x.end_time) : false;
+        const spanStart = !prevSlot || prevCovered;
+        h+='<td class="cell">'+(spanStart?'<span class="freetag">空</span>':'')+'</td>';
+      }
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  return h;
+}
+
 /* 本地时区日期格式化（避免 toISOString 的 UTC 偏移，日本 UTC+9 会差一天） */
 function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
@@ -211,7 +249,7 @@ async function checkCode(code, needRole){
 function renderNav(active){
   const items = [
     ['index.html','首页'],['board.html','教室看板'],['timetable.html','学生课表'],
-    ['booking.html','教室预约'],['meeting.html','会议账号'],
+    ['booking.html','教室占用录入'],['meeting.html','会议账号'],
     ['entry.html','录入'],['admin.html','管理']
   ];
   return '<header class="top"><div class="wrap"><h1>唯新 · 教学资源调度</h1><nav>'+
