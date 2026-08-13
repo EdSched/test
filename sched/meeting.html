@@ -70,29 +70,12 @@ function renderList(){
 }
 function renderGrid(){
   const date = el('date').value;
-  const accts = ACCOUNTS.slice().sort((a,b)=>(a.kind==='固定'?0:1)-(b.kind==='固定'?0:1)||(a.name||'').localeCompare(b.name||''));
+  const accts = ACCOUNTS.slice().sort((a,b)=>(a.kind==='固定'?0:1)-(b.kind==='固定'?0:1)||(a.name||'').localeCompare(b.name||''))
+    .map(a=>({id:a.id,name:a.name,sub:a.kind}));
   const todays = BOOKINGS.filter(b => b.uses_meeting && b.meeting_account_id && bookingOnDate(b, date) &&
     !(b.kind==='course' && b.course_id && window.SKIPMAP && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
-  const covered=(accId,slot)=>todays.some(b=>String(b.meeting_account_id)===String(accId)&&b.start_time<=slot&&slot<b.end_time);
   let h=`<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} · 全天占用一览</div>`;
-  h+='<div class="board"><table><thead><tr><th class="tcol">时段</th>';
-  accts.forEach(a=>h+=`<th>${esc(a.name)}<br><small class="muted">${a.kind}</small></th>`);
-  h+='</tr></thead><tbody>';
-  SLOTS.forEach((slot,i)=>{
-    const prev=i>0?SLOTS[i-1]:null;
-    h+=`<tr><td class="tcol">${slot}</td>`;
-    accts.forEach(a=>{
-      const starting=todays.filter(b=>String(b.meeting_account_id)===String(a.id)&&b.start_time===slot);
-      const isC=covered(a.id,slot); const spanStart=!isC&&(!prev||covered(a.id,prev));
-      h+='<td class="cell">'; if(spanStart) h+='<span class="freetag">空</span>';
-      starting.forEach(b=>{ const ai=t=>SLOTS.indexOf(t); let z=ai(b.end_time); if(z<0)z=SLOTS.length; let st=ai(b.start_time); if(st<0)st=0;
-        const rows=Math.max(1,z-st);
-        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*24-2}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${esc(b.user_name||b.student_name||'')} ${b.start_time}-${b.end_time}</small></div>`; });
-      h+='</td>';
-    });
-    h+='</tr>';
-  });
-  h+='</tbody></table></div>';
+  h+='<div class="board">'+renderOccupancyGrid(accts, todays, 'meeting_account_id')+'</div>';
   el('box').innerHTML=h;
 }
 boot();
