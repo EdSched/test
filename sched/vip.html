@@ -135,13 +135,13 @@ function find(){
   if(ppl) rooms=rooms.filter(r=>r.capacity>=ppl);
   const rows=rooms.map(r=>{ const conf=roomConflicts(BOOKINGS,r.id,date,s,e,null); return {r,free:conf.length===0,conf}; });
   const urgent=!advanceOk();
-  let h=`<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} ${s}-${e}${ppl?(' · ≥'+ppl+'人'):''}${urgent?' · <b style="color:#d93025">紧急（3天内）</b>':''}</div>`;
+  let h=`<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} ${s}-${e}${ppl?(' · ≥'+ppl+'人'):''}${urgent?' · <b style="color:#e97457">紧急（3天内）</b>':''}</div>`;
   h+='<table><thead><tr><th>教室</th><th>容量</th><th>状态</th><th>操作</th></tr></thead><tbody>';
   rows.forEach(({r,free,conf})=>{
     let op='';
     if(free){
       op = urgent
-        ? `<button class="sm" style="background:#d93025" data-urgent="${r.id}">紧急预约</button>`
+        ? `<button class="sm" style="background:#e97457" data-urgent="${r.id}">紧急预约</button>`
         : `<button class="sm" data-r="${r.id}">预约</button>`;
     }else op='<span class="muted">—</span>';
     h+=`<tr><td>${esc(r.name)}</td><td>${r.capacity}人</td>`+
@@ -162,7 +162,7 @@ function urgentMsg(roomId){
   const box=el('resBox');
   const div=document.createElement('div');
   div.className='card'; div.style.marginTop='10px'; div.style.background='#fff7f7';
-  div.innerHTML='<b style="color:#d93025">紧急预约 · 复制以下文字发到群里</b>'+
+  div.innerHTML='<b style="color:#e97457">紧急预约 · 复制以下文字发到群里</b>'+
     `<textarea rows="3" style="width:100%;margin-top:6px" readonly>${esc(msg)}</textarea>`+
     '<button class="sm" id="copyUrgent">复制文字</button>';
   box.appendChild(div);
@@ -188,7 +188,7 @@ function openModal(roomId, urgent){
   el('m_warn').classList.add('hidden');
   // 紧急模式：改标题与按钮，提示会生成群消息
   el('m_head').innerHTML = URGENT
-    ? '紧急预约 · <span style="color:#d93025">'+esc(r.name)+'</span>'
+    ? '紧急预约 · <span style="color:#e97457">'+esc(r.name)+'</span>'
     : '预约 · '+esc(r.name);
   el('m_hint').innerHTML = URGENT
     ? '<div class="badge b-warn" style="margin-bottom:6px">3天内为紧急预约：填好信息后生成群消息，复制发群联系管理员安排。</div>'
@@ -213,7 +213,7 @@ async function submit(){
     const box=el('resBox');
     const div=document.createElement('div');
     div.className='card'; div.style.marginTop='10px'; div.style.background='#fff7f7';
-    div.innerHTML='<b style="color:#d93025">紧急预约 · 复制以下文字发到群里联系管理员</b>'+
+    div.innerHTML='<b style="color:#e97457">紧急预约 · 复制以下文字发到群里联系管理员</b>'+
       `<textarea rows="4" style="width:100%;margin-top:6px" readonly>${esc(msg)}</textarea>`+
       '<button class="sm" id="copyUrgent">复制文字</button>';
     box.appendChild(div);
