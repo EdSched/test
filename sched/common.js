@@ -262,6 +262,14 @@ async function getRoleByCode(code){
 }
 // 当前 URL 的 code
 function currentCode(){ return new URLSearchParams(location.search).get('k') || ''; }
+// 统一获取当前身份：已登录(session)优先，其次 URL 的 ?k=
+async function currentRole(){
+  try{ const s=sessionStorage.getItem('sched_role'); if(s) return JSON.parse(s); }catch(e){}
+  const code=currentCode();
+  if(code){ const r=await getRoleByCode(code); if(r){ try{ sessionStorage.setItem('sched_role',JSON.stringify(r)); }catch(e){} } return r; }
+  return null;
+}
+function isAdminRole(r){ return !!(r && (r.role==='admin' || (r.perms&&r.perms.split(',').map(s=>s.trim()).includes('manage')))); }
 // 角色的权限集合
 function permSet(roleRec){ return new Set((roleRec&&roleRec.perms?roleRec.perms.split(','):[]).map(s=>s.trim()).filter(Boolean)); }
 function hasPerm(roleRec, p){ return permSet(roleRec).has(p); }
