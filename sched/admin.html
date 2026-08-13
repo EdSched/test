@@ -8,7 +8,7 @@
 <div class="wrap">
   <div id="gate" class="gate card">
     <h3>管理员口令</h3>
-    <input id="code" placeholder="admin 口令" style="width:100%;margin-bottom:10px">
+    <input id="code" placeholder="口令" style="width:100%;margin-bottom:10px">
     <button id="enter" style="width:100%">进入</button>
     <p id="gerr" class="b-err badge hidden" style="margin-top:10px"></p>
   </div>
@@ -30,17 +30,19 @@
 
 <script src="common.js"></script>
 <script>
-el('nav').innerHTML = renderNav('admin.html');
-let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[];
+let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[], ROLE=null;
 
-/* 口令 */
+/* 口令登录（口令即 access_codes 的 code，需 manage 权限）。admin-9527 可直接进 */
+el('nav').innerHTML = renderNav('admin.html');
 el('enter').onclick = doEnter;
 el('code').addEventListener('keydown',e=>{ if(e.key==='Enter') doEnter(); });
 async function doEnter(){
   const code=el('code').value.trim(); if(!code) return;
   try{
-    const rec=await checkCode(code,'admin');
-    if(!rec){ el('gerr').textContent='口令无效或非管理员'; el('gerr').classList.remove('hidden'); return; }
+    const rec=await getRoleByCode(code);
+    const ok = rec && (hasPerm(rec,'manage') || rec.role==='admin');
+    if(!ok){ el('gerr').textContent='口令无效或非管理员'; el('gerr').classList.remove('hidden'); return; }
+    ROLE=rec;
     el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
     await reloadAll(); show('pending');
   }catch(e){ el('gerr').textContent=e.message; el('gerr').classList.remove('hidden'); }
