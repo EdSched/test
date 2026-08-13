@@ -236,25 +236,77 @@ function toast(msg, ok){ // 顶部临时提示
   clearTimeout(t.__h); t.__h=setTimeout(()=>{ t.style.opacity='0'; }, 2600);
 }
 
-/* ---------- 口令校验（entry / admin 页共用）---------- */
+/* ---------- 角色权限系统 ---------- */
+// 权限项 → 显示名 + 对应页面（用于生成导航/首页卡片）
+const PERM_DEFS = [
+  ['board',           '教室看板',        'board.html'],
+  ['timetable',       '课程表',          'timetable.html'],
+  ['meeting_view',    '腾讯账号查看',    'meeting.html'],
+  ['entry_room',      '教室占用录入',    'booking.html'],      // 仅临时/租用（页面内再限制用途）
+  ['entry_room_full', '教室占用录入',    'booking.html'],      // 全部用途
+  ['assign',          '排教室',          'admin.html?tab=assign'],
+  ['approve',         '预约批准',        'admin.html?tab=pending'],
+  ['meeting_arrange', '腾讯会议安排',    'admin.html?tab=assign'],
+  ['course',          '课程录入/修改',   'entry.html'],
+  ['manage',          '账号与权限管理',  'admin.html'],
+];
+const PERM_LABEL = Object.fromEntries(PERM_DEFS.map(p=>[p[0],p[1]]));
+const ALL_PERMS  = PERM_DEFS.map(p=>p[0]);
+
+// 用 code 读取角色记录（含 perms）
+async function getRoleByCode(code){
+  if(!code) return null;
+  const rows = await sbGet('sched_access_codes',
+    'select=*&code=eq.'+encodeURIComponent(code)+'&active=eq.true');
+  return rows.length ? rows[0] : null;
+}
+// 当前 URL 的 code
+function currentCode(){ return new URLSearchParams(location.search).get('k') || ''; }
+// 角色的权限集合
+function permSet(roleRec){ return new Set((roleRec&&roleRec.perms?roleRec.perms.split(','):[]).map(s=>s.trim()).filter(Boolean)); }
+function hasPerm(roleRec, p){ return permSet(roleRec).has(p); }
+
+/* ---------- 口令校验（旧版兼容，逐步弃用）---------- */
 async function checkCode(code, needRole){
   const rows = await sbGet('sched_access_codes',
     'select=*&code=eq.'+encodeURIComponent(code)+'&active=eq.true');
   if(!rows.length) return null;
   const rec = rows[0];
-  if(needRole === 'entry') return (rec.role==='entry'||rec.role==='admin') ? rec : null;
-  if(needRole === 'admin') return rec.role==='admin' ? rec : null;
+  if(needRole === 'entry') return (rec.role==='entry'||rec.role==='admin'||hasPerm(rec,'course')||hasPerm(rec,'entry_room')||hasPerm(rec,'entry_room_full')) ? rec : null;
+  if(needRole === 'admin') return (rec.role==='admin'||hasPerm(rec,'manage')) ? rec : null;
   return rec;
 }
 
-/* ---------- 顶部导航（各页统一注入）---------- */
-function renderNav(active){
-  const items = [
-    ['index.html','首页'],['board.html','教室看板'],['timetable.html','学生课表'],
-    ['booking.html','教室占用录入'],['meeting.html','会议账号'],
-    ['entry.html','录入'],['admin.html','管理']
-  ];
+/* ---------- 顶部导航（按角色权限生成；带 code 时链接自动带上 ?k=）---------- */
+function renderNav(active, roleRec){
+  const code = currentCode();
+  const kq = code ? ('?k='+encodeURIComponent(code)) : '';
+  // 有角色记录 → 按权限生成；否则显示全部（管理员/开发用）
+  let items;
+  if(roleRec){
+    const ps = permSet(roleRec);
+    const seen = new Set();
+    items = [];
+    PERM_DEFS.forEach(([perm,label,page])=>{
+      if(!ps.has(perm)) return;
+      const base = page.split('?')[0];
+      if(seen.has(base)) return; seen.add(base);       // 同页去重（如两种录入都指向 booking）
+      items.push([base, label]);
+    });
+    items.unshift(['index.html','首页']);
+  }else{
+    items = [
+      ['index.html','首页'],['board.html','教室看板'],['timetable.html','课程表'],
+      ['booking.html','教室占用录入'],['meeting.html','会议账号'],
+      ['entry.html','录入'],['admin.html','管理']
+    ];
+  }
+  const label = roleRec ? (roleRec.label||roleRec.role||'') : '';
   return '<header class="top"><div class="wrap"><h1>唯新 · 教学资源调度</h1><nav>'+
-    items.map(([h,t])=>`<a href="${h}"${h===active?' style="color:var(--blue);font-weight:600"':''}>${t}</a>`).join('')+
+    items.map(([h,t])=>{
+      const href = h.includes('?') ? h+(code?('&k='+encodeURIComponent(code)):'') : h+kq;
+      return `<a href="${href}"${h===active?' style="color:var(--blue);font-weight:600"':''}>${t}</a>`;
+    }).join('')+
+    (label?`<span style="color:var(--sub);font-size:12px;margin-left:8px">${esc(label)}</span>`:'')+
     '</nav></div></header>';
 }
