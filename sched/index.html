@@ -35,6 +35,7 @@ const DESC = {
 async function boot(){
   const code = currentCode();
   const role = code ? await getRoleByCode(code) : null;
+  if(role){ try{ sessionStorage.setItem('sched_role', JSON.stringify(role)); }catch(e){} }  // 全站共享身份
 
   if(!role){
     // 无 code 或无效：极简提示，无任何入口
