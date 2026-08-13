@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIP教室预约 · 唯新</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .topbar{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .topbar h2{ font-size:18px; margin:0; }
+  .seg{ display:inline-flex; gap:4px; margin-left:auto; }
+  .seg button{ padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; font-size:13px; }
+  .seg button.on{ background:var(--blue); color:#fff; border-color:var(--blue); }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="topbar">
+    <h2>唯新 · VIP教室预约</h2>
+    <div class="seg">
+      <button id="seg_book" class="on">预约</button>
+      <button id="seg_mine">我的预约</button>
+    </div>
+  </div>
+
+  <!-- 预约视图 -->
+  <div id="view_book">
+    <div class="tip">
+      给兼职老师的 VIP 教室预约。① 常规预约需<b>提前 3 天</b>；② 3 天内的<b>紧急预约</b>请用紧急按钮生成群消息联系管理员；
+      ③ 须填<b>真实姓名、学生姓名、专业</b>。提交后待管理员确认，可在「我的预约」查看/取消。
+    </div>
+    <div class="card">
+      <div class="row">
+        <div class="field"><label>校区</label><select id="campus"></select></div>
+        <div class="field"><label>日期</label><input type="date" id="date"></div>
+        <div class="field"><label>开始</label><select id="st"></select></div>
+        <div class="field"><label>结束</label><select id="et"></select></div>
+        <div class="field"><label>人数</label><input type="number" id="ppl" min="1" style="width:80px"></div>
+        <div class="field"><label>&nbsp;</label><button id="find">查空闲</button></div>
+      </div>
+      <div id="dateWarn"></div>
+    </div>
+    <div class="card" id="resBox"><div class="muted">设定条件后点「查空闲」</div></div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <b>当天 VIP 教室占用一览</b>
+        <span class="legend" style="margin:0">
+          <span><i style="background:var(--vip)"></i>VIP占用</span>
+          <span><i style="background:var(--temp)"></i>临时</span>
+        </span>
+      </div>
+      <div class="board" id="gridBox"><div class="muted">选校区+日期后显示</div></div>
+    </div>
+  </div>
+
+  <!-- 我的预约视图 -->
+  <div id="view_mine" class="hidden">
+    <div class="card">
+      <b>我的预约</b>
+      <span class="muted" style="font-size:12px;margin-left:8px">本机记录自动显示；换了设备可用真实姓名找回。</span>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>用真实姓名找回（换设备时）</label><input id="mine_name" placeholder="输入预约时填的真实姓名"></div>
+        <div class="field"><label>&nbsp;</label><button class="ghost sm" id="mine_find">按姓名查找</button></div>
+        <div class="field"><label>&nbsp;</label><button class="ghost sm" id="mine_reload">刷新本机记录</button></div>
+      </div>
+      <div id="mineBox" style="margin-top:10px"><div class="muted">加载中…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 预约弹窗 -->
+<div id="modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:40px 16px">
+  <div class="card" style="width:440px;max-width:92vw;margin:auto">
+    <h3 style="margin-top:2px">预约 <span id="m_room"></span></h3>
+    <div id="m_when" class="muted" style="font-size:13px;margin-bottom:8px"></div>
+    <div class="field"><label>用途 / 预约理由</label><input id="m_title" placeholder="如 VIP面试指导"></div>
+    <div class="field" style="margin-top:8px"><label>真实姓名（预约人）*</label><input id="m_user"></div>
+    <div class="field" style="margin-top:8px"><label>学生姓名 *</label><input id="m_stu"></div>
+    <div class="field" style="margin-top:8px"><label>专业 *</label><input id="m_major"></div>
+    <div class="field" style="margin-top:8px"><label>备注</label><input id="m_note"></div>
+    <div id="m_warn" class="hidden" style="margin-top:8px"></div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button id="m_submit">提交预约</button>
+      <button class="ghost" id="m_cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+let ROOMS=[], BOOKINGS=[], CUR=null;
+const MIN_ADVANCE=3;
+const TKEY='vip_client_token', NKEY='vip_last_name';
+function myToken(){ let t=localStorage.getItem(TKEY); if(!t){ t='t'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem(TKEY,t);} return t; }
+const isVIP=r=>r.type==='VIP' && !/コスモ|cosmo|外借/i.test((r.name||'')+(r.campus||''));
+
+async function boot(){
+  fillSelect(el('campus'), CAMPUSES);
+  fillSelect(el('st'), SLOTS); fillSelect(el('et'), SLOTS);
+  el('date').value = addDays(todayStr(), MIN_ADVANCE);
+  const i=SLOTS.indexOf('18:00'); if(i>0){ el('st').value='18:00'; el('et').value='21:00'; }
+  ROOMS    = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
+  BOOKINGS = await sbGet('sched_bookings','select=*');
+  { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
+  el('find').onclick = find;
+  el('date').onchange = ()=>{ checkAdvance(); renderGrid(); };
+  el('campus').onchange = renderGrid;
+  el('m_cancel').onclick = ()=>el('modal').classList.add('hidden');
+  el('m_submit').onclick = submit;
+  el('seg_book').onclick = ()=>seg('book');
+  el('seg_mine').onclick = ()=>seg('mine');
+  el('mine_find').onclick = ()=>loadMine(el('mine_name').value.trim());
+  el('mine_reload').onclick = ()=>loadMine('');
+  const last=localStorage.getItem(NKEY); if(last) el('mine_name').value=last;
+  checkAdvance(); renderGrid();
+}
+function seg(v){
+  el('seg_book').classList.toggle('on',v==='book');
+  el('seg_mine').classList.toggle('on',v==='mine');
+  el('view_book').classList.toggle('hidden',v!=='book');
+  el('view_mine').classList.toggle('hidden',v!=='mine');
+  if(v==='mine') loadMine('');
+}
+function advanceOk(){ return diffDays(todayStr(), el('date').value) >= MIN_ADVANCE; }
+function checkAdvance(){
+  const box=el('dateWarn');
+  if(!advanceOk()){
+    box.innerHTML='<div class="badge b-warn" style="margin-top:8px">该日期在 3 天内，属紧急预约。请先「查空闲」确认有空教室，再用红色<b>紧急预约</b>按钮生成群消息联系管理员。</div>';
+  }else box.innerHTML='';
+}
+function find(){
+  checkAdvance();
+  const campus=el('campus').value, date=el('date').value, s=el('st').value, e=el('et').value, ppl=Number(el('ppl').value)||0;
+  if(e<=s){ toast('结束需晚于开始', false); return; }
+  let rooms=ROOMS.filter(r=>r.campus===campus && isVIP(r));
+  if(ppl) rooms=rooms.filter(r=>r.capacity>=ppl);
+  const rows=rooms.map(r=>{ const conf=roomConflicts(BOOKINGS,r.id,date,s,e,null); return {r,free:conf.length===0,conf}; });
+  const urgent=!advanceOk();
+  let h=`<div class="muted" style="margin-bottom:8px">${WEEKDAYS[weekdayOf(date)]} ${date} ${s}-${e}${ppl?(' · ≥'+ppl+'人'):''}${urgent?' · <b style="color:#d93025">紧急（3天内）</b>':''}</div>`;
+  h+='<table><thead><tr><th>教室</th><th>容量</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+  rows.forEach(({r,free,conf})=>{
+    let op='';
+    if(free){
+      op = urgent
+        ? `<button class="sm" style="background:#d93025" data-urgent="${r.id}">紧急预约</button>`
+        : `<button class="sm" data-r="${r.id}">预约</button>`;
+    }else op='<span class="muted">—</span>';
+    h+=`<tr><td>${esc(r.name)}</td><td>${r.capacity}人</td>`+
+      (free?'<td><span class="badge b-ok">空闲</span></td>':`<td><span class="badge b-err">占用</span> <small class="muted">${conf.map(c=>c.title||KIND_LABEL[c.kind]).join('、')}</small></td>`)+
+      `<td>${op}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  if(!rows.length) h+='<div class="muted">该校区暂无 VIP 教室</div>';
+  el('resBox').innerHTML=h;
+  el('resBox').querySelectorAll('button[data-r]').forEach(b=>b.onclick=()=>openModal(b.dataset.r));
+  el('resBox').querySelectorAll('button[data-urgent]').forEach(b=>b.onclick=()=>urgentMsg(b.dataset.urgent));
+}
+function urgentMsg(roomId){
+  const r=ROOMS.find(x=>String(x.id)===String(roomId));
+  const date=el('date').value, s=el('st').value, e=el('et').value;
+  const name=el('mine_name').value.trim();
+  const msg=`【紧急预约申请】麻烦管理员安排：${date}（${WEEKDAYS[weekdayOf(date)]}）${s}-${e} 的 VIP教室「${r.name}」（${r.campus}）。已确认该时段空闲。${name?('预约人：'+name+'。'):''}谢谢！`;
+  const box=el('resBox');
+  const div=document.createElement('div');
+  div.className='card'; div.style.marginTop='10px'; div.style.background='#fff7f7';
+  div.innerHTML='<b style="color:#d93025">紧急预约 · 复制以下文字发到群里</b>'+
+    `<textarea rows="3" style="width:100%;margin-top:6px" readonly>${esc(msg)}</textarea>`+
+    '<button class="sm" id="copyUrgent">复制文字</button>';
+  box.appendChild(div);
+  el('copyUrgent').onclick=()=>navigator.clipboard.writeText(msg).then(()=>toast('已复制，去群里发给管理员'));
+}
+function renderGrid(){
+  const campus=el('campus').value, date=el('date').value;
+  const rooms=ROOMS.filter(r=>r.campus===campus && isVIP(r));
+  const box=el('gridBox');
+  if(!rooms.length){ box.innerHTML='<div class="muted">该校区暂无 VIP 教室</div>'; return; }
+  const todays=BOOKINGS.filter(b=>bookingOnDate(b,date) &&
+    !(b.kind==='course'&&b.course_id&&window.SKIPMAP&&window.SKIPMAP[b.course_id]&&window.SKIPMAP[b.course_id].has(date)));
+  const covered=(rid,slot)=>todays.some(b=>String(b.room_id)===String(rid)&&b.start_time<=slot&&slot<b.end_time);
+  let h='<table><thead><tr><th class="tcol">时段</th>';
+  rooms.forEach(r=>h+=`<th>${esc(r.name)}<br><small class="muted">${r.capacity}人</small></th>`);
+  h+='</tr></thead><tbody>';
+  SLOTS.forEach((slot,i)=>{
+    const prev=i>0?SLOTS[i-1]:null;
+    h+=`<tr><td class="tcol">${slot}</td>`;
+    rooms.forEach(r=>{
+      const starting=todays.filter(b=>String(b.room_id)===String(r.id)&&b.start_time===slot);
+      const isC=covered(r.id,slot); const spanStart=!isC&&(!prev||covered(r.id,prev));
+      h+='<td class="cell">'; if(spanStart) h+='<span class="freetag">空</span>';
+      starting.forEach(b=>{ const ai=t=>SLOTS.indexOf(t); let z=ai(b.end_time); if(z<0)z=SLOTS.length; let st=ai(b.start_time); if(st<0)st=0;
+        const rows=Math.max(1,z-st);
+        h+=`<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*22-3}px">${esc(b.title||KIND_LABEL[b.kind]||'')}<small>${b.start_time}-${b.end_time}</small></div>`; });
+      h+='</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table>'; box.innerHTML=h;
+}
+function openModal(roomId){
+  if(!advanceOk()){ toast('3天内请用紧急预约', false); return; }
+  const r=ROOMS.find(x=>String(x.id)===String(roomId)); CUR=r;
+  el('m_room').textContent=r.name;
+  el('m_when').textContent=`${el('date').value}（${WEEKDAYS[weekdayOf(el('date').value)]}）${el('st').value}-${el('et').value} · ${r.campus}`;
+  ['m_title','m_user','m_stu','m_major','m_note'].forEach(id=>el(id).value='');
+  const last=localStorage.getItem(NKEY); if(last) el('m_user').value=last;
+  el('m_warn').classList.add('hidden');
+  el('modal').classList.remove('hidden');
+}
+async function submit(){
+  const s=el('st').value, e=el('et').value, date=el('date').value;
+  const warn=m=>{ el('m_warn').className=''; el('m_warn').innerHTML='<span class="badge b-err">'+m+'</span>'; };
+  if(!advanceOk()){ warn('3天内请用紧急预约联系管理员'); return; }
+  const user=el('m_user').value.trim(), stu=el('m_stu').value.trim(), major=el('m_major').value.trim();
+  if(!user){ warn('请填真实姓名'); return; }
+  if(!stu){ warn('请填学生姓名'); return; }
+  if(!major){ warn('请填专业'); return; }
+  const rec={ room_id:CUR.id, kind:'vip', title:el('m_title').value.trim()||null,
+    user_name:user, student_name:stu, major:major, recurrence:'once', booking_date:date,
+    start_time:s, end_time:e, uses_meeting:false, meeting_account_id:null,
+    status:'pending', created_by:user, note:el('m_note').value.trim()||null, client_token:myToken() };
+  const sb=el('m_submit'); if(sb.disabled) return; sb.disabled=true; sb.textContent='提交中…';
+  try{
+    const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
+    localStorage.setItem(NKEY, user);
+    el('modal').classList.add('hidden');
+    toast('已提交！管理员批准后将显示为教室占用，请在「我的预约」里确认');
+    find(); renderGrid();
+  }catch(err){ warn(esc(err.message)); }
+  finally{ sb.disabled=false; sb.textContent='提交预约'; }
+}
+async function loadMine(name){
+  const box=el('mineBox'); box.innerHTML='<div class="muted">加载中…</div>';
+  const token=myToken();
+  let rows=[];
+  try{
+    if(name){
+      rows = await sbGet('sched_bookings','select=*&kind=eq.vip&user_name=eq.'+encodeURIComponent(name)+'&order=booking_date.desc&limit=100');
+      localStorage.setItem(NKEY, name);
+    }else{
+      rows = await sbGet('sched_bookings','select=*&kind=eq.vip&client_token=eq.'+encodeURIComponent(token)+'&order=booking_date.desc&limit=100');
+    }
+  }catch(e){ box.innerHTML='<span class="badge b-err">读取失败：'+esc(e.message)+'</span>'; return; }
+  if(!rows.length){ box.innerHTML='<div class="muted">'+(name?'没找到该姓名的预约':'本机暂无预约记录。换过设备的话，用上方真实姓名找回。')+'</div>'; return; }
+  const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r);
+  let h='<table><thead><tr><th>日期</th><th>时段</th><th>教室</th><th>学生</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+  rows.forEach(b=>{
+    const r=rmap[b.room_id]; const past=b.booking_date<todayStr();
+    const st = b.status==='confirmed'?'<span class="badge b-ok">已批准</span>':'<span class="badge b-warn">待确认</span>';
+    h+=`<tr${past?' style="opacity:.5"':''}><td>${b.booking_date}<br><small class="muted">${WEEKDAYS[weekdayOf(b.booking_date)]}</small></td>`+
+      `<td>${b.start_time}-${b.end_time}</td><td>${esc(r?r.name:'')}<br><small class="muted">${esc(r?r.campus:'')}</small></td>`+
+      `<td>${esc(b.student_name||'')}</td><td>${st}</td>`+
+      `<td>${past?'<span class="muted">已过期</span>':`<button class="sm danger" data-cancel="${b.id}">取消</button>`}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  box.innerHTML=h;
+  box.querySelectorAll('button[data-cancel]').forEach(btn=>btn.onclick=()=>cancelBooking(btn.dataset.cancel, name));
+}
+async function cancelBooking(id, name){
+  if(!confirm('确定取消这条预约？取消后教室将释放。')) return;
+  try{
+    await sbDelete('sched_bookings', id);
+    BOOKINGS = BOOKINGS.filter(b=>String(b.id)!==String(id));
+    toast('已取消，教室已释放');
+    loadMine(name);
+  }catch(e){ toast('取消失败：'+e.message, false); }
+}
+boot();
+</script>
+</body></html>
