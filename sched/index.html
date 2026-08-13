@@ -1,48 +1,81 @@
 <!DOCTYPE html>
 <html lang="zh"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>唯新 · 今日课表看板</title>
+<title>唯新 · 教学资源调度</title>
 <link rel="stylesheet" href="style.css">
 </head><body>
+<div id="nav"></div>
 <div class="wrap">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-    <h2 style="margin:0;font-size:18px">唯新 · 今日教室课表</h2>
-    <span class="muted" id="meta" style="font-size:13px"></span>
+  <div id="hello"></div>
+  <div id="alerts"></div>
+  <div id="hubWrap" class="card hidden">
+    <h3 style="margin:2px 0 10px" id="hubTitle">我的功能</h3>
+    <div class="hub" id="hub"></div>
   </div>
-  <div class="card">
-    <div class="row">
-      <div class="field"><label>校区</label><select id="campus"></select></div>
-      <div class="field"><label>日期</label><input type="date" id="date"></div>
-      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="today">今天</button></div>
-    </div>
+  <div id="empty" class="hidden" style="text-align:center;color:var(--sub);padding:80px 20px;font-size:15px">
+    请使用管理员发放的专属链接进入。
   </div>
-  <div class="card"><div class="board" id="gridBox"><div class="muted">加载中…</div></div></div>
-  <p class="muted" style="font-size:12px;text-align:center">仅显示上课安排。如需教室预约或管理，请使用管理员发放的专属链接。</p>
 </div>
 <script src="common.js"></script>
 <script>
-let ROOMS=[], BOOKINGS=[];
+const ICON = { board:'📋', timetable:'🎓', meeting_view:'📶', entry_room:'🏫', entry_room_full:'🏫',
+  assign:'🧩', approve:'✅', meeting_arrange:'🎦', course:'✍️', manage:'⚙️' };
+const DESC = {
+  board:'选校区+日期，一眼看当天各教室占用',
+  timetable:'按专业/期生成课表，可分享只读链接',
+  meeting_view:'选时段，查哪个腾讯账号空闲',
+  entry_room:'录入临时/租用/开会等教室占用',
+  entry_room_full:'录入教室占用（含VIP等全部用途）',
+  assign:'把课程分配到教室、设定会议链接',
+  approve:'审批老师提交的教室预约',
+  meeting_arrange:'排课后设定腾讯会议链接',
+  course:'录入、修改班级课程',
+  manage:'管理教室/账号/角色权限'
+};
 async function boot(){
-  fillSelect(el('campus'), CAMPUSES);
-  el('date').value = todayStr();
-  ROOMS = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
-  // 只取课程占用（对外只展示上课，不露预约/VIP/临时）
-  BOOKINGS = await sbGet('sched_bookings','select=*&kind=eq.course');
-  { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
-  el('campus').onchange = render;
-  el('date').onchange = render;
-  el('today').onclick = ()=>{ el('date').value=todayStr(); render(); };
-  render();
+  const code = currentCode();
+  const role = code ? await getRoleByCode(code) : null;
+
+  if(!role){
+    // 无 code 或无效：极简提示，无任何入口
+    el('nav').innerHTML = '';
+    el('empty').classList.remove('hidden');
+    return;
+  }
+
+  el('nav').innerHTML = renderNav('index.html', role);
+  el('hello').innerHTML = `<div class="tip">你好，<b>${esc(role.label||role.role||'')}</b>。以下是你可用的功能。</div>`;
+  const ps = permSet(role);
+  await renderAlerts(ps);
+
+  const seen=new Set(); const list=[];
+  PERM_DEFS.forEach(([perm])=>{ if(!ps.has(perm)) return;
+    const key=(perm==='entry_room_full')?'entry_room':perm;
+    if(seen.has(key)) return; seen.add(key); list.push(perm); });
+  renderHub(list, code);
+  el('hubWrap').classList.remove('hidden');
 }
-function render(){
-  const campus=el('campus').value, date=el('date').value;
-  const rooms=ROOMS.filter(r=>r.campus===campus).map(r=>({id:r.id,name:r.name,sub:(r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人'))}));
-  el('meta').textContent = WEEKDAYS[weekdayOf(date)]+' '+date;
-  if(!rooms.length){ el('gridBox').innerHTML='<div class="muted">该校区暂无教室</div>'; return; }
-  const todays = BOOKINGS.filter(b => bookingOnDate(b, date) &&
-    !(b.course_id && window.SKIPMAP && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
-  // 对外：隐藏使用人/事由，只显示课名+时间
-  el('gridBox').innerHTML = renderOccupancyGrid(rooms, todays, 'room_id', {hideWho:true});
+function renderHub(perms, code){
+  const kq = code?('?k='+encodeURIComponent(code)):'';
+  const pageOf = p => (PERM_DEFS.find(x=>x[0]===p)||[])[2] || 'index.html';
+  let h='';
+  perms.forEach(p=>{
+    const page = pageOf(p);
+    const href = page.includes('?') ? page+(code?('&k='+encodeURIComponent(code)):'') : page.split('?')[0]+kq;
+    h += `<a href="${href}"><b>${ICON[p]||'•'} ${PERM_LABEL[p]||p}</b><span>${DESC[p]||''}</span></a>`;
+  });
+  el('hub').innerHTML = h || '<span class="muted">暂无可用功能，请联系管理员。</span>';
+}
+async function renderAlerts(ps){
+  const box=el('alerts'); let cards=[];
+  if(ps.has('approve')){
+    try{
+      const rows = await sbGet('sched_bookings','select=id&status=eq.pending');
+      const n = rows.length;
+      cards.push(`<a href="admin.html?tab=pending" class="alert-card"><b>✅ 待批准预约</b><span>${n>0?('有 '+n+' 条待处理'):'暂无待处理'}</span></a>`);
+    }catch(e){}
+  }
+  box.innerHTML = cards.length ? ('<div class="hub" style="margin-bottom:14px">'+cards.join('')+'</div>') : '';
 }
 boot();
 </script>
