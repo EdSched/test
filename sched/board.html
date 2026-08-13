@@ -72,7 +72,7 @@ function render(){
       starting.forEach(b => {
         const rows = spanRows(b.start_time, b.end_time);
         const pend = b.status==='pending';
-        h += `<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*22-3}px;${pend?'border:1px dashed #d93025;opacity:.85':''}">`
+        h += `<div class="blk ${KIND_CLASS[b.kind]||''}" style="height:${rows*24-2}px;${pend?'border:1px dashed #d93025;opacity:.85':''}">`
           + `${esc(b.title||KIND_LABEL[b.kind]||'')} ${b.uses_meeting?'<span class="mic">📶</span>':''}`
           + `<small>${esc(b.user_name||'')} ${b.start_time}-${b.end_time}${pend?' · 待确认':''}</small></div>`;
       });
