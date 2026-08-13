@@ -58,6 +58,7 @@
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('booking.html');
+getRoleByCode(currentCode()).then(r=>{ if(r) el('nav').innerHTML = renderNav('booking.html', r); }).catch(()=>{});
 let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CUR=null;
 
 async function boot(){
