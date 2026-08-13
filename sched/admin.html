@@ -17,17 +17,17 @@
   </div>
 
   <div id="main" class="hidden">
-    <div class="tabs">
-      <button class="on" data-t="pending">待确认预约 <span id="pendN" class="badge b-warn"></span></button>
-      <button data-t="assign">排教室</button>
-      <button data-t="conflict">冲突检查</button>
-      <button data-t="occupy">教室占用</button>
-      <button data-t="rooms">教室</button>
-      <button data-t="accounts">会议账号</button>
-      <button data-t="courses">课程</button>
-      <button data-t="codes">角色权限</button>
+    <div id="hub">
+      <div class="hub" id="hubCards"></div>
     </div>
-    <div id="panel"></div>
+    <div id="work" class="hidden">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <button class="ghost sm" id="backHub">← 返回</button>
+        <b id="workTitle" style="font-size:15px"></b>
+      </div>
+      <div id="panel"></div>
+      <iframe id="frame" style="display:none;width:100%;height:calc(100vh - 160px);border:1px solid var(--line);border-radius:8px"></iframe>
+    </div>
   </div>
 </div>
 
@@ -48,8 +48,8 @@ el('code').addEventListener('keydown',e=>{ if(e.key==='Enter') doEnter(); });
     try{ sessionStorage.setItem('sched_role', JSON.stringify(rec)); }catch(e){}
     el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
     await reloadAll();
-    const tab = new URLSearchParams(location.search).get('tab') || 'pending';
-    show(tab);
+    const tab = new URLSearchParams(location.search).get('tab');
+    if(tab){ openCard(tab); } else { renderHub(); }
   }
 })();
 async function doEnter(){
@@ -61,7 +61,7 @@ async function doEnter(){
     ROLE=rec;
     sessionStorage.setItem('sched_role', JSON.stringify(rec));  // 全站共享登录身份
     el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
-    await reloadAll(); show('pending');
+    await reloadAll(); renderHub();
   }catch(e){ el('gerr').textContent=e.message; el('gerr').classList.remove('hidden'); }
 }
 async function reloadAll(){
@@ -73,15 +73,56 @@ async function reloadAll(){
     sbGet('sched_access_codes','select=*&order=id')
   ]);
   const pend=BOOKINGS.filter(b=>b.status==='pending').length;
-  el('pendN').textContent = pend||''; el('pendN').style.display=pend?'':'none';
+  const pn=el('pendN'); if(pn){ pn.textContent = pend||''; pn.style.display=pend?'':'none'; }
 }
 const rname=id=>{ const r=ROOMS.find(x=>String(x.id)===String(id)); return r?r.name:'—'; };
 const aname=id=>{ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?a.name:'—'; };
 
-/* tabs */
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>show(b.dataset.t));
+/* 卡片墙：所有功能都在 admin 内部打开，绝不外跳 */
+const HUB_CARDS = [
+  // key, 图标, 名称, 说明, 类型('tab'内部函数 / 'iframe'嵌页), 目标
+  ['board',    '📋','教室看板','选校区+日期，看当天各教室占用','iframe','board.html'],
+  ['timetable','🎓','课程表','按专业/期生成课表，可分享只读链接','iframe','timetable.html'],
+  ['meeting',  '📶','腾讯账号查看','选时段，查哪个腾讯账号空闲','iframe','meeting.html'],
+  ['bookingf', '🏫','教室占用录入','查空闲→点教室→录入临时/租用/开会','iframe','booking.html'],
+  ['pending',  '✅','预约批准','审批老师提交的教室预约','tab','pending'],
+  ['assign',   '🧩','排教室','把课程分配到教室、排完设定会议链接','tab','assign'],
+  ['conflict', '⚠️','冲突检查','选日期，检查教室/账号有没有撞车','tab','conflict'],
+  ['occupy',   '📖','教室占用管理','查看/删除所有临时/VIP/出租/开会占用','tab','occupy'],
+  ['rooms',    '🏠','教室管理','增删改教室、新增租借教室','tab','rooms'],
+  ['accounts', '🎙️','会议账号管理','管理腾讯账号（固定/临时、登录名密码）','tab','accounts'],
+  ['courses',  '✍️','课程管理','课程列表：新增/编辑/删除/查重','tab','courses'],
+  ['codes',    '⚙️','角色权限','管理各角色权限、生成专属链接','tab','codes'],
+];
+function renderHub(){
+  el('hub').classList.remove('hidden');
+  el('work').classList.add('hidden');
+  const pend = BOOKINGS.filter(b=>b.status==='pending').length;
+  el('hubCards').innerHTML = HUB_CARDS.map(([k,ic,nm,desc])=>{
+    const badge = (k==='pending'&&pend)?` <span class="badge b-warn">${pend}</span>`:'';
+    return `<a href="#" data-hub="${k}"><b>${ic} ${nm}${badge}</b><span>${desc}</span></a>`;
+  }).join('');
+  el('hubCards').querySelectorAll('[data-hub]').forEach(a=>a.onclick=(e)=>{ e.preventDefault(); openCard(a.dataset.hub); });
+}
+function openCard(key){
+  const c = HUB_CARDS.find(x=>x[0]===key); if(!c) return;
+  const [,ic,nm,,type,target]=c;
+  el('hub').classList.add('hidden');
+  el('work').classList.remove('hidden');
+  el('workTitle').textContent = ic+' '+nm;
+  const panel=el('panel'), frame=el('frame');
+  if(type==='iframe'){
+    panel.style.display='none'; panel.innerHTML='';
+    frame.style.display='block'; frame.src = target;
+  }else{
+    frame.style.display='none'; frame.src='about:blank';
+    panel.style.display='block';
+    show(target);
+  }
+}
+el('backHub').onclick = ()=>{ el('frame').src='about:blank'; renderHub(); };
+
 function show(t){
-  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
   ({pending:tabPending,assign:tabAssign,conflict:tabConflict,occupy:tabOccupy,rooms:tabRooms,
     accounts:tabAccounts,courses:tabCourses,codes:tabCodes}[t])();
 }
