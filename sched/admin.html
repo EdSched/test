@@ -666,16 +666,8 @@ function courseEdit(id){
   };
 }
 
-/* 角色主功能落地页：按权限决定链接进入哪个页面 */
-function landingFor(role){
-  const ps = new Set((role.perms?role.perms.split(','):[]).map(s=>s.trim()).filter(Boolean));
-  if(ps.has('manage')) return 'admin.html';
-  if(ps.has('course')) return 'entry.html';
-  if(ps.has('entry_room')||ps.has('entry_room_full')) return 'booking.html';
-  if(ps.has('board')) return 'board.html';
-  if(ps.has('meeting_view')) return 'meeting.html';
-  return 'timetable.html';
-}
+/* 角色链接统一指向 index 分发板（进去后按权限看到自己的功能） */
+function landingFor(role){ return 'index.html'; }
 /* ---------- 角色权限 ---------- */
 function tabCodes(){
   const base = location.origin + location.pathname.replace(/admin\.html$/,'') ;
