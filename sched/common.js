@@ -101,7 +101,8 @@ function parseTencent(text){
 
 /* 通用占用网格（rowspan 版，色块与时段严格对齐，不漂移）
    rooms: [{id,name,sub}]；items: 占用记录数组；keyField: 'room_id' 或 'meeting_account_id' */
-function renderOccupancyGrid(rooms, items, keyField){
+function renderOccupancyGrid(rooms, items, keyField, opts){
+  opts = opts||{};
   const idxOf=t=>{ const i=SLOTS.indexOf(t); return i<0?SLOTS.length:i; };
   // 每列一个“跳过计数”：>0 表示这格被上面的 rowspan 占了，不输出
   const skip = rooms.map(()=>0);
@@ -117,12 +118,13 @@ function renderOccupancyGrid(rooms, items, keyField){
         let span = Math.max(1, idxOf(b.end_time)-idxOf(b.start_time));
         if(si+span>SLOTS.length) span=SLOTS.length-si;
         skip[ci]=span-1;
-        const who = b.user_name||b.student_name||'';
+        const who = opts.hideWho ? '' : (b.user_name||b.student_name||'');
         const pend = b.status==='pending';
-        const mic = b.uses_meeting ? ' <span class="mic">📶</span>' : '';
+        const mic = (opts.hideWho ? false : b.uses_meeting) ? ' <span class="mic">📶</span>' : '';
+        const label = opts.hideWho ? (KIND_LABEL[b.kind]||'占用') : (b.title||KIND_LABEL[b.kind]||'');
         h+=`<td class="occ ${KIND_CLASS[b.kind]||''}${pend?' occ-pend':''}" rowspan="${span}">`+
-           `<div class="occ-in">${esc(b.title||KIND_LABEL[b.kind]||'')}${mic}`+
-           `<small>${esc(who)} ${b.start_time}-${b.end_time}${pend?' · 待确认':''}</small></div></td>`;
+           `<div class="occ-in">${esc(label)}${mic}`+
+           `<small>${esc(who)} ${b.start_time}-${b.end_time}${pend&&!opts.hideWho?' · 待确认':''}</small></div></td>`;
       }else{
         // 空格：连续空档起点标“空”
         const prevSlot = si>0?SLOTS[si-1]:null;
