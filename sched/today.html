@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>唯新 · 今日教室课表</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+<div class="wrap">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+    <h2 style="margin:0;font-size:18px">唯新 · 今日教室课表</h2>
+    <span class="muted" id="meta" style="font-size:13px"></span>
+  </div>
+  <div class="card">
+    <div class="row">
+      <div class="field"><label>校区</label><select id="campus"></select></div>
+      <div class="field"><label>日期</label><input type="date" id="date"></div>
+      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="today">今天</button></div>
+    </div>
+  </div>
+  <div class="card"><div class="board" id="gridBox"><div class="muted">加载中…</div></div></div>
+  <p class="muted" style="font-size:12px;text-align:center">仅显示上课安排。如需教室预约或管理，请使用管理员发放的专属链接。</p>
+</div>
+<script src="common.js"></script>
+<script>
+let ROOMS=[], BOOKINGS=[];
+async function boot(){
+  fillSelect(el('campus'), CAMPUSES);
+  el('date').value = todayStr();
+  ROOMS = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
+  // 只取课程占用（对外只展示上课，不露预约/VIP/临时）
+  BOOKINGS = await sbGet('sched_bookings','select=*&kind=eq.course');
+  { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
+  el('campus').onchange = render;
+  el('date').onchange = render;
+  el('today').onclick = ()=>{ el('date').value=todayStr(); render(); };
+  render();
+}
+function render(){
+  const campus=el('campus').value, date=el('date').value;
+  const rooms=ROOMS.filter(r=>r.campus===campus).map(r=>({id:r.id,name:r.name,sub:(r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人'))}));
+  el('meta').textContent = WEEKDAYS[weekdayOf(date)]+' '+date;
+  if(!rooms.length){ el('gridBox').innerHTML='<div class="muted">该校区暂无教室</div>'; return; }
+  const todays = BOOKINGS.filter(b => bookingOnDate(b, date) &&
+    !(b.course_id && window.SKIPMAP && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
+  // 对外：隐藏使用人/事由，只显示课名+时间
+  el('gridBox').innerHTML = renderOccupancyGrid(rooms, todays, 'room_id', {hideWho:true});
+}
+boot();
+</script>
+</body></html>
