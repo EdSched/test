@@ -113,7 +113,7 @@ function openCard(key){
   const panel=el('panel'), frame=el('frame');
   if(type==='iframe'){
     panel.style.display='none'; panel.innerHTML='';
-    frame.style.display='block'; frame.src = target;
+    frame.style.display='block'; frame.src = target + (target.includes('?')?'&':'?') + 'embed=1';
   }else{
     frame.style.display='none'; frame.src='about:blank';
     panel.style.display='block';
