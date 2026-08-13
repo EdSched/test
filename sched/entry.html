@@ -105,6 +105,7 @@
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('entry.html');
+getRoleByCode(currentCode()).then(r=>{ if(r) el('nav').innerHTML = renderNav('entry.html', r); }).catch(()=>{});
 let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CODEREC=null, PARSED=[], EXISTING=[];
 
 /* 口令 */
