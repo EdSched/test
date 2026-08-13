@@ -4,7 +4,6 @@
 <title>管理后台 · 唯新</title>
 <link rel="stylesheet" href="style.css">
 </head><body>
-<div id="nav"></div>
 <div class="wrap">
   <div id="gate" class="gate card">
     <h3>管理员口令</h3>
@@ -33,7 +32,6 @@
 let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[], ROLE=null;
 
 /* 口令登录（口令即 access_codes 的 code，需 manage 权限）。admin-9527 可直接进 */
-el('nav').innerHTML = renderNav('admin.html');
 el('enter').onclick = doEnter;
 el('code').addEventListener('keydown',e=>{ if(e.key==='Enter') doEnter(); });
 async function doEnter(){
