@@ -48,15 +48,18 @@ th{ background:#f7f9fc; font-weight:600; color:var(--sub); white-space:nowrap; }
 
 /* 看板网格 */
 .board{ overflow:auto; }
-.board table{ border-collapse:collapse; }
-.board th,.board td{ border:1px solid var(--line); }
+.board table{ border-collapse:collapse; table-layout:fixed; }
+.board th,.board td{ border:1px solid var(--line); box-sizing:border-box; }
+.board tr{ height:24px; }
 .board .tcol{ width:70px; background:#f7f9fc; text-align:center; white-space:nowrap;
   font-size:11px; color:var(--sub); position:sticky; left:0; z-index:2; }
-.board thead th{ position:sticky; top:0; z-index:3; text-align:center; }
-.board td.cell{ height:22px; min-width:96px; padding:0; position:relative; }
+.board thead th{ position:sticky; top:0; z-index:3; text-align:center; background:#f7f9fc; }
+.board td.cell{ height:24px; min-width:96px; padding:0; position:relative; }
 .board .freetag{ position:absolute; top:1px; left:3px; font-size:10px; color:#c2c7cf; opacity:.7; }
-.blk{ position:absolute; left:1px; right:1px; border-radius:4px; padding:3px 5px;
-  font-size:12px; overflow:hidden; line-height:1.25; box-shadow:0 0 0 1px rgba(0,0,0,.03); }
+.vt2{ display:inline-flex; gap:4px; }
+.vt2 button.on{ background:var(--blue); color:#fff; }
+.blk{ position:absolute; left:1px; right:1px; top:0; border-radius:4px; padding:2px 5px;
+  font-size:12px; overflow:hidden; line-height:1.2; box-shadow:0 0 0 1px rgba(0,0,0,.03); box-sizing:border-box; }
 .blk small{ display:block; color:var(--sub); font-size:11px; }
 .k-course{ background:var(--course); } .k-vip{ background:var(--vip); }
 .k-temp{ background:var(--temp); } .k-rental{ background:var(--rental); }
