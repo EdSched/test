@@ -49,8 +49,11 @@ async function boot(){
   const ps = permSet(role);
   await renderAlerts(ps);
 
+  // admin 专属功能（排教室/批准/会议安排/冲突/账号权限）只在 admin 后台做，不出现在 index 分发板
+  const ADMIN_ONLY = new Set(['assign','approve','meeting_arrange','conflict','manage']);
   const seen=new Set(); const list=[];
   PERM_DEFS.forEach(([perm])=>{ if(!ps.has(perm)) return;
+    if(ADMIN_ONLY.has(perm)) return;
     const key=(perm==='entry_room_full')?'entry_room':perm;
     if(seen.has(key)) return; seen.add(key); list.push(perm); });
   renderHub(list, code);
