@@ -1,7 +1,7 @@
 /* 唯新 · 教学资源调度系统  共享样式 */
 * { box-sizing: border-box; }
 :root{
-  --blue:#2563eb; --blue-d:#1d4ed8; --bg:#f4f6f9; --line:#e2e6ec;
+  --blue:#2f6b4f; --blue-d:#245740; --bg:#f4f6f9; --line:#e2e6ec;
   --ink:#1f2733; --sub:#6b7480; --ok:#0f9d58; --warn:#e0a800; --err:#d93025;
   --course:#dbeafe; --vip:#fde2e2; --temp:#fff3cd; --rental:#e6f4ea; --meeting:#ede7f6;
 }
@@ -41,7 +41,7 @@ th{ background:#f7f9fc; font-weight:600; color:var(--sub); white-space:nowrap; }
 .b-warn{ background:#fff3cd; color:#8a6d00; }
 .b-err{ background:#fde2e2; color:var(--err); }
 .b-mute{ background:#eef1f5; color:var(--sub); }
-.tip{ background:#eef4ff; border:1px solid #cfe0ff; color:#1e40af; padding:8px 12px;
+.tip{ background:#eef4f0; border:1px solid #cfe3d6; color:#2f6b4f; padding:8px 12px;
   border-radius:6px; font-size:13px; margin-bottom:12px; }
 .muted{ color:var(--sub); }
 .hidden{ display:none !important; }
@@ -57,10 +57,18 @@ th{ background:#f7f9fc; font-weight:600; color:var(--sub); white-space:nowrap; }
 .board td.cell{ height:24px; min-width:96px; padding:0; position:relative; }
 .board .freetag{ position:absolute; top:1px; left:3px; font-size:10px; color:#c2c7cf; opacity:.7; }
 .vt2{ display:inline-flex; gap:4px; }
-.vt2 button.on{ background:var(--blue); color:#fff; }
+.vt2 button{ background:#fff; color:var(--ink); border:1px solid var(--line); }
+.vt2 button.on{ background:var(--blue); color:#fff; border-color:var(--blue); }
 .blk{ position:absolute; left:1px; right:1px; top:0; border-radius:4px; padding:2px 5px;
   font-size:12px; overflow:hidden; line-height:1.2; box-shadow:0 0 0 1px rgba(0,0,0,.03); box-sizing:border-box; }
 .blk small{ display:block; color:var(--sub); font-size:11px; }
+.board td.occ{ padding:0; vertical-align:top; }
+.board td.occ .occ-in{ padding:3px 5px; font-size:12px; line-height:1.25; height:100%; border-radius:3px; }
+.board td.occ small{ display:block; color:var(--sub); font-size:11px; }
+.board td.occ.k-course{ background:var(--course); } .board td.occ.k-vip{ background:var(--vip); }
+.board td.occ.k-temp{ background:var(--temp); } .board td.occ.k-rental{ background:var(--rental); }
+.board td.occ.k-meeting{ background:var(--meeting); }
+.board td.occ.occ-pend .occ-in{ border:1px dashed var(--err); opacity:.85; }
 .k-course{ background:var(--course); } .k-vip{ background:var(--vip); }
 .k-temp{ background:var(--temp); } .k-rental{ background:var(--rental); }
 .k-meeting{ background:var(--meeting); }
