@@ -103,11 +103,11 @@
 <script>
 let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CODEREC=null, PARSED=[], EXISTING=[];
 
-/* 凭 ?k= 自动进入（需 course 权限） */
+/* 统一身份进入（管理员已登录则直接放行；否则需 course 权限的 ?k=） */
 (async function gate(){
-  const rec = await getRoleByCode(currentCode());
+  const rec = await currentRole();
   el('nav').innerHTML = renderNav('entry.html', rec);
-  if(!rec || !hasPerm(rec,'course')){
+  if(!rec || !(isAdminRole(rec) || hasPerm(rec,'course'))){
     el('gate').classList.remove('hidden'); el('main').classList.add('hidden'); return;
   }
   CODEREC = rec;
