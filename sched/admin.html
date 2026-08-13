@@ -22,7 +22,7 @@
       <button data-t="rooms">教室</button>
       <button data-t="accounts">会议账号</button>
       <button data-t="courses">课程</button>
-      <button data-t="codes">口令</button>
+      <button data-t="codes">角色权限</button>
     </div>
     <div id="panel"></div>
   </div>
@@ -652,22 +652,55 @@ function courseEdit(id){
 
 /* ---------- 口令 CRUD ---------- */
 function tabCodes(){
-  let h='<div class="card"><h3 style="margin-top:2px">口令</h3><table><thead><tr><th>口令</th><th>角色</th><th>范围</th><th>使用者</th><th>状态</th><th></th></tr></thead><tbody>';
-  CODES.forEach(c=>{ h+=`<tr><td><code>${esc(c.code)}</code></td><td>${esc(c.role)}</td><td>${esc(c.scope||'')}</td><td>${esc(c.label||'')}</td>`+
-    `<td>${c.active?'<span class="badge b-ok">启用</span>':'<span class="badge b-mute">停用</span>'}</td>`+
-    `<td><button class="sm ghost" data-togc="${c.id}">${c.active?'停用':'启用'}</button> <button class="sm danger" data-delc2="${c.id}">删</button></td></tr>`; });
-  h+='</tbody></table><div class="row" style="margin-top:12px">'+
-    '<div class="field"><label>口令</label><input id="nc_code"></div>'+
-    '<div class="field"><label>角色</label><select id="nc_role"><option value="entry">录入</option><option value="admin">管理员</option></select></div>'+
-    '<div class="field"><label>范围</label><input id="nc_scope"></div>'+
-    '<div class="field"><label>使用者</label><input id="nc_label"></div>'+
-    '<div class="field"><label>&nbsp;</label><button id="nc_add">新增</button></div></div></div>';
+  const base = location.origin + location.pathname.replace(/admin\.html$/,'') ;
+  let h='<div class="card"><h3 style="margin-top:2px">角色权限</h3>'+
+    '<div class="tip">每个角色一条：勾选它能用的功能（点击标签切换），保存后生效。把「专属链接」发给对应的人，他们打开就只看到自己有权限的功能。</div>'+
+    '<table><thead><tr><th>角色</th><th>功能权限（点击切换）</th><th>专属链接</th><th>状态</th><th></th></tr></thead><tbody>';
+  CODES.slice().sort((a,b)=>(a.sort||100)-(b.sort||100)).forEach(c=>{
+    const ps = new Set((c.perms?c.perms.split(','):[]).map(s=>s.trim()).filter(Boolean));
+    const chips = PERM_DEFS
+      // 同页两种录入分别显示（entry_room / entry_room_full）
+      .map(([perm,label])=>{
+        const on = ps.has(perm);
+        const nm = perm==='entry_room'?'录入(仅临时)':perm==='entry_room_full'?'录入(全部)':label;
+        return `<span class="permchip${on?' on':''}" data-perm="${perm}" data-cid="${c.id}">${on?'✓ ':''}${esc(nm)}</span>`;
+      }).join(' ');
+    const link = base+'index.html?k='+encodeURIComponent(c.code);
+    h+=`<tr><td><b>${esc(c.label||c.role||'')}</b><br><small class="muted">${esc(c.role||'')}</small></td>`+
+      `<td style="max-width:520px">${chips}</td>`+
+      `<td style="max-width:220px"><input readonly value="${esc(link)}" style="width:190px;font-size:11px" data-link="${c.id}"> <button class="sm ghost" data-copy="${c.id}">复制</button></td>`+
+      `<td>${c.active?'<span class="badge b-ok">启用</span>':'<span class="badge b-mute">停用</span>'}</td>`+
+      `<td><button class="sm ghost" data-savep="${c.id}">保存</button> <button class="sm ghost" data-togc="${c.id}">${c.active?'停用':'启用'}</button> <button class="sm danger" data-delc2="${c.id}">删</button></td></tr>`;
+  });
+  h+='</tbody></table>'+
+    '<h4 style="margin:16px 0 8px">新增角色</h4><div class="row">'+
+    '<div class="field"><label>角色显示名</label><input id="nc_label" placeholder="如 教务助理"></div>'+
+    '<div class="field"><label>角色标识</label><input id="nc_role" placeholder="如 assistant" style="width:120px"></div>'+
+    '<div class="field"><label>编码(链接用,留空自动生成)</label><input id="nc_code" placeholder="留空自动" style="width:140px"></div>'+
+    '<div class="field"><label>&nbsp;</label><button id="nc_add">新增</button></div></div>'+
+    '<p class="muted" style="font-size:12px;margin-top:6px">新增后在上表勾选它的权限并保存。</p></div>';
   render(h);
+
+  // 本地暂存每行勾选状态
+  const draft={}; CODES.forEach(c=>draft[c.id]=new Set((c.perms?c.perms.split(','):[]).map(s=>s.trim()).filter(Boolean)));
+  document.querySelectorAll('.permchip').forEach(chip=>{
+    chip.onclick=()=>{
+      const cid=chip.getAttribute('data-cid'), perm=chip.getAttribute('data-perm');
+      if(draft[cid].has(perm)){ draft[cid].delete(perm); chip.classList.remove('on'); chip.textContent=chip.textContent.replace('✓ ',''); }
+      else { draft[cid].add(perm); chip.classList.add('on'); if(!chip.textContent.startsWith('✓')) chip.textContent='✓ '+chip.textContent; }
+    };
+  });
+  bind('[data-savep]', async id=>{ const perms=[...draft[id]].join(','); await sbUpdate('sched_access_codes',id,{perms}); await reloadAll(); toast('权限已保存'); });
   bind('[data-togc]', async id=>{ const c=CODES.find(x=>String(x.id)===String(id)); await sbUpdate('sched_access_codes',id,{active:!c.active}); await reloadAll(); show('codes'); });
-  bind('[data-delc2]', async id=>{ if(confirm('删除该口令？')){ await sbDelete('sched_access_codes',id); await reloadAll(); show('codes'); } });
-  el('nc_add').onclick=async()=>{ const code=el('nc_code').value.trim(); if(!code){ toast('填口令',false); return; }
-    await sbInsert('sched_access_codes',{code,role:el('nc_role').value,scope:el('nc_scope').value.trim()||null,label:el('nc_label').value.trim()||null,active:true});
-    await reloadAll(); show('codes'); toast('已新增'); };
+  bind('[data-delc2]', async id=>{ if(confirm('删除该角色？其链接将失效。')){ await sbDelete('sched_access_codes',id); await reloadAll(); show('codes'); } });
+  bind('[data-copy]', id=>{ const inp=document.querySelector(`[data-link="${id}"]`); navigator.clipboard.writeText(inp.value).then(()=>toast('链接已复制')); });
+  el('nc_add').onclick=async()=>{
+    const label=el('nc_label').value.trim(), role=el('nc_role').value.trim();
+    if(!label){ toast('填角色显示名',false); return; }
+    let code=el('nc_code').value.trim(); if(!code){ code=(role||'r')+'-'+Math.random().toString(36).slice(2,8); }
+    await sbInsert('sched_access_codes',{code,role:role||label,label,perms:'timetable',sort:100,active:true});
+    await reloadAll(); show('codes'); toast('已新增，请勾选权限并保存');
+  };
 }
 
 /* helpers */
