@@ -7,12 +7,9 @@
 <div id="nav"></div>
 <div class="wrap">
 
-  <div id="gate" class="gate card">
-    <h3>录入口令</h3>
-    <p class="muted" style="font-size:13px">请输入管理员发放的录入口令</p>
-    <input id="code" placeholder="口令" style="width:100%;margin-bottom:10px">
-    <button id="enter" style="width:100%">进入</button>
-    <p id="gerr" class="b-err badge hidden" style="margin-top:10px"></p>
+  <div id="gate" class="gate card hidden">
+    <h3>无法访问</h3>
+    <p id="gerr" class="muted">此链接无效或没有课程录入权限。请使用管理员发放的专属链接进入。</p>
   </div>
 
   <div id="main" class="hidden">
@@ -104,25 +101,20 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="common.js"></script>
 <script>
-el('nav').innerHTML = renderNav('entry.html');
-getRoleByCode(currentCode()).then(r=>{ if(r) el('nav').innerHTML = renderNav('entry.html', r); }).catch(()=>{});
 let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CODEREC=null, PARSED=[], EXISTING=[];
 
-/* 口令 */
-el('enter').onclick = doEnter;
-el('code').addEventListener('keydown', e=>{ if(e.key==='Enter') doEnter(); });
-async function doEnter(){
-  const code = el('code').value.trim();
-  if(!code) return;
-  try{
-    const rec = await checkCode(code, 'entry');
-    if(!rec){ el('gerr').textContent='口令无效'; el('gerr').classList.remove('hidden'); return; }
-    CODEREC = rec;
-    el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
-    el('who').textContent = rec.label || rec.scope || '录入员';
-    await boot();
-  }catch(e){ el('gerr').textContent=e.message; el('gerr').classList.remove('hidden'); }
-}
+/* 凭 ?k= 自动进入（需 course 权限） */
+(async function gate(){
+  const rec = await getRoleByCode(currentCode());
+  el('nav').innerHTML = renderNav('entry.html', rec);
+  if(!rec || !hasPerm(rec,'course')){
+    el('gate').classList.remove('hidden'); el('main').classList.add('hidden'); return;
+  }
+  CODEREC = rec;
+  el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
+  el('who').textContent = rec.label || rec.role || '录入员';
+  await boot();
+})();
 
 /* tabs */
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
