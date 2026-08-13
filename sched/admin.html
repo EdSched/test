@@ -39,6 +39,19 @@ let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[], ROLE=null;
 el('enter').onclick = doEnter;
 el('logout').onclick = ()=>{ try{ sessionStorage.removeItem('sched_role'); }catch(e){} el('main').classList.add('hidden'); el('gate').classList.remove('hidden'); el('code').value=''; };
 el('code').addEventListener('keydown',e=>{ if(e.key==='Enter') doEnter(); });
+
+/* 自动进入：带 session 身份或 ?k= 且为管理员时，免口令直接进，并跳到 ?tab= 指定标签 */
+(async function autoGate(){
+  const rec = await currentRole();
+  if(rec && (hasPerm(rec,'manage') || rec.role==='admin')){
+    ROLE=rec;
+    try{ sessionStorage.setItem('sched_role', JSON.stringify(rec)); }catch(e){}
+    el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
+    await reloadAll();
+    const tab = new URLSearchParams(location.search).get('tab') || 'pending';
+    show(tab);
+  }
+})();
 async function doEnter(){
   const code=el('code').value.trim(); if(!code) return;
   try{
