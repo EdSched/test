@@ -16,6 +16,7 @@
 
   <div id="main" class="hidden">
     <div id="hub">
+      <div id="hello" style="margin:4px 0 16px"></div>
       <div class="hub" id="hubCards"></div>
     </div>
     <div id="work" class="hidden">
@@ -104,6 +105,7 @@ function renderHub(){
   renderAdminNav();
   el('hub').classList.remove('hidden');
   el('work').classList.add('hidden');
+  const hi=el('hello'); if(hi) hi.innerHTML = `<div class="tip">你好，<b>${esc((ROLE&&(ROLE.label||ROLE.role))||'')}</b>。以下是你可用的功能。</div>`;
   const pend = BOOKINGS.filter(b=>b.status==='pending').length;
   el('hubCards').innerHTML = visibleCards().map(([k,ic,nm,desc])=>{
     const badge = (k==='pending'&&pend)?` <span class="badge b-warn">${pend}</span>`:'';
