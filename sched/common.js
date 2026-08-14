@@ -81,6 +81,22 @@ function weekdayOf(dateStr){ // 1=周一...7=周日
 }
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
+/* 推断课程"班级性质"：共通/线上/周末/下午/晚上/默认。用于课表分组显示 */
+function classKind(c){
+  const name=(c.name||'');
+  const wds=(c.weekdays||'').split(',').map(Number).filter(x=>x);
+  const st=(c.start_time||'');
+  if(c.course_type==='共通课' || /共通|進学指導|進学指导|高数|高數/.test(name)) return '共通课';
+  if(c.mode==='线上') return '线上班';
+  if(wds.includes(6) || wds.includes(7)) return '周末班';
+  if(st){ const h=parseInt(st.slice(0,2),10);
+    if(h>=17) return '晚上班';
+    if(h>=13) return '下午班';
+  }
+  return '默认班';
+}
+const CLASS_KINDS = ['默认班','下午班','晚上班','周末班','线上班','共通课'];
+
 /* 解析腾讯会议邀请文字，抽取链接/会议号/起止日/时段/周几 */
 function parseTencent(text){
   const t=String(text||'');
