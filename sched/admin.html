@@ -721,7 +721,10 @@ function courseEdit(id){
 }
 
 /* 角色链接统一指向 index 分发板（进去后按权限看到自己的功能） */
-function landingFor(role){ return 'index.html'; }
+function landingFor(role){
+  const ps=(role.perms||'').split(',').map(s=>s.trim());
+  return (ps.includes('manage')||role.role==='admin') ? 'admin.html' : 'index.html';
+}
 /* ---------- 角色权限 ---------- */
 function tabCodes(){
   const base = location.origin + location.pathname.replace(/admin\.html$/,'') ;
