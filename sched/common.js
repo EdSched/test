@@ -90,12 +90,12 @@ function classKind(c){
   if(c.mode==='线上') return '线上班';
   if(wds.includes(6) || wds.includes(7)) return '周末班';
   if(st){ const h=parseInt(st.slice(0,2),10);
-    if(h>=17) return '晚上班';
+    if(h>=17) return '其他课程';
     if(h>=13) return '下午班';
   }
   return '默认班';
 }
-const CLASS_KINDS = ['默认班','下午班','晚上班','周末班','线上班','共通课'];
+const CLASS_KINDS = ['默认班','下午班','其他课程','周末班','线上班','共通课'];
 
 /* 语言课语种：英语 / 日语 */
 function langType(c){
