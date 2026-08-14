@@ -2,7 +2,7 @@
 * { box-sizing: border-box; }
 :root{
   --blue:#2f6b4f; --blue-d:#245740; --bg:#f4f6f9; --line:#e2e6ec;
-  --ink:#1f2733; --sub:#6b7480; --ok:#0f9d58; --warn:#e0a800; --err:#e97457;
+  --ink:#1f2733; --sub:#6b7480; --ok:#0f9d58; --warn:#e0a800; --err:#d93025;
   --course:#dbeafe; --vip:#fde2e2; --temp:#fff3cd; --rental:#e6f4ea; --meeting:#ede7f6;
 }
 body{ margin:0; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
@@ -10,7 +10,7 @@ body{ margin:0; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-s
 a{ color:var(--blue); text-decoration:none; }
 .wrap{ max-width:1400px; margin:0 auto; padding:16px; }
 header.top{ background:#fff; border-bottom:1px solid var(--line); }
-header.top .wrap{ display:flex; align-items:center; gap:16px; padding:12px 16px; }
+header.top .wrap{ display:flex; align-items:center; gap:16px; padding:20px 24px; }
 header.top h1{ font-size:17px; margin:0; }
 header.top nav{ margin-left:auto; display:flex; gap:14px; font-size:13px; }
 header.top nav a{ color:var(--sub); }
