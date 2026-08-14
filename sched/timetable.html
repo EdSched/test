@@ -95,7 +95,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
     </div>
     <div class="field" style="margin-top:10px"><label>专业/共通课程（可多选，不选=该专业全部；按期·班级性质分组）</label>
       <div id="courseTags" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
-    <div class="field" id="langWrap" style="margin-top:10px"><label>语言课（可多选，不选=全部语言课；按期·班级性质分组）</label>
+    <div class="field" id="langWrap" style="margin-top:16px;border-top:2px dashed #cfe3d6;padding-top:12px"><label style="color:#2f6b4f;font-weight:600">🗣️ 语言课（与专业课分开；下分日语 / 英语，可多选，不选=全部语言课）</label>
       <div id="langTags" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
     <details style="margin-top:10px">
       <summary style="cursor:pointer;font-size:13px;color:var(--blue)">+ 添加其他校区课程（学生跨校区上课时用）</summary>
@@ -292,7 +292,7 @@ function refreshCourseTags(){
   });
   refreshLangTags();
 }
-/* 语言课多选：按「期→班级性质」分组 */
+/* 语言课多选：先按 日语/英语 分区，各区内按「期→班级性质」分组 */
 function refreshLangTags(){
   const wrap=el('langWrap'), box=el('langTags');
   const withLang=el('lang').value==='1';
@@ -305,20 +305,26 @@ function refreshLangTags(){
   [...LANG_IDS].forEach(id=>{ if(!seen.has(id)) LANG_IDS.delete(id); });
   if(!items.length){ box.innerHTML='<span class="muted">（该期该校区无语言课）</span>'; return; }
   const multiTerm=SEL_TERMS.size>1;
-  const groups={};
-  items.forEach(c=>{ const key=(c.term||'未分期')+' · '+classKind(c); (groups[key]=groups[key]||{term:c.term,ck:classKind(c),list:[]}).list.push(c); });
-  const keys=Object.keys(groups).sort((a,b)=>{ const ga=groups[a],gb=groups[b]; if(ga.term!==gb.term) return (gb.term||'').localeCompare(ga.term||''); return CLASS_KINDS.indexOf(ga.ck)-CLASS_KINDS.indexOf(gb.ck); });
+  const termShort=t=>(t||'').replace(/^20/,'').replace('年','.').replace('期','');
   let h='';
-  keys.forEach(k=>{ const g=groups[k]; const ids=g.list.map(c=>String(c.id));
-    const allOn=ids.every(id=>LANG_IDS.has(id));
-    const termTag=multiTerm?`<span class="badge" style="background:#eef4f0;color:#2f6b4f;margin-right:4px">${esc(g.term)}</span>`:'';
-    h+=`<div style="margin:8px 0 4px;display:flex;align-items:center;gap:8px">${termTag}<b style="font-size:13px">${esc(g.ck)}</b>`+
-       `<button type="button" class="ghost sm lgrpsel" data-ids="${ids.join(',')}" style="font-size:11px">${allOn?'取消全选':'全选本组'}</button>`+
-       `<span class="muted" style="font-size:11px">${g.list.length}门</span></div><div>`+
-       g.list.map(c=>{ const on=LANG_IDS.has(String(c.id));
-         const pt=multiTerm?`<span style="opacity:.7;font-size:10px">[${esc((c.term||'').replace(/^20/,'').replace('年','.').replace('期',''))}] </span>`:'';
-         return `<button type="button" class="ghost sm ltagbtn" data-id="${c.id}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${pt}${esc(c.name)}</button>`;
-       }).join('')+'</div>';
+  ['日语','英语'].forEach(lt=>{
+    const sub=items.filter(c=>langType(c)===lt);
+    if(!sub.length) return;
+    h+=`<div style="margin:12px 0 2px;padding:4px 8px;background:#f0f5f2;border-left:3px solid #2f6b4f;border-radius:3px"><b style="color:#2f6b4f">${lt}课</b> <span class="muted" style="font-size:11px">${sub.length}门</span></div>`;
+    const groups={};
+    sub.forEach(c=>{ const key=(c.term||'未分期')+' · '+classKind(c); (groups[key]=groups[key]||{term:c.term,ck:classKind(c),list:[]}).list.push(c); });
+    const keys=Object.keys(groups).sort((a,b)=>{ const ga=groups[a],gb=groups[b]; if(ga.term!==gb.term) return (gb.term||'').localeCompare(ga.term||''); return CLASS_KINDS.indexOf(ga.ck)-CLASS_KINDS.indexOf(gb.ck); });
+    keys.forEach(k=>{ const g=groups[k]; const ids=g.list.map(c=>String(c.id));
+      const allOn=ids.every(id=>LANG_IDS.has(id));
+      const tt=multiTerm?`<span class="badge" style="background:#eef4f0;color:#2f6b4f;margin-right:4px">${esc(g.term)}</span>`:'';
+      h+=`<div style="margin:6px 0 3px;display:flex;align-items:center;gap:8px">${tt}<b style="font-size:13px">${esc(g.ck)}</b>`+
+         `<button type="button" class="ghost sm lgrpsel" data-ids="${ids.join(',')}" style="font-size:11px">${allOn?'取消全选':'全选本组'}</button>`+
+         `<span class="muted" style="font-size:11px">${g.list.length}门</span></div><div>`+
+         g.list.map(c=>{ const on=LANG_IDS.has(String(c.id));
+           const pt=multiTerm?`<span style="opacity:.7;font-size:10px">[${esc(termShort(c.term))}] </span>`:'';
+           return `<button type="button" class="ghost sm ltagbtn" data-id="${c.id}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${pt}${esc(c.name)}</button>`;
+         }).join('')+'</div>';
+    });
   });
   box.innerHTML=h;
   box.querySelectorAll('.ltagbtn').forEach(b=>b.onclick=()=>{ const id=b.dataset.id; if(LANG_IDS.has(id)) LANG_IDS.delete(id); else LANG_IDS.add(id); refreshLangTags(); gen(); });
@@ -340,8 +346,10 @@ function refreshExtraList(){
   }).slice(0,300);
   box.innerHTML = list.length ? list.map(c=>{
     const on=EXTRA_IDS.has(String(c.id));
+    const termShort=(c.term||'').replace(/^20/,'').replace('年','.').replace('期','');
     return `<div class="xrow" data-id="${c.id}" style="cursor:pointer;padding:5px 8px;border-radius:5px;display:flex;justify-content:space-between;gap:8px;${on?'background:#e8f0ff':''}">`+
-      `<span>${on?'✓ ':''}${esc(c.name)} <small class="muted">${esc(c.campus)}·${esc(c.major||c.category)}·${weekdaysLabel(c.weekdays)} ${c.start_time||''}-${c.end_time||''}</small></span></div>`;
+      `<span>${on?'✓ ':''}<span class="badge" style="background:#eef4f0;color:#2f6b4f;font-size:10px;margin-right:4px">${esc(termShort)}</span>${esc(c.name)} `+
+      `<small class="muted">${esc(c.campus)}·${esc(classKind(c))}·${weekdaysLabel(c.weekdays)} ${c.start_time||''}-${c.end_time||''}</small></span></div>`;
   }).join('') : '<span class="muted">无匹配课程</span>';
   el('x_info').textContent = '已附加 '+EXTRA_IDS.size+' 门跨校区课程';
   box.querySelectorAll('.xrow').forEach(r=>r.onclick=()=>{
