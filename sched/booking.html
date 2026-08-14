@@ -15,7 +15,11 @@
         <option value="temp">临时使用</option><option value="vip">VIP</option>
         <option value="rental">对外出租</option><option value="meeting">开会</option></select></div>
       <div class="field"><label>校区</label><select id="campus"></select></div>
-      <div class="field"><label>日期</label><input type="date" id="date"></div>
+      <div class="field"><label>重复</label><select id="rec"><option value="once">单次</option><option value="weekly">每周重复</option></select></div>
+      <div class="field"><label id="dateLbl">日期</label><input type="date" id="date"></div>
+      <div class="field hidden" id="endWrap"><label>结束日期</label><input type="date" id="endDate"></div>
+      <div class="field hidden" id="wdWrap"><label>星期几（可多选）</label>
+        <div id="wdPick" style="display:flex;gap:4px;flex-wrap:wrap"></div></div>
       <div class="field"><label>开始</label><select id="st"></select></div>
       <div class="field"><label>结束</label><select id="et"></select></div>
       <div class="field"><label>人数</label><input type="number" id="ppl" min="1" style="width:80px"></div>
@@ -65,6 +69,21 @@ async function boot(){
   fillSelect(el('campus'), CAMPUSES);
   fillSelect(el('st'), SLOTS); fillSelect(el('et'), SLOTS);
   el('date').value = todayStr();
+  // 周几多选按钮（1=周一…7=周日）
+  const WD=['一','二','三','四','五','六','日'];
+  el('wdPick').innerHTML = WD.map((w,i)=>`<button type="button" class="ghost sm wdb" data-wd="${i+1}">${w}</button>`).join('');
+  window.SELWD=new Set();
+  el('wdPick').querySelectorAll('.wdb').forEach(b=>b.onclick=()=>{
+    const wd=b.dataset.wd;
+    if(SELWD.has(wd)){ SELWD.delete(wd); b.style.background=''; b.style.color=''; }
+    else { SELWD.add(wd); b.style.background='var(--blue)'; b.style.color='#fff'; }
+  });
+  el('rec').onchange=()=>{
+    const weekly=el('rec').value==='weekly';
+    el('endWrap').classList.toggle('hidden',!weekly);
+    el('wdWrap').classList.toggle('hidden',!weekly);
+    el('dateLbl').textContent = weekly?'开始日期':'日期';
+  };
   const i=SLOTS.indexOf('18:00'); if(i>0){ el('st').value='18:00'; el('et').value='21:00'; }
   ROOMS    = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
   ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
@@ -142,19 +161,51 @@ function openModal(roomId){
   el('modal').classList.remove('hidden');
 }
 async function submit(){
-  const s=el('st').value, e=el('et').value, date=el('date').value, use=el('use').value;
+  const s=el('st').value, e=el('et').value, use=el('use').value;
   const warn=m=>{ el('m_warn').className=''; el('m_warn').innerHTML='<span class="badge b-err">'+m+'</span>'; };
   const um = el('m_um').value==='true';
   const accId = um ? (CUR.meeting_account_id||null) : null;
   if(um && !accId){ warn('该教室没有绑定固定会议账号，无法占用账号'); return; }
-  if(um){ const ac=accountConflicts(BOOKINGS, accId, date, s, e, null); if(ac.length){ warn('该教室账号此时段已被占用'); return; } }
-  const rec={ room_id:CUR.id, kind:use, title: el('m_title').value.trim()||KIND_LABEL[use]||null,
-    user_name: el('m_user').value.trim()||null, recurrence:'once', booking_date:date, start_time:s, end_time:e,
-    uses_meeting:um, meeting_account_id:accId,
-    status:'confirmed', created_by:'admin', note: el('m_note').value.trim()||null };
+
+  const weekly = el('rec').value==='weekly';
+  // 生成要录入的日期列表
+  let dates=[];
+  if(weekly){
+    const sd=el('date').value, ed=el('endDate').value;
+    if(!sd||!ed){ warn('请填开始和结束日期'); return; }
+    if(!SELWD.size){ warn('请至少选一个星期几'); return; }
+    let d=sd; let guard=0;
+    while(d<=ed && guard<400){
+      const wd=weekdayOf(d); const wdNum=(wd===0?7:wd); // 本项目 weekdayOf 周日=0，转成7
+      if(SELWD.has(String(wdNum))) dates.push(d);
+      d=addDays(d,1); guard++;
+    }
+    if(!dates.length){ warn('该日期范围内没有选中的星期几'); return; }
+  } else {
+    if(!el('date').value){ warn('请选日期'); return; }
+    dates=[el('date').value];
+  }
+  // 逐日期检查冲突
+  const conflictDates=[];
+  for(const date of dates){
+    const rc=roomConflicts(BOOKINGS, CUR.id, date, s, e, null);
+    if(rc.length) conflictDates.push(date);
+    if(um){ const ac=accountConflicts(BOOKINGS, accId, date, s, e, null); if(ac.length && !conflictDates.includes(date)) conflictDates.push(date); }
+  }
+  if(conflictDates.length){
+    warn('以下日期该教室/账号已被占用，请调整：'+conflictDates.slice(0,8).join('、')+(conflictDates.length>8?' 等':''));
+    return;
+  }
   const sb=el('m_submit'); if(sb.disabled) return; sb.disabled=true; sb.textContent='保存中…';
-  try{ const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
-    el('modal').classList.add('hidden'); toast('已录入并生效'); find(); renderGrid();
+  try{
+    for(const date of dates){
+      const rec={ room_id:CUR.id, kind:use, title: el('m_title').value.trim()||KIND_LABEL[use]||null,
+        user_name: el('m_user').value.trim()||null, recurrence: weekly?'weekly':'once', booking_date:date, start_time:s, end_time:e,
+        uses_meeting:um, meeting_account_id:accId,
+        status:'confirmed', created_by:'admin', note: el('m_note').value.trim()||null };
+      const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
+    }
+    el('modal').classList.add('hidden'); toast(weekly?('已批量录入 '+dates.length+' 条'):'已录入并生效'); find(); renderGrid();
   }catch(err){ warn(esc(err.message)); }
   finally{ sb.disabled=false; sb.textContent='保存占用'; }
 }
