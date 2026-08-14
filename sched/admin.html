@@ -739,7 +739,7 @@ function landingFor(role){
 }
 /* ---------- 角色权限 ---------- */
 function tabCodes(){
-  const base = location.origin + location.pathname.replace(/admin\.html$/,'') ;
+  const base = location.origin + location.pathname.replace(/[^/]*$/,'');  // 取目录（去掉当前文件名），避免拼出 index.htmlindex.html
   let h='<div class="card"><h3 style="margin-top:2px">角色权限</h3>'+
     '<div class="tip">每个角色一条：勾选它能用的功能（点击标签切换），保存后生效。把「专属链接」发给对应的人，他们打开就只看到自己有权限的功能。</div>'+
     '<table><thead><tr><th>角色</th><th>功能权限（点击切换）</th><th>专属链接</th><th>状态</th><th></th></tr></thead><tbody>';
