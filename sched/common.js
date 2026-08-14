@@ -97,6 +97,13 @@ function classKind(c){
 }
 const CLASS_KINDS = ['默认班','下午班','晚上班','周末班','线上班','共通课'];
 
+/* 语言课语种：英语 / 日语 */
+function langType(c){
+  const name=(c.name||'');
+  if(/英语|英語|托福|托業|托业|TOEFL|TOEIC|IELTS|雅思/i.test(name)) return '英语';
+  return '日语';
+}
+
 /* 解析腾讯会议邀请文字，抽取链接/会议号/起止日/时段/周几 */
 function parseTencent(text){
   const t=String(text||'');
