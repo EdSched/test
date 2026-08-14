@@ -4,8 +4,9 @@
 <title>管理后台 · 唯新</title>
 <link rel="stylesheet" href="style.css">
 </head><body>
-<header class="top"><div class="wrap" style="display:flex;align-items:center">
+<header class="top"><div class="wrap" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">
   <h1 style="margin:0;font-size:17px">唯新 · 教学资源调度 <span style="font-size:13px;color:var(--sub);font-weight:400">管理后台</span></h1>
+  <nav id="adminNav" style="display:flex;flex-wrap:wrap;gap:2px 10px;font-size:13px;margin-left:16px"></nav>
   <button class="ghost sm" id="logout" style="margin-left:auto">退出登录</button>
 </div></header>
 <div class="wrap">
@@ -94,7 +95,17 @@ const HUB_CARDS = [
   ['courses',  '✍️','课程管理','课程列表：新增/编辑/删除/查重','tab','courses'],
   ['codes',    '⚙️','角色权限','管理各角色权限、生成专属链接','tab','codes'],
 ];
+function renderAdminNav(){
+  const nav=el('adminNav'); if(!nav) return;
+  nav.innerHTML = '<a href="#" data-nav="_hub" style="color:var(--blue)">首页</a>' +
+    HUB_CARDS.map(([k,ic,nm])=>`<a href="#" data-nav="${k}">${nm}</a>`).join('');
+  nav.querySelectorAll('[data-nav]').forEach(a=>a.onclick=(e)=>{
+    e.preventDefault();
+    if(a.dataset.nav==='_hub') renderHub(); else openCard(a.dataset.nav);
+  });
+}
 function renderHub(){
+  renderAdminNav();
   el('hub').classList.remove('hidden');
   el('work').classList.add('hidden');
   const pend = BOOKINGS.filter(b=>b.status==='pending').length;
@@ -105,6 +116,7 @@ function renderHub(){
   el('hubCards').querySelectorAll('[data-hub]').forEach(a=>a.onclick=(e)=>{ e.preventDefault(); openCard(a.dataset.hub); });
 }
 function openCard(key){
+  if(el('adminNav') && !el('adminNav').innerHTML) renderAdminNav();
   const c = HUB_CARDS.find(x=>x[0]===key); if(!c) return;
   const [,ic,nm,,type,target]=c;
   el('hub').classList.add('hidden');
