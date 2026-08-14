@@ -41,18 +41,7 @@ el('enter').onclick = doEnter;
 el('logout').onclick = ()=>{ try{ sessionStorage.removeItem('sched_role'); }catch(e){} el('main').classList.add('hidden'); el('gate').classList.remove('hidden'); el('code').value=''; };
 el('code').addEventListener('keydown',e=>{ if(e.key==='Enter') doEnter(); });
 
-/* 自动进入：带 session 身份或 ?k= 且为管理员时，免口令直接进，并跳到 ?tab= 指定标签 */
-(async function autoGate(){
-  const rec = await currentRole();
-  if(rec && (hasPerm(rec,'manage') || rec.role==='admin')){
-    ROLE=rec;
-    try{ sessionStorage.setItem('sched_role', JSON.stringify(rec)); }catch(e){}
-    el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
-    await reloadAll();
-    const tab = new URLSearchParams(location.search).get('tab');
-    if(tab){ openCard(tab); } else { renderHub(); }
-  }
-})();
+/* admin 只用口令进入（管理员管角色的地方），不做 ?k= 自动进 */
 async function doEnter(){
   const code=el('code').value.trim(); if(!code) return;
   try{
@@ -62,8 +51,18 @@ async function doEnter(){
     ROLE=rec;
     sessionStorage.setItem('sched_role', JSON.stringify(rec));  // 全站共享登录身份
     el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
-    await reloadAll(); renderHub();
+    await reloadAll(); enterCodesOnly();
   }catch(e){ el('gerr').textContent=e.message; el('gerr').classList.remove('hidden'); }
+}
+/* admin 精简：只做角色权限管理 */
+function enterCodesOnly(){
+  el('hub').classList.add('hidden');
+  el('work').classList.remove('hidden');
+  const bh=el('backHub'); if(bh) bh.style.display='none';
+  const nv=el('adminNav'); if(nv) nv.innerHTML='';
+  el('workTitle').textContent='⚙️ 角色权限管理';
+  el('frame').style.display='none'; el('panel').style.display='block';
+  tabCodes();
 }
 async function reloadAll(){
   [ROOMS,ACCOUNTS,COURSES,BOOKINGS,CODES] = await Promise.all([
