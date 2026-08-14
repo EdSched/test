@@ -93,8 +93,10 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
       <div class="field"><label>&nbsp;</label><button class="ghost" id="print">打印 / 存PDF</button></div>
     </div>
-    <div class="field" style="margin-top:10px"><label>课程（可多选，不选=全部；语言课由上面开关控制，不在此列）</label>
+    <div class="field" style="margin-top:10px"><label>专业/共通课程（可多选，不选=该专业全部；按期·班级性质分组）</label>
       <div id="courseTags" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+    <div class="field" id="langWrap" style="margin-top:10px"><label>语言课（可多选，不选=全部语言课；按期·班级性质分组）</label>
+      <div id="langTags" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
     <details style="margin-top:10px">
       <summary style="cursor:pointer;font-size:13px;color:var(--blue)">+ 添加其他校区课程（学生跨校区上课时用）</summary>
       <div class="row" style="margin-top:8px">
@@ -120,7 +122,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
 getRoleByCode(currentCode()).then(r=>{ if(r) el('nav').innerHTML = renderNav('timetable.html', r); }).catch(()=>{});
-let COURSES=[], EVENTS=[], curView='month', SELECTED_IDS=new Set(), EXTRA_IDS=new Set(), TEMPLATES=[], MULTI=false, ALL_TERMS=[], SEL_TERMS=new Set();
+let COURSES=[], EVENTS=[], curView='month', SELECTED_IDS=new Set(), EXTRA_IDS=new Set(), LANG_IDS=new Set(), TEMPLATES=[], MULTI=false, ALL_TERMS=[], SEL_TERMS=new Set();
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
 const PALETTE=[
@@ -158,6 +160,8 @@ async function boot(){
   fillSelect(el('x_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   el('cat').onchange=()=>{ fillMajors(); SELECTED_IDS.clear(); refreshCourseTags(); };
   el('major').onchange=()=>{ SELECTED_IDS.clear(); refreshCourseTags(); };
+  el('lang').onchange=()=>{ refreshLangTags(); gen(); };
+  el('campus').onchange=()=>{ SELECTED_IDS.clear(); LANG_IDS.clear(); refreshCourseTags(); };
   ['lang','campus'].forEach(id=>el(id).onchange=refreshCourseTags);
   el('x_campus').onchange=()=>{ fillXMajors(); refreshExtraList(); };
   el('x_cat').onchange=()=>{ fillXMajors(); refreshExtraList(); };
@@ -222,15 +226,15 @@ function baseCourses(){
         withLang=el('lang').value==='1', campus=el('campus').value;
   return COURSES.filter(c=>{
     if(SEL_TERMS.size && !SEL_TERMS.has(c.term)) return false;
-    if(campus==='线上'){ if(c.mode!=='线上') return false; }
-    else if(campus){ if(c.campus!==campus && c.mode!=='线上') return false; }
+    // 严格按校区筛：线上课 campus='线上'，选高马/市谷时不带出；方式(线上/线下/线上+线下)与此无关
+    if(campus && c.campus!==campus) return false;
     if(c.category==='语言') return withLang;
     if(c.category!==cat) return false;
     if(major) return c.major===major || c.course_type==='共通课';
     return true;
   });
 }
-/* 课程多选标签：必须先选期+校区，只列非语言课 */
+/* 课程多选：按「期→班级性质」分组，每组可全选，课程带期标签 */
 function refreshCourseTags(){
   const box=el('courseTags');
   if(!SEL_TERMS.size || !el('campus').value){
@@ -242,15 +246,83 @@ function refreshCourseTags(){
   const seen=new Set(), items=[];
   cand.forEach(c=>{ if(!seen.has(String(c.id))){ seen.add(String(c.id)); items.push(c); } });
   [...SELECTED_IDS].forEach(id=>{ if(!seen.has(id)) SELECTED_IDS.delete(id); });
-  box.innerHTML = items.length ? items.map(c=>{
-    const on=SELECTED_IDS.has(String(c.id));
-    return `<button type="button" class="ghost sm tagbtn" data-id="${c.id}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${esc(c.name)}</button>`;
-  }).join('') : '<span class="muted">（无课程）</span>';
+  if(!items.length){ box.innerHTML='<span class="muted">（无课程）</span>'; return; }
+
+  const multiTerm = SEL_TERMS.size>1;
+  // 分组：期 → 班级性质
+  const groups={};
+  items.forEach(c=>{
+    const term=c.term||'未分期', ck=classKind(c);
+    const key=term+' · '+ck;
+    (groups[key]=groups[key]||{term,ck,list:[]}).list.push(c);
+  });
+  // 排序：先按期（倒序，新期在前），再按班级性质固定顺序
+  const keys=Object.keys(groups).sort((a,b)=>{
+    const ga=groups[a],gb=groups[b];
+    if(ga.term!==gb.term) return gb.term.localeCompare(ga.term);
+    return CLASS_KINDS.indexOf(ga.ck)-CLASS_KINDS.indexOf(gb.ck);
+  });
+  let h='';
+  keys.forEach(k=>{
+    const g=groups[k];
+    const ids=g.list.map(c=>String(c.id));
+    const allOn=ids.every(id=>SELECTED_IDS.has(id));
+    const termTag = multiTerm ? `<span class="badge" style="background:#eef4f0;color:#2f6b4f;margin-right:4px">${esc(g.term)}</span>` : '';
+    h+=`<div style="margin:8px 0 4px;display:flex;align-items:center;gap:8px">`+
+       `${termTag}<b style="font-size:13px">${esc(g.ck)}</b>`+
+       `<button type="button" class="ghost sm grpsel" data-ids="${ids.join(',')}" style="font-size:11px">${allOn?'取消全选':'全选本组'}</button>`+
+       `<span class="muted" style="font-size:11px">${g.list.length}门</span></div>`;
+    h+='<div>'+g.list.map(c=>{
+      const on=SELECTED_IDS.has(String(c.id));
+      const pt = multiTerm ? `<span style="opacity:.7;font-size:10px">[${esc((c.term||'').replace(/^20/,'').replace('年','.').replace('期',''))}] </span>` : '';
+      return `<button type="button" class="ghost sm tagbtn" data-id="${c.id}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${pt}${esc(c.name)}</button>`;
+    }).join('')+'</div>';
+  });
+  box.innerHTML=h;
   box.querySelectorAll('.tagbtn').forEach(b=>b.onclick=()=>{
     const id=b.dataset.id;
     if(SELECTED_IDS.has(id)) SELECTED_IDS.delete(id); else SELECTED_IDS.add(id);
     refreshCourseTags(); gen();
   });
+  box.querySelectorAll('.grpsel').forEach(b=>b.onclick=()=>{
+    const ids=b.dataset.ids.split(',');
+    const allOn=ids.every(id=>SELECTED_IDS.has(id));
+    if(allOn) ids.forEach(id=>SELECTED_IDS.delete(id)); else ids.forEach(id=>SELECTED_IDS.add(id));
+    refreshCourseTags(); gen();
+  });
+  refreshLangTags();
+}
+/* 语言课多选：按「期→班级性质」分组 */
+function refreshLangTags(){
+  const wrap=el('langWrap'), box=el('langTags');
+  const withLang=el('lang').value==='1';
+  wrap.style.display = withLang ? '' : 'none';
+  if(!withLang){ LANG_IDS.clear(); return; }
+  if(!SEL_TERMS.size || !el('campus').value){ box.innerHTML='<span class="muted">请先选「期」和「校区」</span>'; return; }
+  const campus=el('campus').value;
+  let items=COURSES.filter(c=>c.category==='语言' && SEL_TERMS.has(c.term) && (!campus || c.campus===campus));
+  const seen=new Set(); items=items.filter(c=>{ const s=String(c.id); if(seen.has(s))return false; seen.add(s); return true; });
+  [...LANG_IDS].forEach(id=>{ if(!seen.has(id)) LANG_IDS.delete(id); });
+  if(!items.length){ box.innerHTML='<span class="muted">（该期该校区无语言课）</span>'; return; }
+  const multiTerm=SEL_TERMS.size>1;
+  const groups={};
+  items.forEach(c=>{ const key=(c.term||'未分期')+' · '+classKind(c); (groups[key]=groups[key]||{term:c.term,ck:classKind(c),list:[]}).list.push(c); });
+  const keys=Object.keys(groups).sort((a,b)=>{ const ga=groups[a],gb=groups[b]; if(ga.term!==gb.term) return (gb.term||'').localeCompare(ga.term||''); return CLASS_KINDS.indexOf(ga.ck)-CLASS_KINDS.indexOf(gb.ck); });
+  let h='';
+  keys.forEach(k=>{ const g=groups[k]; const ids=g.list.map(c=>String(c.id));
+    const allOn=ids.every(id=>LANG_IDS.has(id));
+    const termTag=multiTerm?`<span class="badge" style="background:#eef4f0;color:#2f6b4f;margin-right:4px">${esc(g.term)}</span>`:'';
+    h+=`<div style="margin:8px 0 4px;display:flex;align-items:center;gap:8px">${termTag}<b style="font-size:13px">${esc(g.ck)}</b>`+
+       `<button type="button" class="ghost sm lgrpsel" data-ids="${ids.join(',')}" style="font-size:11px">${allOn?'取消全选':'全选本组'}</button>`+
+       `<span class="muted" style="font-size:11px">${g.list.length}门</span></div><div>`+
+       g.list.map(c=>{ const on=LANG_IDS.has(String(c.id));
+         const pt=multiTerm?`<span style="opacity:.7;font-size:10px">[${esc((c.term||'').replace(/^20/,'').replace('年','.').replace('期',''))}] </span>`:'';
+         return `<button type="button" class="ghost sm ltagbtn" data-id="${c.id}" style="${on?'background:var(--blue);color:#fff':''}">${on?'✓ ':''}${pt}${esc(c.name)}</button>`;
+       }).join('')+'</div>';
+  });
+  box.innerHTML=h;
+  box.querySelectorAll('.ltagbtn').forEach(b=>b.onclick=()=>{ const id=b.dataset.id; if(LANG_IDS.has(id)) LANG_IDS.delete(id); else LANG_IDS.add(id); refreshLangTags(); gen(); });
+  box.querySelectorAll('.lgrpsel').forEach(b=>b.onclick=()=>{ const ids=b.dataset.ids.split(','); const allOn=ids.every(id=>LANG_IDS.has(id)); if(allOn) ids.forEach(id=>LANG_IDS.delete(id)); else ids.forEach(id=>LANG_IDS.add(id)); refreshLangTags(); gen(); });
 }
 /* 跨校区滚动多选 */
 function refreshExtraList(){
@@ -280,8 +352,13 @@ function refreshExtraList(){
 }
 function selectedCourses(){
   let base=baseCourses(), out;
-  if(SELECTED_IDS.size) out = base.filter(c=> c.category==='语言' || SELECTED_IDS.has(String(c.id)));
-  else out = base.slice();
+  const langSel = LANG_IDS.size>0;
+  if(SELECTED_IDS.size || langSel){
+    out = base.filter(c=>{
+      if(c.category==='语言') return langSel ? LANG_IDS.has(String(c.id)) : true;
+      return SELECTED_IDS.size ? SELECTED_IDS.has(String(c.id)) : true;
+    });
+  } else out = base.slice();
   EXTRA_IDS.forEach(id=>{ const c=COURSES.find(x=>String(x.id)===id); if(c && !out.includes(c)) out.push(c); });
   return out;
 }
