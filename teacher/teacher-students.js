@@ -774,7 +774,7 @@ function tmRenderShell() {
     <div class="filter-chip ${tmView==='has'?'active':''}" onclick="tmSetView('has')" style="padding:3px 10px;font-size:10px">有面谈记录</div>
     <div class="filter-chip ${tmView==='none'?'active':''}" onclick="tmSetView('none')" style="padding:3px 10px;font-size:10px">⚠ 无面谈记录</div>
     <div class="filter-chip ${tmView==='contacted'?'active':''}" onclick="tmSetView('contacted')" style="padding:3px 10px;font-size:10px;${tmView==='contacted'?'background:#1a6d3a;color:#fff;border-color:#1a6d3a':''}">✓ 已联系确认</div>
-    ${tmView==='none' ? `<button onclick="tmBatchReminder()" style="font-size:10px;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:4px 12px;cursor:pointer;font-family:inherit;margin-left:auto">✉ 按专业批量生成提醒</button>` : ''}
+    ${tmView==='none' ? `<button onclick="tmBatchReminder()" style="font-size:10px;background:var(--accent);color:#fff;border:none;border-radius:2px;padding:4px 12px;cursor:pointer;font-family:inherit;margin-left:auto">✉ 按专业批量生成提醒</button>` : `<button onclick="tmContactModal('','','')" style="font-size:10px;background:#1a6d3a;color:#fff;border:none;border-radius:2px;padding:4px 12px;cursor:pointer;font-family:inherit;margin-left:auto">＋ 补充记录（手输姓名）</button>`}
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">
     <span style="font-size:10px;color:var(--text-3)">专业：</span>${tpMajorChipsHtml(tmMajorFilter, 'tmSetMajor')}
@@ -906,6 +906,7 @@ function tmRenderList() {
           <div style="font-size:11px;color:var(--text-3);margin-bottom:6px">📅 ${b.slot_date}${b.slot_time_range?' '+b.slot_time_range:''}${b.actual_duration?' · '+b.actual_duration+'min':''}${b.assigned_teacher?' · '+tsaEsc(b.assigned_teacher)+'老师':''}${b.type?' · '+(typeof typeLabel==='function'?typeLabel(b.type):b.type):''}</div>
           <pre style="font-size:11px;line-height:1.8;white-space:pre-wrap;font-family:inherit;margin:0;color:var(--text-2)">${tsaEsc(buildRecordText(b))}</pre>
         </div>`).join('')}
+        ${tmContactBlockHtml(g.name, g.major, (tmData.students.find(s => s.name === g.name) || {}).id || '')}
       </div>` : ''}
     </div>`;
   }).join('') + noRecHtml) : '<div class="empty">没有符合筛选条件的面谈记录</div>';
@@ -1194,13 +1195,18 @@ function tmContactModal(sid, name, major) {
   const m = document.createElement('div');
   m.id = 'tmContactModal';
   m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const fixed = !!name;
   m.innerHTML = `
     <div style="background:var(--surface);border-radius:6px;padding:18px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto">
-      <div style="font-size:13px;font-weight:600;margin-bottom:4px">记录已联系 — ${tsaEsc(name)}</div>
-      <div style="font-size:10px;color:var(--text-3);margin-bottom:12px">记录你联系该学生的情况（例：已发提醒未回复 / 回复说不需要面谈）。可直接 Ctrl+V 粘贴截图。</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${name ? '补充记录 — ' + tsaEsc(name) : '补充学生记录'}</div>
+      <div style="font-size:10px;color:var(--text-3);margin-bottom:12px">记录该学生的情况或补充信息（例：已发提醒未回复、某些重点信息）。可直接 Ctrl+V 粘贴截图。</div>
       <div class="form-group">
-        <label class="form-label">备注</label>
-        <textarea id="tm_contact_note" rows="3" placeholder="如：已在微信发面谈提醒，学生未回复…" onpaste="tmHandlePaste(event)" style="width:100%;font-size:12px"></textarea>
+        <label class="form-label">学生姓名</label>
+        <input id="tm_contact_name" value="${tsaEsc(name) || ''}" placeholder="输入学生姓名（汉字）" ${fixed ? 'readonly' : ''} style="width:100%;font-size:12px;${fixed ? 'background:var(--bg);color:var(--text-2)' : ''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">备注 / 内容</label>
+        <textarea id="tm_contact_note" rows="3" placeholder="如：已在微信发面谈提醒，学生未回复… / 该生近期状态…" onpaste="tmHandlePaste(event)" style="width:100%;font-size:12px"></textarea>
       </div>
       <div class="form-group">
         <label class="form-label">截图证据（可选，Ctrl+V 粘贴或选择文件）</label>
@@ -1211,7 +1217,7 @@ function tmContactModal(sid, name, major) {
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
         <button onclick="document.getElementById('tmContactModal').remove()" style="font-size:12px;background:none;border:1px solid var(--border);border-radius:3px;padding:7px 14px;cursor:pointer;font-family:inherit">取消</button>
-        <button id="tm_contact_save" onclick="tmSaveContact('${sid}','${(name||'').replace(/'/g,'')}','${major||''}')" style="font-size:12px;background:#1a6d3a;color:#fff;border:none;border-radius:3px;padding:7px 16px;cursor:pointer;font-family:inherit;font-weight:500">保存</button>
+        <button id="tm_contact_save" onclick="tmSaveContact('${sid || ''}','${major || ''}')" style="font-size:12px;background:#1a6d3a;color:#fff;border:none;border-radius:3px;padding:7px 16px;cursor:pointer;font-family:inherit;font-weight:500">保存</button>
       </div>
     </div>`;
   document.body.appendChild(m);
@@ -1242,15 +1248,22 @@ async function tmSetImg(file) {
   }
 }
 
-async function tmSaveContact(sid, name, major) {
+async function tmSaveContact(sid, major) {
+  const name = (document.getElementById('tm_contact_name').value || '').trim();
   const note = (document.getElementById('tm_contact_note').value || '').trim();
+  if (!name) { alert('请填写学生姓名'); return; }
   if (!note && !tmPendingImg) { alert('请填写备注，或粘贴一张截图'); return; }
+  // 手动输入姓名时，按姓名从已加载学生里补出 id/专业
+  if (!sid || !major) {
+    const st = (tmData.students || []).find(s => s.name === name);
+    if (st) { sid = sid || st.id; major = major || st.major; }
+  }
   const btn = document.getElementById('tm_contact_save');
   if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
   let imageUrl = '';
   try {
     if (tmPendingImg) {
-      imageUrl = await sbUpload('teacher-files', `contact/${(sid||'x')}-${Date.now()}.jpg`, tmPendingImg);
+      imageUrl = await sbUpload('teacher-files', `contact/${(sid || 'x')}-${Date.now()}.jpg`, tmPendingImg);
     }
     await sb('/rest/v1/student_contact_logs', 'POST', [{
       id: 'sclog-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
@@ -1259,7 +1272,6 @@ async function tmSaveContact(sid, name, major) {
       note, image_url: imageUrl || null,
     }]);
     document.getElementById('tmContactModal')?.remove();
-    tmView = 'contacted';
     renderTsaMeetings(document.getElementById('sm_content') || document.getElementById('mainContent'));
   } catch (e) {
     alert('保存失败：' + e.message);
@@ -1458,5 +1470,22 @@ async function focusOpenSummary(sid) {
     ${contacts.length ? sec('联系确认记录', contactHtml) : ''}
 
     <div style="margin-top:20px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:8px">唯新教育 · 学生学习概要 · 生成于 ${new Date().toLocaleDateString('zh-CN')}</div>
+  </div>`;
+}
+
+// 学生名下的"补充记录"块（追加按钮 + 已有联系/补充记录）——用于「有面谈记录」展开处
+function tmContactBlockHtml(name, major, sid) {
+  const logs = tmContactByName[name] || [];
+  const logHtml = logs.map(l => `<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--border-light)">
+    ${l.image_url ? `<img src="${l.image_url}" onclick="tmImgLightbox('${l.image_url}')" style="flex-shrink:0;width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in">` : ''}
+    <div style="flex:1;min-width:0"><div style="font-size:11px;white-space:pre-wrap;line-height:1.5">${tsaEsc(l.note) || '（无备注）'}</div><div style="font-size:9px;color:var(--text-3);margin-top:2px">${l.teacher_name || ''} · ${(l.created_at || '').slice(0, 10)}</div></div>
+    <span onclick="tmDeleteContact('${l.id}')" style="flex-shrink:0;font-size:9px;color:var(--danger);cursor:pointer">删除</span>
+  </div>`).join('');
+  return `<div style="border-top:1px dashed var(--border);margin-top:2px;padding-top:8px">
+    <div style="display:flex;align-items:center;gap:8px;${logs.length ? 'margin-bottom:4px' : ''}">
+      <span style="font-size:10px;color:#1a6d3a;font-weight:600">📝 补充记录${logs.length ? '（' + logs.length + '）' : ''}</span>
+      <button onclick="tmContactModal('${sid}','${tsaEsc(name)}','${major || ''}')" style="margin-left:auto;font-size:10px;background:#1a6d3a;color:#fff;border:none;border-radius:2px;padding:3px 10px;cursor:pointer;font-family:inherit">＋ 追加记录</button>
+    </div>
+    ${logHtml}
   </div>`;
 }
