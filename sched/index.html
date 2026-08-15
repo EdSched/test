@@ -56,9 +56,11 @@ async function reloadAll(){
     sbGet('sched_bookings','select=*&order=created_at.desc'),
     sbGet('sched_access_codes','select=*&order=id')
   ]);
+  try{ MTEMPLATES = await sbGet('sched_meeting_templates','select=*&order=created_at.desc'); }catch(e){ MTEMPLATES=[]; }
   const pend=BOOKINGS.filter(b=>b.status==='pending').length;
   const pn=el('pendN'); if(pn){ pn.textContent = pend||''; pn.style.display=pend?'':'none'; }
 }
+let MTEMPLATES=[];
 const rname=id=>{ const r=ROOMS.find(x=>String(x.id)===String(id)); return r?r.name:'—'; };
 const aname=id=>{ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?a.name:'—'; };
 
@@ -357,45 +359,123 @@ function assignForm(courseId){
     }catch(e){ el('as_warn').className=''; el('as_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
   };
 }
-/* 排完教室后：粘贴腾讯会议文字，解析并回填链接/会议号 */
+/* 生成会议标题：期-类别-（课程名 或 专业名） */
+function makeMeetingTitle(c, generic, majorName){
+  const term=c.term||'', cat=c.category||'';
+  const tail = generic ? (majorName||c.major||'专业课') : (c.name||'');
+  return [term,cat,tail].filter(Boolean).join('-');
+}
+/* 排完教室后的会议三步流程（硬绑定：中途取消=占用未完成） */
 function meetingLinkStep(c, accId){
   const acc = ACCOUNTS.find(a=>String(a.id)===String(accId));
-  let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px">'+
-    '<div class="card" style="width:560px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">设定会议链接 · 「'+esc(c.name)+'」</h3>'+
-    '<div class="tip">已排好教室、账号'+(acc?('：<b>'+esc(acc.name)+'</b>'):'')+'。把<b>腾讯会议 App 生成的邀请文字</b>整段粘贴进来，自动读出链接、会议号、时间。</div>'+
-    '<div class="field"><label>腾讯会议邀请文字</label><textarea id="mk_txt" rows="7" placeholder="会议主题：...\n会议时间：2026/07/12 16:00-18:00 ...\n重复周期：2026/07/12-2026/09/13 ... 每周 (周日)\n点击链接入会：https://meeting.tencent.com/dm/xxxx\n#腾讯会议：537-7181-4387"></textarea></div>'+
-    '<div><button class="ghost sm" id="mk_parse">解析</button></div>'+
-    '<div id="mk_prev" style="margin-top:8px"></div>'+
-    '<div id="mk_warn" class="hidden" style="margin-top:8px"></div>'+
-    '<div style="margin-top:12px"><button id="mk_save" disabled>保存会议信息</button> <button class="ghost" id="mk_skip">暂不设定</button></div>'+
-    '</div></div>';
-  el('asForm').innerHTML=h;
-  let parsed=null;
-  el('mk_skip').onclick=()=>{ el('asForm').innerHTML=''; toast('教室已排（会议链接稍后可在课程编辑里补）'); };
-  el('mk_parse').onclick=()=>{
-    parsed=parseTencent(el('mk_txt').value);
-    if(!parsed.link && !parsed.id){ el('mk_prev').innerHTML='<span class="badge b-err">没识别到腾讯链接或会议号，请检查粘贴内容</span>'; el('mk_save').disabled=true; return; }
-    el('mk_prev').innerHTML='<table><tbody>'+
-      `<tr><td class="muted">会议链接</td><td>${parsed.link?esc(parsed.link):'<span class="muted">—</span>'}</td></tr>`+
-      `<tr><td class="muted">会议号</td><td>${parsed.id?esc(parsed.id):'<span class="muted">—</span>'}</td></tr>`+
-      `<tr><td class="muted">时段</td><td>${parsed.start_time?parsed.start_time+'-'+parsed.end_time:'<span class="muted">—</span>'}</td></tr>`+
-      `<tr><td class="muted">周期</td><td>${parsed.start_date?(parsed.start_date+' ~ '+(parsed.end_date||'?')):'<span class="muted">—</span>'}${parsed.weekday?(' 每周'+WEEKDAYS[parsed.weekday]):''}</td></tr>`+
-      '</tbody></table>';
-    // 时段/周几与课程不一致时给个提示
-    const warn=[];
-    if(parsed.start_time && parsed.start_time!==c.start_time) warn.push('腾讯时段('+parsed.start_time+')与课程('+c.start_time+')不一致');
-    if(parsed.weekday && c.weekdays && !c.weekdays.split(',').map(Number).includes(parsed.weekday)) warn.push('腾讯周几(周'+WEEKDAYS[parsed.weekday]+')不在课程上课日内');
-    el('mk_prev').innerHTML += warn.length?('<div class="badge b-warn" style="margin-top:6px">⚠ '+warn.join('；')+'（仍可保存，仅提醒）</div>'):'';
-    el('mk_save').disabled=false;
-  };
-  el('mk_save').onclick=async()=>{
-    if(!parsed) return;
-    try{
-      await sbUpdate('sched_courses', c.id, { meeting_link:parsed.link||null, meeting_id:parsed.id||null });
-      await reloadAll(); if(el('assignTable')) renderAssignTable();
-      el('asForm').innerHTML=''; toast('会议信息已保存，学生课表可点链接');
-    }catch(e){ el('mk_warn').className=''; el('mk_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
-  };
+  let useGeneric=false, chosenTpl=null, parsed=null;
+
+  function render(){
+    const title = makeMeetingTitle(c, useGeneric, el('mk_major')?el('mk_major').value:'');
+    // 该期+专业已有的通用标题模板
+    const tpls = MTEMPLATES.filter(t=>t.term===c.term);
+    let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px">'+
+      '<div class="card" style="width:600px;max-width:94vw;margin:auto">'+
+      '<h3 style="margin-top:2px">设定腾讯会议 · 「'+esc(c.name)+'」</h3>'+
+      '<div class="tip">排教室与腾讯会议须一并完成。<b>中途关闭即视为本次占用未完成</b>，请走完三步。</div>'+
+
+      // —— 标题类型
+      '<div class="field"><label>标题类型</label>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button type="button" class="ghost sm ttype" data-g="0" style="'+(!useGeneric?'background:var(--blue);color:#fff':'')+'">单门课标题</button>'+
+        '<button type="button" class="ghost sm ttype" data-g="1" style="'+(useGeneric?'background:var(--blue);color:#fff':'')+'">通用标题（多门课/多天共用一个会议）</button>'+
+      '</div></div>';
+
+    if(useGeneric){
+      h+='<div class="field" style="margin-top:8px"><label>专业名（通用标题用，如「社会学专业课」）</label>'+
+         '<input id="mk_major" value="'+esc(el('mk_major')?el('mk_major').value:(c.major||''))+'"></div>';
+      if(tpls.length){
+        h+='<div class="field" style="margin-top:8px"><label>或直接复用本期已做好的通用会议</label>'+
+           '<select id="mk_tpl"><option value="">— 新建 —</option>'+
+           tpls.map(t=>`<option value="${t.id}"${chosenTpl&&String(chosenTpl.id)===String(t.id)?' selected':''}>${esc(t.title||t.major||('#'+t.id))}</option>`).join('')+
+           '</select><p class="muted" style="font-size:12px;margin-top:4px">选已有的会直接套用它的链接/会议号/账号，无需重新创建。</p></div>';
+      }
+    }
+
+    // —— 步骤1 标题
+    h+='<div style="border-top:1px solid var(--line);margin:12px 0;padding-top:10px"><b>① 会议标题</b>'+
+       '<div style="display:flex;gap:8px;align-items:center;margin-top:6px">'+
+       '<input id="mk_title" value="'+esc(chosenTpl?chosenTpl.title:title)+'" style="flex:1">'+
+       '<button type="button" class="ghost sm" id="mk_copy">复制标题</button></div>'+
+       '<p class="muted" style="font-size:12px;margin-top:4px">复制此标题，去腾讯会议 App 创建会议时粘贴为会议主题。</p></div>';
+
+    // —— 步骤2 账号信息
+    h+='<div style="border-top:1px solid var(--line);margin:12px 0;padding-top:10px"><b>② 使用的会议账号</b>';
+    if(acc){
+      h+='<table style="margin-top:6px"><tbody>'+
+         `<tr><td class="muted" style="width:90px">账号名</td><td><b>${esc(acc.name||'—')}</b></td></tr>`+
+         `<tr><td class="muted">登录账号</td><td>${esc(acc.account_no||'—')} ${acc.account_no?('<button type="button" class="ghost sm" data-cp="'+esc(acc.account_no)+'">复制</button>'):''}</td></tr>`+
+         `<tr><td class="muted">密码</td><td>${esc(acc.password||'—')} ${acc.password?('<button type="button" class="ghost sm" data-cp="'+esc(acc.password)+'">复制</button>'):''}</td></tr>`+
+         '</tbody></table><p class="muted" style="font-size:12px;margin-top:4px">用此账号登录腾讯会议，创建上面标题的会议。</p>';
+    } else {
+      h+='<div class="badge b-warn" style="margin-top:6px">该教室没有绑定固定会议账号，请先到「会议账号管理」补上。</div>';
+    }
+    h+='</div>';
+
+    // —— 步骤3 解析
+    h+='<div style="border-top:1px solid var(--line);margin:12px 0;padding-top:10px"><b>③ 粘贴会议邀请，解析完成</b>'+
+       '<div class="field" style="margin-top:6px"><textarea id="mk_txt" rows="6" placeholder="把腾讯会议 App 生成的邀请文字整段粘贴进来">'+(chosenTpl?'':'')+'</textarea></div>'+
+       '<button type="button" class="ghost sm" id="mk_parse">解析</button>'+
+       '<div id="mk_prev" style="margin-top:8px"></div></div>';
+
+    h+='<div id="mk_warn" class="hidden" style="margin-top:8px"></div>'+
+       '<div style="margin-top:12px;display:flex;gap:8px"><button id="mk_save" '+((chosenTpl||parsed)?'':'disabled')+'>完成占用</button>'+
+       '<button class="ghost" id="mk_cancel">取消</button></div>'+
+       '</div></div>';
+    el('asForm').innerHTML=h;
+    bindEvents(tpls);
+  }
+
+  function bindEvents(tpls){
+    document.querySelectorAll('.ttype').forEach(b=>b.onclick=()=>{ useGeneric=b.dataset.g==='1'; chosenTpl=null; parsed=null; render(); });
+    const mj=el('mk_major'); if(mj) mj.oninput=()=>{ const t=el('mk_title'); if(t) t.value=makeMeetingTitle(c,true,mj.value); };
+    const tplSel=el('mk_tpl');
+    if(tplSel) tplSel.onchange=()=>{
+      const id=tplSel.value;
+      chosenTpl = id ? MTEMPLATES.find(t=>String(t.id)===String(id)) : null;
+      parsed=null; render();
+    };
+    el('mk_copy').onclick=()=>{ const t=el('mk_title').value; navigator.clipboard.writeText(t).then(()=>toast('标题已复制')); };
+    document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>navigator.clipboard.writeText(b.dataset.cp).then(()=>toast('已复制')));
+    el('mk_parse').onclick=()=>{
+      parsed=parseTencent(el('mk_txt').value);
+      if(!parsed.link && !parsed.id){ el('mk_prev').innerHTML='<span class="badge b-err">没识别到链接或会议号，请检查粘贴内容</span>'; el('mk_save').disabled=true; return; }
+      el('mk_prev').innerHTML='<table><tbody>'+
+        `<tr><td class="muted">会议链接</td><td>${parsed.link?esc(parsed.link):'—'}</td></tr>`+
+        `<tr><td class="muted">会议号</td><td>${parsed.id?esc(parsed.id):'—'}</td></tr>`+
+        `<tr><td class="muted">时段</td><td>${parsed.start_time?parsed.start_time+'-'+parsed.end_time:'—'}</td></tr>`+
+        '</tbody></table>';
+      el('mk_save').disabled=false;
+    };
+    el('mk_cancel').onclick=()=>{ el('asForm').innerHTML=''; toast('已取消：本次教室占用未完成（未绑定会议）', false); };
+    el('mk_save').onclick=async()=>{
+      // 复用模板：直接套用模板的会议信息
+      let link, mid, title=el('mk_title')?el('mk_title').value.trim():'';
+      if(chosenTpl){ link=chosenTpl.meeting_link; mid=chosenTpl.meeting_id; }
+      else { if(!parsed){ warn('请先解析会议邀请，或选一个已有通用会议'); return; } link=parsed.link||null; mid=parsed.id||null; }
+      const btn=el('mk_save'); if(btn.disabled) return; btn.disabled=true; btn.textContent='保存中…';
+      try{
+        await sbUpdate('sched_courses', c.id, { meeting_link:link||null, meeting_id:mid||null });
+        // 通用标题且是新建 → 存入模板库，供本期同专业复用
+        if(useGeneric && !chosenTpl){
+          const majorName = el('mk_major')?el('mk_major').value.trim():'';
+          await sbInsert('sched_meeting_templates', { term:c.term||null, major:majorName||null, title:title||null,
+            meeting_link:link||null, meeting_id:mid||null, account_id:accId||null,
+            start_time:c.start_time||null, end_time:c.end_time||null });
+          try{ MTEMPLATES = await sbGet('sched_meeting_templates','select=*&order=created_at.desc'); }catch(e){}
+        }
+        await reloadAll(); if(el('assignTable')) renderAssignTable();
+        el('asForm').innerHTML=''; toast('已完成：教室占用 + 腾讯会议已绑定');
+      }catch(e){ warn(esc(e.message)); btn.disabled=false; btn.textContent='完成占用'; }
+    };
+    function warn(m){ el('mk_warn').className=''; el('mk_warn').innerHTML='<span class="badge b-err">'+m+'</span>'; }
+  }
+  render();
 }
 
 /* ---------- 冲突检查 ---------- */
