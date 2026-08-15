@@ -8,6 +8,7 @@
   <h1 style="margin:0;font-size:17px">唯新 · 教学资源调度</h1>
   <nav id="adminNav" style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;margin-left:auto"></nav>
 </div></header>
+<div id="roleBar" style="max-width:1400px;margin:0 auto;padding:10px 16px 0"><span id="whoami"></span></div>
 <div class="wrap">
   <div id="gate" class="card hidden" style="text-align:center;padding:60px 20px;color:var(--sub)">
     此链接无效或已停用。请使用管理员发放的专属链接进入。
@@ -33,14 +34,14 @@
 <script>
 let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[], ROLE=null;
 
-/* 口令登录（口令即 access_codes 的 code，需 manage 权限）。admin-9527 可直接进 */
+/* 口令登录（口令即 access_codes 的 code，需 manage 权限）。admin-7910 可直接进 */
 /* 凭 ?k= 进入：任何有效角色都进，按其权限显示功能。无效才拦。 */
 (async function gate(){
   const rec = await currentRole();
   if(!rec){ el('gate').classList.remove('hidden'); el('main').classList.add('hidden'); return; }
   ROLE=rec;
   try{ sessionStorage.setItem('sched_role', JSON.stringify(rec)); }catch(e){}
-  const who=el('whoami'); if(who) who.textContent = rec.label || rec.role || '';
+  const who=el('whoami'); if(who) who.innerHTML = rec ? `<span style="background:#eef4f0;color:#2f6b4f;padding:2px 10px;border-radius:12px;font-size:12px">当前身份 · ${esc(rec.label||rec.role||'')}</span>` : '';
   el('gate').classList.add('hidden'); el('main').classList.remove('hidden');
   await reloadAll();
   const tab = new URLSearchParams(location.search).get('tab');
