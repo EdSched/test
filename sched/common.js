@@ -81,6 +81,49 @@ function weekdayOf(dateStr){ // 1=周一...7=周日
 }
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
+/* 从期名解析开课日：取"YY年M月"或"YYYY年M月"，开课日=该月1号 */
+function termStartDate(term){
+  if(!term) return null;
+  const m = String(term).match(/(\d{2,4})\s*年\s*(\d{1,2})\s*月/);
+  if(!m) return null;
+  let y = parseInt(m[1],10); if(y<100) y+=2000;
+  const mo = parseInt(m[2],10);
+  return y+'-'+String(mo).padStart(2,'0')+'-01';
+}
+/* 统计各期"未排教室"的课程：未排 = 该课在 bookings 里没有 kind=course 记录 */
+function unscheduledByTerm(courses, bookings){
+  const scheduled = new Set(bookings.filter(b=>b.kind==='course'&&b.course_id).map(b=>String(b.course_id)));
+  const byTerm = {};
+  courses.forEach(c=>{
+    if(scheduled.has(String(c.id))) return;
+    const term = c.term||'未分期';
+    (byTerm[term]=byTerm[term]||[]).push(c);
+  });
+  return byTerm;
+}
+/* 生成排课提醒文案列表（每个未排完的期一条）。提前半个月进入提醒窗 */
+function schedulingReminders(courses, bookings){
+  const byTerm = unscheduledByTerm(courses, bookings);
+  const today = todayStr();
+  const out = [];
+  Object.keys(byTerm).forEach(term=>{
+    const n = byTerm[term].length; if(!n) return;
+    const start = termStartDate(term);
+    let msg, urgent=false;
+    if(start){
+      const days = diffDays(today, start);   // 距开课天数（负=已开课）
+      if(days<0){ msg = `【${term}】已开课，仍有 ${n} 门课未排教室，请尽快补排！`; urgent=true; }
+      else if(days<=15){ msg = `【${term}】距开课仅 ${days} 天，还有 ${n} 门课未排教室，请于开课前完成！`; urgent=true; }
+      else if(days<=45){ msg = `【${term}】距开课约 ${days} 天，有 ${n} 门课未排教室，请及时安排。`; }
+      else return; // 太早，不提醒
+    } else {
+      msg = `【${term}】有 ${n} 门课未排教室。`;
+    }
+    out.push({term, n, msg, urgent});
+  });
+  return out;
+}
+
 /* 推断课程"班级性质"：共通/线上/周末/下午/晚上/默认。用于课表分组显示 */
 function classKind(c){
   const name=(c.name||'');
