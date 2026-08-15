@@ -25,6 +25,7 @@
         <button class="ghost sm" id="backHub">← 返回</button>
         <b id="workTitle" style="font-size:15px"></b>
       </div>
+      <div id="workRemind"></div>
       <div id="panel"></div>
       <iframe id="frame" style="display:none;width:100%;height:calc(100vh - 160px);border:1px solid var(--line);border-radius:8px"></iframe>
     </div>
@@ -129,6 +130,17 @@ function renderHub(){
   }).join('') || '<span class="muted">当前账号暂无可用功能，请联系管理员。</span>';
   el('hubCards').querySelectorAll('[data-hub]').forEach(a=>a.onclick=(e)=>{ e.preventDefault(); openCard(a.dataset.hub); });
 }
+function reminderHtml(){
+  try{
+    if(typeof schedulingReminders!=='function' || !ROLE) return '';
+    const ps=permSet(ROLE);
+    if(!(ps.has('assign')||ps.has('manage'))) return '';   // 只对能排教室的账号提醒
+    const rems=schedulingReminders(COURSES, BOOKINGS);
+    return rems.length ? rems.map(r=>
+      `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
+    ).join('') : '';
+  }catch(e){ return ''; }
+}
 function openCard(key){
   if(!canSee(key)){ renderHub(); return; }           // 无权限的功能不可进
   if(el('adminNav') && !el('adminNav').innerHTML) renderAdminNav();
@@ -137,6 +149,7 @@ function openCard(key){
   el('hub').classList.add('hidden');
   el('work').classList.remove('hidden');
   el('workTitle').textContent = ic+' '+nm;
+  const wr=el('workRemind'); if(wr) wr.innerHTML = reminderHtml();   // 每个功能页都显示提醒
   const panel=el('panel'), frame=el('frame');
   if(type==='iframe'){
     panel.style.display='none'; panel.innerHTML='';
@@ -177,16 +190,7 @@ function tabPending(){
 
 /* ---------- 排教室：课程 -> 生成 weekly 占用 ---------- */
 function tabAssign(){
-  let remHtml='';
-  try{
-    if(typeof schedulingReminders==='function'){
-      const rems = schedulingReminders(COURSES, BOOKINGS);
-      remHtml = rems.length ? rems.map(r=>
-        `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
-      ).join('') : '';
-    }
-  }catch(e){ remHtml=''; }
-  let h='<div class="card">'+remHtml+'<h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
+  let h='<div class="card"><h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
     '<div class="tip">线下课需分配容量足够的教室；纯线上课不占教室，只需指定会议账号。分配后自动生成整学期每周占用。</div>'+
     '<div class="row" style="margin-bottom:10px">'+
       '<div class="field"><label>搜索课程名/讲师</label><input id="af_q" placeholder="关键词"></div>'+
