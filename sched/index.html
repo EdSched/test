@@ -114,7 +114,7 @@ function renderHub(){
     if(ps.has('assign')||ps.has('manage')){
       const rems=schedulingReminders(COURSES, BOOKINGS);
       rb.innerHTML = rems.length ? rems.map(r=>
-        `<div style="background:${r.urgent?'#fdecea':'#fff6e5'};border-left:4px solid ${r.urgent?'#d93025':'#e8a33d'};color:#5a3a00;padding:10px 14px;border-radius:6px;margin-bottom:8px;font-size:13px">${r.urgent?'🔴':'🟡'} ${esc(r.msg)}</div>`
+        `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
       ).join('') : '';
     } else rb.innerHTML='';
   }
@@ -175,7 +175,7 @@ function tabPending(){
 function tabAssign(){
   const rems = schedulingReminders(COURSES, BOOKINGS);
   const remHtml = rems.length ? rems.map(r=>
-    `<div style="background:${r.urgent?'#fdecea':'#fff6e5'};border-left:4px solid ${r.urgent?'#d93025':'#e8a33d'};color:#5a3a00;padding:10px 14px;border-radius:6px;margin-bottom:8px;font-size:13px">${r.urgent?'🔴':'🟡'} ${esc(r.msg)}</div>`
+    `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
   ).join('') : '';
   let h='<div class="card">'+remHtml+'<h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
     '<div class="tip">线下课需分配容量足够的教室；纯线上课不占教室，只需指定会议账号。分配后自动生成整学期每周占用。</div>'+
