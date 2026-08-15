@@ -8,7 +8,7 @@
   <h1 style="margin:0;font-size:17px">唯新 · 教学资源调度</h1>
   <nav id="adminNav" style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;margin-left:auto"></nav>
 </div></header>
-<div id="roleBar" style="max-width:1400px;margin:0 auto;padding:10px 16px 0;text-align:right"><span id="whoami"></span></div>
+<div id="roleBar" style="max-width:1400px;margin:0 auto;padding:10px 16px 0"><span id="whoami"></span></div>
 <div class="wrap">
   <div id="gate" class="card hidden" style="text-align:center;padding:60px 20px;color:var(--sub)">
     此链接无效或已停用。请使用管理员发放的专属链接进入。
@@ -17,6 +17,7 @@
   <div id="main" class="hidden">
     <div id="hub">
       <div id="hello" style="margin:4px 0 16px"></div>
+      <div id="schedRemind"></div>
       <div class="hub" id="hubCards"></div>
     </div>
     <div id="work" class="hidden">
@@ -106,6 +107,17 @@ function renderHub(){
   el('hub').classList.remove('hidden');
   el('work').classList.add('hidden');
   const hi=el('hello'); if(hi) hi.innerHTML = `<div class="tip">你好，<b>${esc((ROLE&&(ROLE.label||ROLE.role))||'')}</b>。以下是你可用的功能。</div>`;
+  // 排课提醒（有排教室权限才显示，不可取消，直到排完清除）
+  const rb=el('schedRemind');
+  if(rb){
+    const ps=permSet(ROLE);
+    if(ps.has('assign')||ps.has('manage')){
+      const rems=schedulingReminders(COURSES, BOOKINGS);
+      rb.innerHTML = rems.length ? rems.map(r=>
+        `<div style="background:${r.urgent?'#fdecea':'#fff6e5'};border-left:4px solid ${r.urgent?'#d93025':'#e8a33d'};color:#5a3a00;padding:10px 14px;border-radius:6px;margin-bottom:8px;font-size:13px">${r.urgent?'🔴':'🟡'} ${esc(r.msg)}</div>`
+      ).join('') : '';
+    } else rb.innerHTML='';
+  }
   const pend = BOOKINGS.filter(b=>b.status==='pending').length;
   el('hubCards').innerHTML = visibleCards().map(([k,ic,nm,desc])=>{
     const badge = (k==='pending'&&pend)?` <span class="badge b-warn">${pend}</span>`:'';
@@ -161,7 +173,11 @@ function tabPending(){
 
 /* ---------- 排教室：课程 -> 生成 weekly 占用 ---------- */
 function tabAssign(){
-  let h='<div class="card"><h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
+  const rems = schedulingReminders(COURSES, BOOKINGS);
+  const remHtml = rems.length ? rems.map(r=>
+    `<div style="background:${r.urgent?'#fdecea':'#fff6e5'};border-left:4px solid ${r.urgent?'#d93025':'#e8a33d'};color:#5a3a00;padding:10px 14px;border-radius:6px;margin-bottom:8px;font-size:13px">${r.urgent?'🔴':'🟡'} ${esc(r.msg)}</div>`
+  ).join('') : '';
+  let h='<div class="card">'+remHtml+'<h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
     '<div class="tip">线下课需分配容量足够的教室；纯线上课不占教室，只需指定会议账号。分配后自动生成整学期每周占用。</div>'+
     '<div class="row" style="margin-bottom:10px">'+
       '<div class="field"><label>搜索课程名/讲师</label><input id="af_q" placeholder="关键词"></div>'+
