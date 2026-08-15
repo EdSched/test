@@ -118,7 +118,7 @@ function renderHub(){
       if((ps.has('assign')||ps.has('manage')) && typeof schedulingReminders==='function'){
         const rems=schedulingReminders(COURSES, BOOKINGS);
         rb.innerHTML = rems.length ? rems.map(r=>
-          `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
+          `<div style="background:${r.urgent?'#fdf1ed':'#f7f5f0'};border:1px solid ${r.urgent?'#f2d5cc':'#e6e0d4'};color:${r.urgent?'#c85a3c':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
         ).join('') : '';
       } else rb.innerHTML='';
     }
@@ -137,7 +137,7 @@ function reminderHtml(){
     if(!(ps.has('assign')||ps.has('manage'))) return '';   // 只对能排教室的账号提醒
     const rems=schedulingReminders(COURSES, BOOKINGS);
     return rems.length ? rems.map(r=>
-      `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
+      `<div style="background:${r.urgent?'#fdf1ed':'#f7f5f0'};border:1px solid ${r.urgent?'#f2d5cc':'#e6e0d4'};color:${r.urgent?'#c85a3c':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
     ).join('') : '';
   }catch(e){ return ''; }
 }
