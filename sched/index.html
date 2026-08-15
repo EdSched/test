@@ -107,17 +107,19 @@ function renderHub(){
   el('hub').classList.remove('hidden');
   el('work').classList.add('hidden');
   const hi=el('hello'); if(hi) hi.innerHTML = `<div class="tip">你好，<b>${esc((ROLE&&(ROLE.label||ROLE.role))||'')}</b>。以下是你可用的功能。</div>`;
-  // 排课提醒（有排教室权限才显示，不可取消，直到排完清除）
-  const rb=el('schedRemind');
-  if(rb){
-    const ps=permSet(ROLE);
-    if(ps.has('assign')||ps.has('manage')){
-      const rems=schedulingReminders(COURSES, BOOKINGS);
-      rb.innerHTML = rems.length ? rems.map(r=>
-        `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
-      ).join('') : '';
-    } else rb.innerHTML='';
-  }
+  // 排课提醒（有排教室权限才显示；出错也不影响卡片渲染）
+  try{
+    const rb=el('schedRemind');
+    if(rb){
+      const ps=permSet(ROLE);
+      if((ps.has('assign')||ps.has('manage')) && typeof schedulingReminders==='function'){
+        const rems=schedulingReminders(COURSES, BOOKINGS);
+        rb.innerHTML = rems.length ? rems.map(r=>
+          `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
+        ).join('') : '';
+      } else rb.innerHTML='';
+    }
+  }catch(e){ const rb=el('schedRemind'); if(rb) rb.innerHTML=''; }
   const pend = BOOKINGS.filter(b=>b.status==='pending').length;
   el('hubCards').innerHTML = visibleCards().map(([k,ic,nm,desc])=>{
     const badge = (k==='pending'&&pend)?` <span class="badge b-warn">${pend}</span>`:'';
@@ -173,10 +175,15 @@ function tabPending(){
 
 /* ---------- 排教室：课程 -> 生成 weekly 占用 ---------- */
 function tabAssign(){
-  const rems = schedulingReminders(COURSES, BOOKINGS);
-  const remHtml = rems.length ? rems.map(r=>
-    `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
-  ).join('') : '';
+  let remHtml='';
+  try{
+    if(typeof schedulingReminders==='function'){
+      const rems = schedulingReminders(COURSES, BOOKINGS);
+      remHtml = rems.length ? rems.map(r=>
+        `<div style="background:${r.urgent?'#fbf3f2':'#f7f5f0'};border:1px solid ${r.urgent?'#e8d3cf':'#e6e0d4'};color:${r.urgent?'#8a4038':'#6b5d3e'};padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:13px;line-height:1.5">${esc(r.msg)}</div>`
+      ).join('') : '';
+    }
+  }catch(e){ remHtml=''; }
   let h='<div class="card">'+remHtml+'<h3 style="margin-top:2px">排教室（把课程分配到教室）</h3>'+
     '<div class="tip">线下课需分配容量足够的教室；纯线上课不占教室，只需指定会议账号。分配后自动生成整学期每周占用。</div>'+
     '<div class="row" style="margin-bottom:10px">'+
