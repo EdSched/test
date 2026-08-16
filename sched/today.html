@@ -28,7 +28,7 @@ async function boot(){
   ROOMS = await sbGet('sched_rooms','select=*&active=eq.true&order=campus,sort');
   // 只取课程占用（对外只展示上课，不露预约/VIP/临时）
   BOOKINGS = await sbGet('sched_bookings','select=*&kind=eq.course');
-  { const cs = await sbGet('sched_courses','select=id,skip_dates'); window.SKIPMAP={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); }); }
+  { const cs = await sbGet('sched_courses','select=id,skip_dates,category,name'); window.SKIPMAP={}; window.CATMAP={}; window.CNAME={}; cs.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); window.CATMAP[c.id]=c.category; window.CNAME[c.id]=c.name; }); }
   el('campus').onchange = render;
   el('date').onchange = render;
   el('today').onclick = ()=>{ el('date').value=todayStr(); render(); };
@@ -42,7 +42,11 @@ function render(){
   const todays = BOOKINGS.filter(b => bookingOnDate(b, date) &&
     !(b.course_id && window.SKIPMAP && window.SKIPMAP[b.course_id] && window.SKIPMAP[b.course_id].has(date)));
   // 对外：隐藏使用人/事由，只显示课名+时间
-  el('gridBox').innerHTML = renderOccupancyGrid(rooms, todays, 'room_id', {hideWho:true});
+  el('gridBox').innerHTML = renderOccupancyGrid(rooms, todays, 'room_id', {
+    hideWho:true,
+    catOf:(cid)=>window.CATMAP?window.CATMAP[cid]:'',
+    nameOf:(cid)=>window.CNAME?window.CNAME[cid]:''
+  });
 }
 boot();
 </script>
