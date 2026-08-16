@@ -81,6 +81,25 @@ function weekdayOf(dateStr){ // 1=周一...7=周日
 }
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
+/* 类别配色：大学院文/理、学部文/理、语言，各一色。用于周历、课表色块 */
+const CAT_COLORS = {
+  '大学院文科': {bg:'#e8f0fb', bd:'#b9d0ef', tx:'#2c5aa0'},
+  '大学院理科': {bg:'#e6f4ee', bd:'#b3ddc9', tx:'#1f7a52'},
+  '学部文科':   {bg:'#fdf0e6', bd:'#f2d3b3', tx:'#b5651d'},
+  '学部理科':   {bg:'#f3ecfa', bd:'#d9c4ee', tx:'#7048a0'},
+  '语言':       {bg:'#fdecec', bd:'#f2c4c4', tx:'#c0504d'},
+};
+function catColor(cat){
+  if(CAT_COLORS[cat]) return CAT_COLORS[cat];
+  const c=cat||'';
+  if(/大学院.*文/.test(c)) return CAT_COLORS['大学院文科'];
+  if(/大学院.*理/.test(c)) return CAT_COLORS['大学院理科'];
+  if(/学部.*文/.test(c)) return CAT_COLORS['学部文科'];
+  if(/学部.*理/.test(c)) return CAT_COLORS['学部理科'];
+  if(/语言|語学/.test(c)) return CAT_COLORS['语言'];
+  return {bg:'#eef1f4', bd:'#d5dbe1', tx:'#556'};
+}
+
 /* 从期名解析开课日：取"YY年M月"或"YYYY年M月"，开课日=该月1号 */
 function termStartDate(term){
   if(!term) return null;
