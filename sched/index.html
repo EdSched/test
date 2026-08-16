@@ -200,15 +200,80 @@ function tabAssign(){
       '<div class="field"><label>状态</label><select id="af_status">'+
         '<option value="">全部</option><option value="todo">未排</option><option value="done">已排</option></select></div>'+
       '<div class="field"><label>&nbsp;</label><span class="muted" id="af_count"></span></div>'+
-    '</div><div id="assignTable"></div></div><div id="asForm"></div>';
+    '</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:10px">'+
+      '<button type="button" class="ghost sm asview" data-v="table">表格</button>'+
+      '<button type="button" class="ghost sm asview" data-v="week">校区周历</button>'+
+    '</div>'+
+    '<div id="assignTable"></div></div><div id="asForm"></div>';
   render(h);
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('af_term'), terms, v=>v, v=>v, '全部期');
-  if(terms.length) el('af_term').value=terms[0]; // 默认最新期，过去的期不显示
+  if(terms.length) el('af_term').value=terms[0];
   fillSelect(el('af_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   fillSelect(el('af_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
-  ['af_q','af_term','af_cat','af_campus','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=renderAssignTable);
-  renderAssignTable();
+  ['af_q','af_term','af_cat','af_campus','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=renderAssignView);
+  window.AS_VIEW = window.AS_VIEW || 'table';
+  document.querySelectorAll('.asview').forEach(b=>{
+    b.style.cssText += b.dataset.v===window.AS_VIEW?';background:var(--blue);color:#fff':'';
+    b.onclick=()=>{ window.AS_VIEW=b.dataset.v;
+      document.querySelectorAll('.asview').forEach(x=>{ x.style.background=x.dataset.v===window.AS_VIEW?'var(--blue)':''; x.style.color=x.dataset.v===window.AS_VIEW?'#fff':''; });
+      renderAssignView(); };
+  });
+  renderAssignView();
+}
+function renderAssignView(){
+  if(window.AS_VIEW==='week') renderAssignWeek(); else renderAssignTable();
+}
+function renderAssignWeek(){
+  const q=(el('af_q').value||'').trim().toLowerCase();
+  const term=el('af_term').value, cat=el('af_cat').value, campus=el('af_campus').value, status=el('af_status').value;
+  const assigned=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
+  let list=COURSES.filter(c=>{
+    const done=assigned.has(String(c.id));
+    if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
+    if(term && c.term!==term) return false;
+    if(cat && c.category!==cat) return false;
+    if(campus && c.campus!==campus) return false;
+    if(status==='todo' && done) return false;
+    if(status==='done' && !done) return false;
+    return true;
+  });
+  el('af_count').textContent='共 '+list.length+' 门';
+  // 时段行：收集所有出现的 起-止 组合，按开始时间排序
+  const slots=[...new Set(list.map(c=>(c.start_time||'')+'-'+(c.end_time||'')).filter(s=>s!=='-'))]
+    .sort((a,b)=>a.localeCompare(b));
+  const WD=[['1','周一'],['2','周二'],['3','周三'],['4','周四'],['5','周五'],['6','周六'],['7','周日']];
+  if(!list.length){ el('assignTable').innerHTML='<div class="muted">无匹配课程</div>'; return; }
+  // 图例
+  let legend='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'+
+    Object.keys(CAT_COLORS).map(k=>{const c=CAT_COLORS[k];return `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:${c.bg};border:1px solid ${c.bd};display:inline-block"></span>${k}</span>`;}).join('')+'</div>';
+  let h=legend+'<div style="overflow-x:auto"><table style="min-width:720px;table-layout:fixed"><thead><tr><th style="width:70px">时段</th>'+
+    WD.map(w=>`<th>${w[1]}</th>`).join('')+'</tr></thead><tbody>';
+  slots.forEach(sl=>{
+    h+=`<tr><td class="muted" style="font-size:11px;white-space:nowrap">${sl}</td>`;
+    WD.forEach(([wd])=>{
+      const cell=list.filter(c=>{
+        const wds=(c.weekdays||'').split(',').map(s=>s.trim());
+        return wds.includes(wd) && ((c.start_time||'')+'-'+(c.end_time||''))===sl;
+      });
+      h+='<td style="vertical-align:top;padding:3px">';
+      cell.forEach(c=>{
+        const done=assigned.has(String(c.id));
+        const cc=catColor(c.category);
+        const myb=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
+        const where=myb.length?(myb[0].room_id?rname(myb[0].room_id):'线上'):'';
+        h+=`<div class="wkcard" data-as="${c.id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.35">`+
+           `<b>${esc(c.name)}</b><br>${esc(c.campus)}${where?(' · '+esc(where)):''}`+
+           `${done?'':' <span style="color:#c0504d">·未排</span>'}</div>`;
+      });
+      h+='</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  el('assignTable').innerHTML=h;
+  el('assignTable').querySelectorAll('.wkcard').forEach(w=>w.onclick=()=>assignForm(w.dataset.as));
 }
 function renderAssignTable(){
   const q=(el('af_q').value||'').trim().toLowerCase();
@@ -232,7 +297,10 @@ function renderAssignTable(){
     const myb=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
     const where=myb.length?(myb[0].room_id?rname(myb[0].room_id):'线上')+(myb[0].uses_meeting?' 📶':''):'';
     const noDate = !c.start_date || !c.end_date;
-    h+=`<tr><td>${esc(c.name)}<br><small class="muted">${esc(c.teacher||'')}</small></td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td>`+
+    const cc=catColor(c.category);
+    h+=`<tr><td>${esc(c.name)}<br><small class="muted">${esc(c.teacher||'')}</small></td>`+
+      `<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:${cc.bg};color:${cc.tx};border:1px solid ${cc.bd}">${esc(c.category)}</span></td>`+
+      `<td>${esc(c.campus)}</td>`+
       `<td>${weekdaysLabel(c.weekdays)}</td><td>${c.start_time||''}-${c.end_time||''}</td>`+
       `<td>${noDate?'<span class="badge b-warn">缺日期</span>':(c.start_date+' ~ '+c.end_date)}</td>`+
       `<td>${c.est_students||'?'}</td><td>${esc(c.mode)}</td>`+
