@@ -257,7 +257,7 @@ function renderAssignWeek(){
         const wds=(c.weekdays||'').split(',').map(s=>s.trim());
         return wds.includes(wd) && ((c.start_time||'')+'-'+(c.end_time||''))===sl;
       });
-      h+='<td style="vertical-align:top;padding:3px">';
+      h+=`<td style="vertical-align:top;padding:3px" data-wd="${wd}" data-slot="${esc(sl)}">`;
       cell.forEach(c=>{
         const done=assigned.has(String(c.id));
         const cc=catColor(c.category);
@@ -267,6 +267,9 @@ function renderAssignWeek(){
            `<b>${esc(c.name)}</b><br>${esc(c.campus)}${where?(' · '+esc(where)):''}`+
            `${done?'':' <span style="color:#c0504d">·未排</span>'}</div>`;
       });
+      // 该格未排的候选数（本周几+本时段+符合筛选+未排）
+      const cand=cell.filter(c=>!assigned.has(String(c.id)));
+      h+=`<div class="wkadd" data-wd="${wd}" data-slot="${esc(sl)}" style="cursor:pointer;text-align:center;color:#9aa;font-size:16px;border:1px dashed #d8dde3;border-radius:6px;padding:1px 0;margin-top:2px"${cand.length?'':' title="此格暂无待排课程"'}>+</div>`;
       h+='</td>';
     });
     h+='</tr>';
@@ -274,6 +277,27 @@ function renderAssignWeek(){
   h+='</tbody></table></div>';
   el('assignTable').innerHTML=h;
   el('assignTable').querySelectorAll('.wkcard').forEach(w=>w.onclick=()=>assignForm(w.dataset.as));
+  // 点空格“+”：列出本周几+时段、符合当前筛选、未排的课，选一门排入
+  el('assignTable').querySelectorAll('.wkadd').forEach(add=>add.onclick=(e)=>{
+    e.stopPropagation();
+    const wd=add.dataset.wd, sl=add.dataset.slot;
+    const cand=list.filter(c=>{
+      const wds=(c.weekdays||'').split(',').map(s=>s.trim());
+      return wds.includes(wd) && ((c.start_time||'')+'-'+(c.end_time||''))===sl && !assigned.has(String(c.id));
+    });
+    if(!cand.length){ toast('该时段没有待排的课程（可在课程管理里新增）', false); return; }
+    if(cand.length===1){ assignForm(cand[0].id); return; }
+    // 多门候选 → 小弹层选一门
+    const wdName={'1':'周一','2':'周二','3':'周三','4':'周四','5':'周五','6':'周六','7':'周日'}[wd]||'';
+    let ph='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:60" id="pickWrap">'+
+      '<div class="card" style="width:420px;max-width:92vw"><h3 style="margin-top:2px">'+wdName+' '+esc(sl)+' · 选择要排的课</h3>'+
+      cand.map(c=>{const cc=catColor(c.category);return `<div class="pickrow" data-id="${c.id}" style="cursor:pointer;border:1px solid ${cc.bd};background:${cc.bg};color:${cc.tx};border-radius:6px;padding:8px 10px;margin-bottom:6px"><b>${esc(c.name)}</b> <small>${esc(c.category)}·${esc(c.campus)}·${esc(c.teacher||'')}</small></div>`;}).join('')+
+      '<button class="ghost" id="pickCancel">取消</button></div></div>';
+    const d=document.createElement('div'); d.innerHTML=ph; document.body.appendChild(d.firstChild);
+    document.querySelectorAll('#pickWrap .pickrow').forEach(r=>r.onclick=()=>{ document.getElementById('pickWrap').remove(); assignForm(r.dataset.id); });
+    document.getElementById('pickCancel').onclick=()=>document.getElementById('pickWrap').remove();
+    document.getElementById('pickWrap').onclick=(ev)=>{ if(ev.target.id==='pickWrap') ev.target.remove(); };
+  });
 }
 function renderAssignTable(){
   const q=(el('af_q').value||'').trim().toLowerCase();
