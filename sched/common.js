@@ -206,8 +206,14 @@ function renderOccupancyGrid(rooms, items, keyField, opts){
         const who = opts.hideWho ? '' : (b.user_name||b.student_name||'');
         const pend = b.status==='pending';
         const mic = (opts.hideWho ? false : b.uses_meeting) ? ' <span class="mic">📶</span>' : '';
-        const label = opts.hideWho ? (KIND_LABEL[b.kind]||'占用') : (b.title||KIND_LABEL[b.kind]||'');
-        h+=`<td class="occ ${KIND_CLASS[b.kind]||''}${pend?' occ-pend':''}" rowspan="${span}">`+
+        // 课名：优先 course 的真实课名(nameOf)，其次 title，再 kind
+        let label = b.title||KIND_LABEL[b.kind]||'占用';
+        if(opts.nameOf && b.course_id){ const nm=opts.nameOf(b.course_id); if(nm) label=nm; }
+        // 按类别上色（opts.catOf 传入 course_id→category 的查找）
+        let styleAttr='', cc=null;
+        if(opts.catOf && b.course_id){ const cat=opts.catOf(b.course_id); if(cat){ cc=catColor(cat); } }
+        if(cc) styleAttr=` style="background:${cc.bg};border-color:${cc.bd};color:${cc.tx}"`;
+        h+=`<td class="occ ${cc?'':(KIND_CLASS[b.kind]||'')}${pend?' occ-pend':''}" rowspan="${span}"${styleAttr}>`+
            `<div class="occ-in">${esc(label)}${mic}`+
            `<small>${esc(who)} ${b.start_time}-${b.end_time}${pend&&!opts.hideWho?' · 待确认':''}</small></div></td>`;
       }else{
