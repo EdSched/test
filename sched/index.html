@@ -201,9 +201,12 @@ function tabAssign(){
         '<option value="">全部</option><option value="todo">未排</option><option value="done">已排</option></select></div>'+
       '<div class="field"><label>&nbsp;</label><span class="muted" id="af_count"></span></div>'+
     '</div>'+
-    '<div style="display:flex;gap:6px;margin-bottom:10px">'+
+    '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:flex-end;flex-wrap:wrap">'+
       '<button type="button" class="ghost sm asview" data-v="table">表格</button>'+
-      '<button type="button" class="ghost sm asview" data-v="week">校区周历</button>'+
+      '<button type="button" class="ghost sm asview" data-v="week">教室周历</button>'+
+      '<span id="wkRoomWrap" class="hidden" style="display:inline-flex;gap:6px;align-items:flex-end;margin-left:8px">'+
+        '<span class="field" style="margin:0"><label style="font-size:11px">选教室（看它一周占空）</label><select id="af_room" style="min-width:160px"></select></span>'+
+      '</span>'+
     '</div>'+
     '<div id="assignTable"></div></div><div id="asForm"></div>';
   render(h);
@@ -214,83 +217,102 @@ function tabAssign(){
   fillSelect(el('af_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
   ['af_q','af_term','af_cat','af_campus','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=renderAssignView);
   window.AS_VIEW = window.AS_VIEW || 'table';
+  function syncRoomPicker(){
+    const show = window.AS_VIEW==='week';
+    el('wkRoomWrap').classList.toggle('hidden', !show);
+    if(show){
+      const campus=el('af_campus').value;
+      let rms=ROOMS.filter(r=>r.active!==false && (!campus || r.campus===campus));
+      const cur=el('af_room')?el('af_room').value:'';
+      el('af_room').innerHTML = rms.length
+        ? rms.map(r=>`<option value="${r.id}"${String(cur)===String(r.id)?' selected':''}>${esc(r.name)}（${esc(r.campus)}）</option>`).join('')
+        : '<option value="">该校区无教室</option>';
+      el('af_room').onchange=renderAssignView;
+    }
+  }
   document.querySelectorAll('.asview').forEach(b=>{
     b.style.cssText += b.dataset.v===window.AS_VIEW?';background:var(--blue);color:#fff':'';
     b.onclick=()=>{ window.AS_VIEW=b.dataset.v;
       document.querySelectorAll('.asview').forEach(x=>{ x.style.background=x.dataset.v===window.AS_VIEW?'var(--blue)':''; x.style.color=x.dataset.v===window.AS_VIEW?'#fff':''; });
-      renderAssignView(); };
+      syncRoomPicker(); renderAssignView(); };
   });
+  // 校区变化时刷新教室下拉
+  el('af_campus').addEventListener('change', syncRoomPicker);
+  syncRoomPicker();
   renderAssignView();
 }
 function renderAssignView(){
   if(window.AS_VIEW==='week') renderAssignWeek(); else renderAssignTable();
 }
 function renderAssignWeek(){
-  const q=(el('af_q').value||'').trim().toLowerCase();
-  const term=el('af_term').value, cat=el('af_cat').value, campus=el('af_campus').value, status=el('af_status').value;
-  const assigned=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
-  let list=COURSES.filter(c=>{
-    const done=assigned.has(String(c.id));
-    if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
-    if(term && c.term!==term) return false;
-    if(cat && c.category!==cat) return false;
-    if(campus && c.campus!==campus) return false;
-    if(status==='todo' && done) return false;
-    if(status==='done' && !done) return false;
-    return true;
-  });
-  el('af_count').textContent='共 '+list.length+' 门';
-  // 时段行：收集所有出现的 起-止 组合，按开始时间排序
-  const slots=[...new Set(list.map(c=>(c.start_time||'')+'-'+(c.end_time||'')).filter(s=>s!=='-'))]
-    .sort((a,b)=>a.localeCompare(b));
+  const campus=el('af_campus').value;
+  const roomId=el('af_room')?el('af_room').value:'';
+  const room=ROOMS.find(r=>String(r.id)===String(roomId));
+  if(!room){ el('assignTable').innerHTML='<div class="muted">请先在上方选一个校区和教室。</div>'; return; }
+  // 该教室的课程占用（每条 booking 对应一门课在某周几）
+  const occ=BOOKINGS.filter(b=>b.kind==='course' && String(b.room_id)===String(room.id));
+  // 时段行：该校区所有课程出现过的时段（保证空时段也能排）
+  const campusCourses=COURSES.filter(c=>!campus || c.campus===campus);
+  const slots=[...new Set(campusCourses.map(c=>(c.start_time||'')+'-'+(c.end_time||'')).filter(x=>x!=='-'))].sort((a,b)=>a.localeCompare(b));
   const WD=[['1','周一'],['2','周二'],['3','周三'],['4','周四'],['5','周五'],['6','周六'],['7','周日']];
-  if(!list.length){ el('assignTable').innerHTML='<div class="muted">无匹配课程</div>'; return; }
-  // 图例
+  el('af_count').textContent='教室：'+room.name;
+  if(!slots.length){ el('assignTable').innerHTML='<div class="muted">该校区暂无课程时段可显示。</div>'; return; }
+  const assignedSet=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
   let legend='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'+
     Object.keys(CAT_COLORS).map(k=>{const c=CAT_COLORS[k];return `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:${c.bg};border:1px solid ${c.bd};display:inline-block"></span>${k}</span>`;}).join('')+'</div>';
-  let h=legend+'<div style="overflow-x:auto"><table style="min-width:720px;table-layout:fixed"><thead><tr><th style="width:70px">时段</th>'+
+  let h=legend+`<div style="margin-bottom:6px;font-size:13px"><b>${esc(room.name)}</b> <span class="muted">${esc(room.campus)}${room.capacity?(' · '+room.capacity+'人'):''}</span></div>`+
+    '<div style="overflow-x:auto"><table style="min-width:760px;table-layout:fixed"><thead><tr><th style="width:80px">时段</th>'+
     WD.map(w=>`<th>${w[1]}</th>`).join('')+'</tr></thead><tbody>';
   slots.forEach(sl=>{
+    const [st,et]=sl.split('-');
     h+=`<tr><td class="muted" style="font-size:11px;white-space:nowrap">${sl}</td>`;
     WD.forEach(([wd])=>{
-      const cell=list.filter(c=>{
-        const wds=(c.weekdays||'').split(',').map(s=>s.trim());
-        return wds.includes(wd) && ((c.start_time||'')+'-'+(c.end_time||''))===sl;
+      // 这间教室这个周几这个时段，被哪门课占了？
+      const taken=occ.filter(b=>{
+        const bwd=(b.weekday!=null?String(b.weekday):'');
+        // booking 可能存 weekday，或靠对应课程的 weekdays
+        const c=COURSES.find(x=>String(x.id)===String(b.course_id));
+        const wds=c?((c.weekdays||'').split(',').map(s=>s.trim())):[];
+        const timeMatch=((c&&c.start_time||b.start_time||'')+'-'+(c&&c.end_time||b.end_time||''))===sl;
+        return (wds.includes(wd)||bwd===wd) && timeMatch;
       });
-      h+=`<td style="vertical-align:top;padding:3px" data-wd="${wd}" data-slot="${esc(sl)}">`;
-      cell.forEach(c=>{
-        const done=assigned.has(String(c.id));
-        const cc=catColor(c.category);
-        const myb=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
-        const where=myb.length?(myb[0].room_id?rname(myb[0].room_id):'线上'):'';
-        h+=`<div class="wkcard" data-as="${c.id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.35">`+
-           `<b>${esc(c.name)}</b><br>${esc(c.campus)}${where?(' · '+esc(where)):''}`+
-           `${done?'':' <span style="color:#c0504d">·未排</span>'}</div>`;
-      });
-      // 该格未排的候选数（本周几+本时段+符合筛选+未排）
-      const cand=cell.filter(c=>!assigned.has(String(c.id)));
-      h+=`<div class="wkadd" data-wd="${wd}" data-slot="${esc(sl)}" style="cursor:pointer;text-align:center;color:#9aa;font-size:16px;border:1px dashed #d8dde3;border-radius:6px;padding:1px 0;margin-top:2px"${cand.length?'':' title="此格暂无待排课程"'}>+</div>`;
-      h+='</td>';
+      if(taken.length){
+        h+='<td style="vertical-align:top;padding:3px">';
+        taken.forEach(b=>{ const c=COURSES.find(x=>String(x.id)===String(b.course_id))||{}; const cc=catColor(c.category);
+          h+=`<div class="wkcard" data-as="${b.course_id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:6px;padding:4px 6px;font-size:11px;line-height:1.35"><b>${esc(c.name||'课程')}</b><br>${esc(c.category||'')}</div>`;
+        });
+        h+='</td>';
+      } else {
+        // 空格：可排。候选=本周几+本时段+符合筛选+未排 的课
+        h+=`<td class="wkempty" data-wd="${wd}" data-slot="${esc(sl)}" data-room="${room.id}" style="vertical-align:top;padding:3px;cursor:pointer">`+
+           '<div style="text-align:center;color:#bbc;font-size:12px;border:1px dashed #dde2e7;border-radius:6px;padding:8px 0">空 +</div></td>';
+      }
     });
     h+='</tr>';
   });
-  h+='</tbody></table></div>';
+  h+='</tbody></table></div><p class="muted" style="font-size:12px;margin-top:6px">点已排课程可重排；点“空 +”把该时段待排的课排进本教室。</p>';
   el('assignTable').innerHTML=h;
   el('assignTable').querySelectorAll('.wkcard').forEach(w=>w.onclick=()=>assignForm(w.dataset.as));
-  // 点空格“+”：列出本周几+时段、符合当前筛选、未排的课，选一门排入
-  el('assignTable').querySelectorAll('.wkadd').forEach(add=>add.onclick=(e)=>{
-    e.stopPropagation();
-    const wd=add.dataset.wd, sl=add.dataset.slot;
-    const cand=list.filter(c=>{
-      const wds=(c.weekdays||'').split(',').map(s=>s.trim());
-      return wds.includes(wd) && ((c.start_time||'')+'-'+(c.end_time||''))===sl && !assigned.has(String(c.id));
+  el('assignTable').querySelectorAll('.wkempty').forEach(cellEl=>cellEl.onclick=()=>{
+    const wd=cellEl.dataset.wd, sl=cellEl.dataset.slot;
+    const q=(el('af_q').value||'').trim().toLowerCase();
+    const term=el('af_term').value, cat=el('af_cat').value;
+    const cand=COURSES.filter(c=>{
+      if(assignedSet.has(String(c.id))) return false;
+      const wds=(c.weekdays||'').split(',').map(x=>x.trim());
+      if(!wds.includes(wd)) return false;
+      if(((c.start_time||'')+'-'+(c.end_time||''))!==sl) return false;
+      if(term && c.term!==term) return false;
+      if(cat && c.category!==cat) return false;
+      if(campus && c.campus!==campus) return false;
+      if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
+      return true;
     });
-    if(!cand.length){ toast('该时段没有待排的课程（可在课程管理里新增）', false); return; }
+    if(!cand.length){ toast('该时段没有待排的课程', false); return; }
     if(cand.length===1){ assignForm(cand[0].id); return; }
-    // 多门候选 → 小弹层选一门
     const wdName={'1':'周一','2':'周二','3':'周三','4':'周四','5':'周五','6':'周六','7':'周日'}[wd]||'';
     let ph='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:60" id="pickWrap">'+
-      '<div class="card" style="width:420px;max-width:92vw"><h3 style="margin-top:2px">'+wdName+' '+esc(sl)+' · 选择要排的课</h3>'+
+      '<div class="card" style="width:420px;max-width:92vw"><h3 style="margin-top:2px">'+wdName+' '+esc(sl)+' · 选择要排入的课</h3>'+
       cand.map(c=>{const cc=catColor(c.category);return `<div class="pickrow" data-id="${c.id}" style="cursor:pointer;border:1px solid ${cc.bd};background:${cc.bg};color:${cc.tx};border-radius:6px;padding:8px 10px;margin-bottom:6px"><b>${esc(c.name)}</b> <small>${esc(c.category)}·${esc(c.campus)}·${esc(c.teacher||'')}</small></div>`;}).join('')+
       '<button class="ghost" id="pickCancel">取消</button></div></div>';
     const d=document.createElement('div'); d.innerHTML=ph; document.body.appendChild(d.firstChild);
