@@ -164,7 +164,7 @@ function renderGrid(){
   if(!rooms.length){ box.innerHTML='<div class="muted">该校区暂无 VIP 教室</div>'; return; }
   const todays=BOOKINGS.filter(b=>bookingOnDate(b,date) &&
     !(b.kind==='course'&&b.course_id&&window.SKIPMAP&&window.SKIPMAP[b.course_id]&&window.SKIPMAP[b.course_id].has(date)));
-  box.innerHTML = renderOccupancyGrid(rooms, todays, 'room_id', {hideWho:true});
+  box.innerHTML = renderOccupancyGrid(rooms, todays, 'room_id', {labelOnly:true});
 }
 let URGENT=false;
 function openModal(roomId, urgent){
