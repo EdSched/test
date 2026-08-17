@@ -200,7 +200,7 @@ async function submit(){
   try{
     for(const date of dates){
       const rec={ room_id:CUR.id, kind:use, title: el('m_title').value.trim()||KIND_LABEL[use]||null,
-        user_name: el('m_user').value.trim()||null, recurrence: weekly?'weekly':'once', booking_date:date, start_time:s, end_time:e,
+        user_name: el('m_user').value.trim()||null, recurrence: 'once', weekday: weekdayOf(date), booking_date:date, start_time:s, end_time:e,
         uses_meeting:um, meeting_account_id:accId,
         status:'confirmed', created_by:'admin', note: el('m_note').value.trim()||null };
       const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
