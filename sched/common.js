@@ -203,19 +203,24 @@ function renderOccupancyGrid(rooms, items, keyField, opts){
         let span = Math.max(1, idxOf(b.end_time)-idxOf(b.start_time));
         if(si+span>SLOTS.length) span=SLOTS.length-si;
         skip[ci]=span-1;
-        const who = opts.hideWho ? '' : (b.user_name||b.student_name||'');
+        const who = (opts.hideWho||opts.labelOnly) ? '' : (b.user_name||b.student_name||'');
         const pend = b.status==='pending';
-        const mic = (opts.hideWho ? false : b.uses_meeting) ? ' <span class="mic">📶</span>' : '';
-        // 课名：优先 course 的真实课名(nameOf)，其次 title，再 kind
-        let label = b.title||KIND_LABEL[b.kind]||'占用';
-        if(opts.nameOf && b.course_id){ const nm=opts.nameOf(b.course_id); if(nm) label=nm; }
+        const mic = ((opts.hideWho||opts.labelOnly) ? false : b.uses_meeting) ? ' <span class="mic">📶</span>' : '';
+        // labelOnly：只显示占用类型标签（如“VIP”），不带课名/事由/人名。用于 VIP 页对外展示
+        let label;
+        if(opts.labelOnly){
+          label = KIND_LABEL[b.kind]||'占用';
+        } else {
+          label = b.title||KIND_LABEL[b.kind]||'占用';
+          if(opts.nameOf && b.course_id){ const nm=opts.nameOf(b.course_id); if(nm) label=nm; }
+        }
         // 按类别上色（opts.catOf 传入 course_id→category 的查找）
         let styleAttr='', cc=null;
         if(opts.catOf && b.course_id){ const cat=opts.catOf(b.course_id); if(cat){ cc=catColor(cat); } }
         if(cc) styleAttr=` style="background:${cc.bg};border-color:${cc.bd};color:${cc.tx}"`;
         h+=`<td class="occ ${cc?'':(KIND_CLASS[b.kind]||'')}${pend?' occ-pend':''}" rowspan="${span}"${styleAttr}>`+
            `<div class="occ-in">${esc(label)}${mic}`+
-           `<small>${esc(who)} ${b.start_time}-${b.end_time}${pend&&!opts.hideWho?' · 待确认':''}</small></div></td>`;
+           `<small>${esc(who)} ${b.start_time}-${b.end_time}${pend&&!(opts.hideWho||opts.labelOnly)?' · 待确认':''}</small></div></td>`;
       }else{
         // 空格：连续空档起点标“空”
         const prevSlot = si>0?SLOTS[si-1]:null;
