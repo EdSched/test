@@ -599,14 +599,49 @@ function meetingLinkStep(c, accId){
 /* ---------- 冲突检查 ---------- */
 function tabConflict(){
   let h='<div class="card"><h3 style="margin-top:2px">冲突检查</h3>'+
-    '<div class="row"><div class="field"><label>检查日期</label><input type="date" id="cf_date" value="'+todayStr()+'"></div>'+
-    '<div class="field"><label>&nbsp;</label><button id="cf_go">检查</button></div></div><div id="cf_res" style="margin-top:10px"></div></div>';
+    '<div class="row">'+
+      '<div class="field"><label>检查方式</label><select id="cf_mode">'+
+        '<option value="date">按具体日期</option>'+
+        '<option value="wd">按每周几（查该周几所有占用）</option>'+
+      '</select></div>'+
+      '<div class="field" id="cf_dateWrap"><label>检查日期</label><input type="date" id="cf_date" value="'+todayStr()+'"></div>'+
+      '<div class="field hidden" id="cf_wdWrap"><label>星期几</label><select id="cf_wd">'+
+        '<option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option>'+
+      '</select></div>'+
+      '<div class="field"><label>&nbsp;</label><button id="cf_go">检查</button></div>'+
+    '</div><div id="cf_res" style="margin-top:10px"></div></div>';
   render(h);
-  el('cf_go').onclick=runConflict; runConflict();
+  el('cf_mode').onchange=()=>{
+    const wd=el('cf_mode').value==='wd';
+    el('cf_dateWrap').classList.toggle('hidden',wd);
+    el('cf_wdWrap').classList.toggle('hidden',!wd);
+    runConflict();
+  };
+  el('cf_go').onclick=runConflict;
+  el('cf_date').onchange=runConflict; el('cf_wd').onchange=runConflict;
+  runConflict();
+}
+// 求某占用适用的星期几集合（weekly 用 weekday；once 用 booking_date 推算）
+function bookingWeekdays(b){
+  const set=new Set();
+  if(b.recurrence==='weekly'){ if(b.weekday!=null&&b.weekday!=='') set.add(Number(b.weekday)===0?7:Number(b.weekday)); }
+  else if(b.booking_date){ const w=weekdayOf(b.booking_date); set.add(w===0?7:w); }
+  if(b.weekday!=null&&b.weekday!==''){ const w=Number(b.weekday); set.add(w===0?7:w); }
+  return set;
 }
 function runConflict(){
-  const date=el('cf_date').value;
-  const active=BOOKINGS.filter(b=>b.status!=='pending' && bookingOnDate(b,date));
+  const mode=el('cf_mode').value;
+  let active, headLabel;
+  if(mode==='wd'){
+    const wd=Number(el('cf_wd').value);
+    const wdName={1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'}[wd];
+    active=BOOKINGS.filter(b=>b.status!=='pending' && bookingWeekdays(b).has(wd));
+    headLabel='每周 '+wdName+'（该周几全部占用）';
+  } else {
+    const date=el('cf_date').value;
+    active=BOOKINGS.filter(b=>b.status!=='pending' && bookingOnDate(b,date));
+    headLabel=WEEKDAYS[weekdayOf(date)]+' '+date;
+  }
   const roomIssues=[], accIssues=[];
   for(let i=0;i<active.length;i++) for(let j=i+1;j<active.length;j++){
     const a=active[i],b=active[j];
@@ -616,8 +651,8 @@ function runConflict(){
     if(a.uses_meeting&&b.uses_meeting&&String(a.meeting_account_id)===String(b.meeting_account_id)&&a.meeting_account_id)
       accIssues.push([a,b,aname(a.meeting_account_id)]);
   }
-  const line=(a,b,label,type)=>`<tr><td>${esc(label)}</td><td>${esc(a.title||KIND_LABEL[a.kind])} ${a.start_time}-${a.end_time}</td><td>${esc(b.title||KIND_LABEL[b.kind])} ${b.start_time}-${b.end_time}</td></tr>`;
-  let h=`<div class="muted">${WEEKDAYS[weekdayOf(date)]} ${date}</div>`;
+  const line=(a,b,label)=>`<tr><td>${esc(label)}</td><td>${esc(a.title||KIND_LABEL[a.kind])} ${a.start_time}-${a.end_time}</td><td>${esc(b.title||KIND_LABEL[b.kind])} ${b.start_time}-${b.end_time}</td></tr>`;
+  let h=`<div class="muted">${esc(headLabel)}</div>`;
   h+='<h4 style="margin:10px 0 4px">教室冲突</h4>';
   h+= roomIssues.length? '<table><thead><tr><th>教室</th><th>占用A</th><th>占用B</th></tr></thead><tbody>'+roomIssues.map(x=>line(...x)).join('')+'</tbody></table>'
     : '<div class="badge b-ok">无教室冲突</div>';
