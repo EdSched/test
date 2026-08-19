@@ -81,6 +81,14 @@ function weekdayOf(dateStr){ // 1=周一...7=周日
 }
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
+/* 课程归属的"6大类范围"：非语言课用类别；语言课细分日语/英语。用于学科负责人权限约束与筛选 */
+function courseScope(c){
+  const cat=c.category||'';
+  if(/语言|語学/.test(cat)) return '语言-'+(langType(c)||'日语');
+  return cat;  // 学部文科/学部理科/大学院文科/大学院理科
+}
+const LEAD_SCOPES = ['学部文科','学部理科','大学院文科','大学院理科','语言-日语','语言-英语'];
+
 /* 类别配色：大学院文/理、学部文/理、语言，各一色。用于周历、课表色块 */
 const CAT_COLORS = {
   '大学院文科': {bg:'#e8f0fb', bd:'#b9d0ef', tx:'#2c5aa0'},
