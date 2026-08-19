@@ -939,12 +939,12 @@ function aoaToCourses(aoa){
     const mt=tm.match(/(\d{1,2}[:：]\d{2})\s*-\s*(\d{1,2}[:：]\d{2})/);
     if(mt){ st=mt[1].replace('：',':'); et=mt[2].replace('：',':'); }
     const sd=normDate(g(8)), ed=normDate(g(9));
+    let term=null; try{ if(typeof termOf==='function') term=termOf(sd)||null; }catch(e){}
     rows.push({
       campus:g(0)||'高马', category:g(1)||CATEGORIES[0], major:g(2)||null,
       course_type:g(3)||null, name:name, teacher:normTeacher(g(5)),
       weekdays:wdToNums(g(6)), start_time:st, end_time:et,
-      start_date:sd, end_date:ed,
-      term: termOf(sd) || null,
+      start_date:sd, end_date:ed, term:term,
       sessions:g(10)?Number(g(10))||null:null, est_students:g(11)?Number(g(11))||null:null,
       mode:g(12)||'线下', meeting_link:g(13)||null
     });
