@@ -261,8 +261,8 @@ function renderAssignWeek(){
   const pend = window.WK_PENDING[room.id] = window.WK_PENDING[room.id] || new Set();
   const occ=BOOKINGS.filter(b=>b.kind==='course' && String(b.room_id)===String(room.id));
   // 候选/时段一律以「教室所在校区」为准（不依赖顶部下拉），线上课可进任意校区教室（学生自习）
-  const roomCampus=room.campus;
-  const inCampus=c=>(c.campus===roomCampus || c.campus==='线上');
+  const roomCampus=(room.campus||'').trim();
+  const inCampus=c=>{ const cc=(c.campus||'').trim(); return cc===roomCampus || cc==='线上'; };
   const campusCourses=COURSES.filter(inCampus);
   const slots=[...new Set(campusCourses.map(c=>(c.start_time||'')+'-'+(c.end_time||'')).filter(x=>x!=='-'))].sort((a,b)=>a.localeCompare(b));
   const WD=[['1','周一'],['2','周二'],['3','周三'],['4','周四'],['5','周五'],['6','周六'],['7','周日']];
@@ -337,7 +337,27 @@ function renderAssignWeek(){
   });
   h+='</tbody></table></div>';
   el('assignTable').innerHTML=h;
-  el('assignTable').querySelectorAll('.wkcard').forEach(w=>w.onclick=()=>assignForm(w.dataset.as));
+  el('assignTable').querySelectorAll('.wkcard').forEach(w=>w.onclick=()=>{
+    const cid=w.dataset.as; const c=COURSES.find(x=>String(x.id)===String(cid))||{};
+    let ph='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:60" id="wkAct"><div class="card" style="width:360px;max-width:92vw">'+
+      '<h3 style="margin-top:2px">'+esc(c.name||'课程')+'</h3>'+
+      '<div class="muted" style="font-size:12px;margin-bottom:10px">'+esc(c.category||'')+' · '+weekdaysLabel(c.weekdays)+' '+(c.start_time||'')+'-'+(c.end_time||'')+' · 现排在「'+esc(room.name)+'」</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px">'+
+        '<button id="wk_re">重排 / 改教室</button>'+
+        '<button class="danger" id="wk_rm">移出本教室（删除占用）</button>'+
+        '<button class="ghost" id="wk_cx">取消</button>'+
+      '</div></div></div>';
+    const d=document.createElement('div'); d.innerHTML=ph; document.body.appendChild(d.firstChild);
+    el('wk_re').onclick=()=>{ document.getElementById('wkAct').remove(); assignForm(cid); };
+    el('wk_cx').onclick=()=>document.getElementById('wkAct').remove();
+    document.getElementById('wkAct').onclick=(ev)=>{ if(ev.target.id==='wkAct') ev.target.remove(); };
+    el('wk_rm').onclick=async()=>{
+      if(!confirm('把「'+(c.name||'')+'」移出「'+room.name+'」？将删除它在本教室的占用记录。')) return;
+      const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(cid)&&String(b.room_id)===String(room.id));
+      for(const b of bs) await sbDelete('sched_bookings', b.id);
+      await reloadAll(); document.getElementById('wkAct').remove(); renderAssignWeek(); toast('已移出');
+    };
+  });
   el('assignTable').querySelectorAll('.wkpick').forEach(p=>p.onclick=()=>{
     const id=String(p.dataset.pick);
     if(pend.has(id)) pend.delete(id); else pend.add(id);
