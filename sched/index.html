@@ -208,15 +208,21 @@ function tabAssign(){
       '<span id="wkRoomWrap" class="hidden" style="display:inline-flex;gap:6px;align-items:flex-end;margin-left:8px">'+
         '<span class="field" style="margin:0"><label style="font-size:11px">选教室（看它一周占空）</label><select id="af_room" style="min-width:160px"></select></span>'+
       '</span>'+
+      '<button type="button" class="ghost sm" id="af_clear" style="margin-left:auto">清空筛选</button>'+
     '</div>'+
     '<div id="assignTable"></div></div><div id="asForm"></div>';
   render(h);
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('af_term'), terms, v=>v, v=>v, '全部期');
-  if(terms.length) el('af_term').value=terms[0];
   fillSelect(el('af_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   fillSelect(el('af_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
-  ['af_q','af_term','af_cat','af_campus','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=renderAssignView);
+  // 恢复上次筛选（操作后不重置）；首次进入默认最新期
+  const AF=window.AF_STATE;
+  if(AF){
+    ['af_q','af_term','af_cat','af_campus','af_status'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; });
+  } else if(terms.length){ el('af_term').value=terms[0]; }
+  const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
+  ['af_q','af_term','af_cat','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=()=>{ saveAF(); renderAssignView(); });
   window.AS_VIEW = window.AS_VIEW || 'week';
   function syncRoomPicker(){
     const show = window.AS_VIEW==='week';
@@ -224,11 +230,11 @@ function tabAssign(){
     if(show){
       const campus=el('af_campus').value;
       let rms=ROOMS.filter(r=>r.active!==false && (!campus || r.campus===campus));
-      const cur=el('af_room')?el('af_room').value:'';
+      const cur=(window.AF_STATE&&window.AF_STATE.af_room) || (el('af_room')?el('af_room').value:'');
       el('af_room').innerHTML = rms.length
         ? rms.map(r=>`<option value="${r.id}"${String(cur)===String(r.id)?' selected':''}>${esc(r.name)}（${esc(r.campus)}）</option>`).join('')
         : '<option value="">该校区无教室</option>';
-      el('af_room').onchange=renderAssignView;
+      el('af_room').onchange=()=>{ saveAF(); renderAssignView(); };
     }
   }
   document.querySelectorAll('.asview').forEach(b=>{
@@ -237,8 +243,8 @@ function tabAssign(){
       document.querySelectorAll('.asview').forEach(x=>{ x.style.background=x.dataset.v===window.AS_VIEW?'var(--blue)':''; x.style.color=x.dataset.v===window.AS_VIEW?'#fff':''; });
       syncRoomPicker(); renderAssignView(); };
   });
-  // 校区变化时刷新教室下拉
-  el('af_campus').addEventListener('change', syncRoomPicker);
+  el('af_campus').addEventListener('change', ()=>{ saveAF(); syncRoomPicker(); saveAF(); renderAssignView(); });
+  const clr=el('af_clear'); if(clr) clr.onclick=()=>{ window.AF_STATE=null; window.AS_VIEW='week'; tabAssign(); };
   syncRoomPicker();
   renderAssignView();
 }
