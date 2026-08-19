@@ -872,21 +872,42 @@ function importCourseFile(file){
   };
   reader.readAsArrayBuffer(file);
 }
+// 解析从 Excel 复制的 TSV：正确处理引号包裹、单元格内换行（多选值常见）
 function parsePastedCourses(text){
-  const lines=text.split(/\r?\n/).filter(l=>l.trim());
-  const aoa=lines.map(l=>l.split('\t'));
-  return aoaToCourses(aoa);
+  const rows=[]; let row=[], cur='', inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i], nx=text[i+1];
+    if(inQ){
+      if(ch==='"' && nx==='"'){ cur+='"'; i++; }
+      else if(ch==='"'){ inQ=false; }
+      else cur+=ch;
+    } else {
+      if(ch==='"'){ inQ=true; }
+      else if(ch==='\t'){ row.push(cur); cur=''; }
+      else if(ch==='\r'){ /* skip */ }
+      else if(ch==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else cur+=ch;
+    }
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return aoaToCourses(rows.filter(r=>r.join('').trim()));
 }
-// 周几中文/数字 → 逗号数字（1=周一…7=周日）
+// 周几 → 逗号数字（1=周一…7=周日）。支持中文/数字/多种分隔符/单元格内换行/连写
 function wdToNums(s){
   if(!s) return '';
   const map={'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':7,'天':7,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7};
   const out=[];
-  String(s).split(/[、,，\s\/]+/).forEach(part=>{
-    const m=part.replace(/周|星期|礼拜/g,'').trim();
-    if(map[m]!=null) out.push(map[m]);
-  });
+  let str=String(s).replace(/星期|礼拜|周/g,'').replace(/[、,，\/\s;；|]+/g,',');
+  // 连写如"二四六"或"246"逐字拆
+  if(!str.includes(',')) str=str.split('').join(',');
+  str.split(',').forEach(part=>{ const m=part.trim(); if(map[m]!=null) out.push(map[m]); });
   return [...new Set(out)].sort().join(',');
+}
+// 老师多选：把单元格内换行/多种分隔统一成顿号，保留多个老师
+function normTeacher(s){
+  if(!s) return null;
+  const t=String(s).replace(/[\r\n、,，\/;；|]+/g,'、').replace(/^、|、$/g,'').trim();
+  return t||null;
 }
 function aoaToCourses(aoa){
   if(!aoa.length) return [];
@@ -907,7 +928,7 @@ function aoaToCourses(aoa){
     if(mt){ st=mt[1].replace('：',':'); et=mt[2].replace('：',':'); }
     rows.push({
       campus:g(0)||'高马', category:g(1)||CATEGORIES[0], major:g(2)||null,
-      course_type:g(3)||null, name:name, teacher:g(5)||null,
+      course_type:g(3)||null, name:name, teacher:normTeacher(g(5)),
       weekdays:wdToNums(g(6)), start_time:st, end_time:et,
       start_date:g(8)||null, end_date:g(9)||null,
       sessions:g(10)?Number(g(10))||null:null, est_students:g(11)?Number(g(11))||null:null,
