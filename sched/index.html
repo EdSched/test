@@ -436,19 +436,32 @@ function assignForm(courseId){
         '<select id="as_acc">'+cand.map(opt).join('')+'</select>';
       return;
     }
-    // 线下课：教室固定账号自动绑定，冲突才改临时
+    // 线下课：默认用教室绑定的固定账号，但始终可手动改选
     const r=ROOMS.find(x=>String(x.id)===String(el('as_room').value));
     const boundAcc = r?r.meeting_account_id:null;
-    const tempAccs=ACCOUNTS.filter(a=>a.kind==='临时');
-    let chosen = (ex&&ex.meeting_account_id) || boundAcc || (tempAccs[0]&&tempAccs[0].id);
+    let chosen = (ex&&ex.meeting_account_id) || boundAcc || null;
+    // 列出所有账号（固定+临时），教室绑定的排最前并标注
+    const opts=ACCOUNTS.map(a=>{
+      const isBound = String(a.id)===String(boundAcc);
+      const sel = String(a.id)===String(chosen)?' selected':'';
+      return `<option value="${a.id}"${sel}>${esc(a.name)}${isBound?'（本教室固定）':(a.kind==='临时'?'（临时）':'')}</option>`;
+    }).join('');
+    let warnHtml='';
     const conflictDays = acctConflictDays(chosen, sd, ed);
     if(conflictDays.length){
-      el('as_accBox').innerHTML='<div class="badge b-err" style="margin-bottom:6px">固定账号 '+esc(aname(boundAcc))+' 在 '+conflictDays.map(d=>WEEKDAYS[d]).join('/')+' 该时段已被占用，请改用临时账号</div>'+
-        '<select id="as_acc">'+tempAccs.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')+'</select>';
-    }else{
-      el('as_accBox').innerHTML='<div>'+esc(aname(chosen))+' <span class="badge b-ok">自动绑定</span></div>'+
-        '<input type="hidden" id="as_acc" value="'+chosen+'">';
+      warnHtml='<div class="badge b-err" style="margin-bottom:6px">账号 '+esc(aname(chosen))+' 在 '+conflictDays.map(d=>WEEKDAYS[d]).join('/')+' 该时段已被占用，请改选其它账号</div>';
     }
+    el('as_accBox').innerHTML=warnHtml+
+      '<select id="as_acc">'+opts+'</select>'+
+      (boundAcc?' <span class="badge b-ok">默认=本教室固定账号，可改</span>':' <span class="badge b-warn">本教室未设固定账号，请选择</span>');
+    // 改选账号时重新检测冲突提示
+    el('as_acc').onchange=()=>{
+      const nid=el('as_acc').value; const cd=acctConflictDays(nid, sd, ed);
+      const box=el('as_accBox').querySelector('.badge.b-err');
+      if(cd.length){ if(!box){ const d=document.createElement('div'); d.className='badge b-err'; d.style.marginBottom='6px'; el('as_accBox').prepend(d); }
+        el('as_accBox').querySelector('.badge.b-err').textContent='账号 '+aname(nid)+' 在 '+cd.map(x=>WEEKDAYS[x]).join('/')+' 该时段已被占用';
+      } else if(box){ box.remove(); }
+    };
   }
   if(!online){ el('as_um').onchange=refreshAcc; el('as_room').onchange=refreshAcc;
     el('as_all').onchange=()=>{ el('as_room').innerHTML=roomOptions(el('as_all').checked); refreshAcc(); }; }
