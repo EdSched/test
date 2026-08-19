@@ -842,7 +842,11 @@ function tabCourses(){
   render(h);
   fillSelect(el('cf_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   fillSelect(el('cf_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
-  ['cf_q','cf_term','cf_cat','cf_major','cf_type','cf_campus'].forEach(id=>el(id)[id==='cf_q'?'oninput':'onchange']=renderCoursesTable);
+  // 恢复上次筛选（编辑后不重置）
+  const st=window.CF_STATE||{};
+  ['cf_q','cf_term','cf_cat','cf_major','cf_type','cf_campus'].forEach(id=>{ if(st[id]!=null && el(id)) el(id).value=st[id]; });
+  const saveState=()=>{ window.CF_STATE={}; ['cf_q','cf_term','cf_cat','cf_major','cf_type','cf_campus'].forEach(id=>{ if(el(id)) window.CF_STATE[id]=el(id).value; }); };
+  ['cf_q','cf_term','cf_cat','cf_major','cf_type','cf_campus'].forEach(id=>el(id)[id==='cf_q'?'oninput':'onchange']=()=>{ saveState(); renderCoursesTable(); });
   el('cf_new').onclick=()=>courseEdit(null);
   // ---- 批量导入 ----
   el('cf_import').onclick=()=>el('cf_importBox').classList.toggle('hidden');
@@ -1000,8 +1004,25 @@ function renderCoursesTable(){
   el('cf_count').textContent='共 '+list.length+' 门';
   let h='<div class="row" style="margin-bottom:8px">'+
     '<button class="ghost sm" id="cf_dupscan">查找重复</button>'+
+    '<button class="ghost sm" id="cf_batch">批量修改所选</button>'+
     '<button class="danger sm" id="cf_delsel">删除所选</button>'+
-    '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>';
+    '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>'+
+    '<div id="cf_batchBox" class="hidden" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fafbfc">'+
+      '<div class="row">'+
+        '<div class="field"><label>修改项</label><select id="cf_bfield">'+
+          '<option value="term">期</option>'+
+          '<option value="campus">校区</option>'+
+          '<option value="course_type">属性</option>'+
+          '<option value="mode">授课方式</option>'+
+          '<option value="category">类别</option>'+
+          '<option value="skip_add">批量休讲（增加休讲日）</option>'+
+        '</select></div>'+
+        '<div class="field" id="cf_bvalWrap"><label>新值</label><span id="cf_bval"></span></div>'+
+        '<div class="field"><label>&nbsp;</label><button class="sm" id="cf_bapply">应用到所选</button></div>'+
+        '<div class="field"><label>&nbsp;</label><button class="ghost sm" id="cf_bclose">收起</button></div>'+
+      '</div>'+
+      '<p class="muted" style="font-size:12px;margin-top:4px" id="cf_bhint"></p>'+
+    '</div>';
   h+='<table><thead><tr><th><input type="checkbox" id="cf_all"></th><th>期</th><th>课程</th><th>类别</th><th>专业</th><th>属性</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>方式</th><th>操作</th></tr></thead><tbody>';
   if(!list.length) h+='<tr><td colspan="13" class="muted">无匹配课程</td></tr>';
   list.forEach(c=>{ h+=`<tr data-cid="${c.id}"><td><input type="checkbox" class="cf_ck" value="${c.id}"></td><td>${esc(c.term||'')}</td><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.major||'')}</td><td>${esc(c.course_type||'')}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
@@ -1021,14 +1042,54 @@ function renderCoursesTable(){
     if(!confirm('删除所选 '+ids.length+' 门课程及其教室占用？')) return;
     for(const id of ids){ const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
       for(const b of bs) await sbDelete('sched_bookings',b.id); await sbDelete('sched_courses',id); }
-    await reloadAll(); show('courses'); toast('已删除 '+ids.length+' 门');
+    await reloadAll(); tabCourses(); toast('已删除 '+ids.length+' 门');
   };
   el('cf_dupscan').onclick=()=>dupScan(list);
+  // ---- 批量修改 ----
+  el('cf_batch').onclick=()=>{ el('cf_batchBox').classList.toggle('hidden'); renderBatchVal(); };
+  el('cf_bclose').onclick=()=>el('cf_batchBox').classList.add('hidden');
+  function renderBatchVal(){
+    const f=el('cf_bfield').value; const box=el('cf_bval'); const hint=el('cf_bhint');
+    if(f==='term'){ box.innerHTML='<input id="cf_bv" placeholder="如 2026年10月期" style="width:150px">'; hint.textContent='所选课程的期统一改为此值。'; }
+    else if(f==='campus'){ box.innerHTML='<select id="cf_bv"><option>高马</option><option>市谷</option><option>线上</option></select>'; hint.textContent='所选课程校区统一改为此值。'; }
+    else if(f==='course_type'){ box.innerHTML='<select id="cf_bv"><option value="">（空）</option><option>共通课</option><option>专业课</option><option>大课</option></select>'; hint.textContent='所选课程属性统一改为此值。'; }
+    else if(f==='mode'){ box.innerHTML='<select id="cf_bv"><option>线下</option><option>线上</option><option>线上+线下</option></select>'; hint.textContent='所选课程授课方式统一改为此值。'; }
+    else if(f==='category'){ box.innerHTML='<select id="cf_bv">'+CATEGORIES.map(x=>`<option>${x}</option>`).join('')+'</select>'; hint.textContent='所选课程类别统一改为此值。'; }
+    else if(f==='skip_add'){ box.innerHTML='<input type="date" id="cf_bv">'; hint.textContent='给所选课程增加一个休讲日（该日不上课）。会同步更新已排教室的占用记录。可多次操作添加多个休讲日。'; }
+  }
+  el('cf_bfield').onchange=renderBatchVal;
+  el('cf_bapply').onclick=async()=>{
+    const ids=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
+    if(!ids.length){ toast('请先勾选课程', false); return; }
+    const f=el('cf_bfield').value; const v=el('cf_bv')?el('cf_bv').value:'';
+    if(f==='skip_add' && !v){ toast('请选休讲日期', false); return; }
+    const btn=el('cf_bapply'); btn.disabled=true; btn.textContent='处理中…';
+    let done=0;
+    try{
+      for(const id of ids){
+        const c=COURSES.find(x=>String(x.id)===String(id)); if(!c) continue;
+        if(f==='skip_add'){
+          const cur=(c.skip_dates?c.skip_dates.split(',').map(s=>s.trim()).filter(Boolean):[]);
+          if(!cur.includes(v)) cur.push(v);
+          const sd=cur.sort().join(',');
+          await sbUpdate('sched_courses', id, {skip_dates:sd});
+          // 同步该课已排教室占用的备注（看板据 skip 排除）
+          const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
+          for(const b of bs) await sbUpdate('sched_bookings', b.id, {note:'排课自动生成；休讲:'+sd});
+        } else {
+          await sbUpdate('sched_courses', id, {[f]: v||null});
+        }
+        done++;
+      }
+      await reloadAll(); tabCourses();
+      toast('已批量修改 '+done+' 门'+(f==='skip_add'?('（休讲日 '+v+'）'):''));
+    }catch(e){ toast('部分失败：'+e.message, false); btn.disabled=false; btn.textContent='应用到所选'; }
+  };
   bind('[data-edc]', id=>courseEdit(id));
   bind('[data-delc]', async id=>{ if(!confirm('删除课程及其教室占用？')) return;
     const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
     for(const b of bs) await sbDelete('sched_bookings',b.id);
-    await sbDelete('sched_courses',id); await reloadAll(); show('courses'); toast('已删除'); });
+    await sbDelete('sched_courses',id); await reloadAll(); tabCourses(); toast('已删除'); });
 }
 /* 查找重复：同校区+同周几+同时段+同起止日 归为一组，组内>1 即疑似重复 */
 function dupScan(list){
@@ -1128,14 +1189,14 @@ function courseEdit(id){
     try{
       if(isNew){
         await sbInsert('sched_courses', patch);
-        await reloadAll(); show('courses'); toast('课程已新增');
+        await reloadAll(); tabCourses(); toast('课程已新增');
         return;
       }
       await sbUpdate('sched_courses', c.id, patch);
       // 若已排教室，同步把休讲日/结课日写进对应占用，看板才准
       const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
       for(const b of bs) await sbUpdate('sched_bookings', b.id, {end_date:patch.end_date, note: SKIP.length?('排课自动生成；休讲:'+SKIP.join(',')):'排课自动生成'});
-      await reloadAll(); show('courses'); toast('已保存');
+      await reloadAll(); tabCourses(); toast('已保存');
     }catch(e){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
   };
 }
