@@ -826,7 +826,7 @@ function tabCourses(){
         '<label class="ghost sm" style="cursor:pointer;padding:4px 10px;border:1px solid var(--line);border-radius:6px">⬆ 选择Excel文件<input type="file" id="cf_file" accept=".xlsx,.xls" style="display:none"></label>'+
         '<span class="muted" style="font-size:12px">或把从 Excel 复制的表格粘贴到下面框里</span>'+
       '</div>'+
-      '<textarea id="cf_paste" rows="5" placeholder="从 Excel 选中含表头的整块（课名 讲师 类别 校区 专业 属性 期 方式 周几 开始时间 结束时间 开始日期 结束日期 会议链接），复制后粘贴到这里" style="width:100%;font-size:12px"></textarea>'+
+      '<textarea id="cf_paste" rows="5" placeholder="从 Excel 选中含表头的整块（校区 类别 专业 课程属性 课程名 讲师 周几 上课时间 开课日 结课日 回数 预估人数 授课方式 腾讯会议链接），复制后粘贴到这里" style="width:100%;font-size:12px"></textarea>'+
       '<div style="margin-top:8px;display:flex;gap:8px"><button class="sm" id="cf_pasteGo">解析粘贴内容</button><button class="ghost sm" id="cf_importClose">收起</button></div>'+
       '<div id="cf_importPrev" style="margin-top:10px"></div>'+
     '</div>'+
@@ -852,9 +852,9 @@ function tabCourses(){
   el('cf_pasteGo').onclick=()=>{ const rows=parsePastedCourses(el('cf_paste').value); previewImport(rows); };
   renderCoursesTable();
 }
-const COURSE_COLS=['课名','讲师','类别','校区','专业','属性','期','方式','周几','开始时间','结束时间','开始日期','结束日期','会议链接'];
+const COURSE_COLS=['校区','类别','专业','课程属性','课程名','讲师','周几','上课时间','开课日','结课日','回数','预估人数','授课方式','腾讯会议链接'];
 function downloadCourseTemplate(){
-  const sample=['社会学导论','刘老师','大学院文科','高马','社会学','专业课','2026年10月期','线下','周三','18:00','21:00','2026-10-01','2027-01-31',''];
+  const sample=['高马','大学院文科','社会学','专业课','社会学导论','刘老师','周三','18:00-21:00','2026-10-01','2027-01-31','15','10','线下',''];
   const ws=XLSX.utils.aoa_to_sheet([COURSE_COLS, sample]);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'课程');
   XLSX.writeFile(wb,'课程导入模板.xlsx');
@@ -890,28 +890,43 @@ function wdToNums(s){
 }
 function aoaToCourses(aoa){
   if(!aoa.length) return [];
-  // 第一行若是表头则跳过
   let start=0;
   const first=(aoa[0]||[]).join('');
-  if(/课名|讲师|类别/.test(first)) start=1;
+  if(/校区|类别|课程名|课名/.test(first)) start=1;   // 首行是表头则跳过
   const rows=[];
   for(let i=start;i<aoa.length;i++){
     const r=aoa[i]; if(!r || !r.join('').trim()) continue;
     const g=(idx)=>String(r[idx]==null?'':r[idx]).trim();
-    if(!g(0)) continue; // 无课名跳过
+    // 列序：0校区 1类别 2专业 3课程属性 4课程名 5讲师 6周几 7上课时间 8开课日 9结课日 10回数 11预估人数 12授课方式 13腾讯会议链接
+    const name=g(4);
+    if(!name) continue;  // 无课程名跳过
+    // 上课时间"18:00-21:00" 拆成开始/结束
+    let st=null, et=null;
+    const tm=g(7).replace(/[～~—]/g,'-');
+    const mt=tm.match(/(\d{1,2}[:：]\d{2})\s*-\s*(\d{1,2}[:：]\d{2})/);
+    if(mt){ st=mt[1].replace('：',':'); et=mt[2].replace('：',':'); }
     rows.push({
-      name:g(0), teacher:g(1)||null, category:g(2)||CATEGORIES[0], campus:g(3)||'高马',
-      major:g(4)||null, course_type:g(5)||null, term:g(6)||null, mode:g(7)||'线下',
-      weekdays:wdToNums(g(8)), start_time:g(9)||null, end_time:g(10)||null,
-      start_date:g(11)||null, end_date:g(12)||null, meeting_link:g(13)||null
+      campus:g(0)||'高马', category:g(1)||CATEGORIES[0], major:g(2)||null,
+      course_type:g(3)||null, name:name, teacher:g(5)||null,
+      weekdays:wdToNums(g(6)), start_time:st, end_time:et,
+      start_date:g(8)||null, end_date:g(9)||null,
+      sessions:g(10)?Number(g(10))||null:null, est_students:g(11)?Number(g(11))||null:null,
+      mode:g(12)||'线下', meeting_link:g(13)||null
     });
   }
   return rows;
 }
 function previewImport(rows){
   if(!rows.length){ el('cf_importPrev').innerHTML='<span class="badge b-err">没解析到有效课程行</span>'; return; }
+  // 学科负责人类别约束
+  let blocked=0;
+  if(ROLE && ROLE.lead_cats){
+    const scope=(ROLE.lead_cats||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(scope.length){ const before=rows.length; rows=rows.filter(c=>scope.includes(courseScope(c))); blocked=before-rows.length; }
+  }
+  if(!rows.length){ el('cf_importPrev').innerHTML='<span class="badge b-err">这些课程都不在你可管理的类别范围内，无法导入</span>'; return; }
   const wdName=n=>({'1':'周一','2':'周二','3':'周三','4':'周四','5':'周五','6':'周六','7':'周日'}[n]||n);
-  let h='<div class="tip">共解析 '+rows.length+' 门课，确认无误后点「确认导入」。</div>'+
+  let h='<div class="tip">共解析 '+rows.length+' 门课'+(blocked?('（另有 '+blocked+' 门不在你可管理类别，已跳过）'):'')+'，确认无误后点「确认导入」。</div>'+
     '<div style="overflow-x:auto;max-height:300px;overflow-y:auto"><table style="font-size:12px"><thead><tr><th>课名</th><th>讲师</th><th>类别</th><th>校区</th><th>专业</th><th>期</th><th>方式</th><th>周几</th><th>时段</th><th>日期</th></tr></thead><tbody>'+
     rows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.teacher||'')}</td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td><td>${esc(c.major||'')}</td><td>${esc(c.term||'')}</td><td>${esc(c.mode)}</td><td>${(c.weekdays||'').split(',').filter(Boolean).map(wdName).join('、')}</td><td>${esc((c.start_time||'')+'-'+(c.end_time||''))}</td><td>${esc((c.start_date||'')+'~'+(c.end_date||''))}</td></tr>`).join('')+
     '</tbody></table></div>'+
@@ -932,6 +947,9 @@ function renderCoursesTable(){
   const q=(el('cf_q').value||'').trim().toLowerCase();
   const term=el('cf_term').value, cat=el('cf_cat').value, major=el('cf_major').value, ctype=el('cf_type').value, campus=el('cf_campus').value;
   let list=COURSES.filter(c=>{
+    // 学科负责人类别约束：ROLE.lead_cats 非空时，只显示其范围内的课
+    if(ROLE && ROLE.lead_cats){ const scope=(ROLE.lead_cats||'').split(',').map(s=>s.trim()).filter(Boolean);
+      if(scope.length && !scope.includes(courseScope(c))) return false; }
     if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
     if(term && c.term!==term) return false;
     if(cat && c.category!==cat) return false;
