@@ -32,6 +32,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="common.js"></script>
 <script>
 let ROOMS=[], ACCOUNTS=[], COURSES=[], BOOKINGS=[], CODES=[], ROLE=null;
@@ -815,7 +816,20 @@ function tabAccounts(){
 function tabCourses(){
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   const majors=[...new Set(COURSES.map(c=>c.major).filter(Boolean))].sort();
-  let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）<button class="sm" id="cf_new" style="margin-left:10px">+ 新增课程</button></h3>'+
+  let h='<div class="card"><h3 style="margin-top:2px">课程（共 '+COURSES.length+'）'+
+    '<button class="sm" id="cf_new" style="margin-left:10px">+ 新增课程</button>'+
+    '<button class="ghost sm" id="cf_import" style="margin-left:6px">📥 批量导入</button>'+
+    '</h3>'+
+    '<div id="cf_importBox" class="hidden" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fafbfc">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
+        '<button class="ghost sm" id="cf_tpl">⬇ 下载模板(Excel)</button>'+
+        '<label class="ghost sm" style="cursor:pointer;padding:4px 10px;border:1px solid var(--line);border-radius:6px">⬆ 选择Excel文件<input type="file" id="cf_file" accept=".xlsx,.xls" style="display:none"></label>'+
+        '<span class="muted" style="font-size:12px">或把从 Excel 复制的表格粘贴到下面框里</span>'+
+      '</div>'+
+      '<textarea id="cf_paste" rows="5" placeholder="从 Excel 选中含表头的整块（课名 讲师 类别 校区 专业 属性 期 方式 周几 开始时间 结束时间 开始日期 结束日期 会议链接），复制后粘贴到这里" style="width:100%;font-size:12px"></textarea>'+
+      '<div style="margin-top:8px;display:flex;gap:8px"><button class="sm" id="cf_pasteGo">解析粘贴内容</button><button class="ghost sm" id="cf_importClose">收起</button></div>'+
+      '<div id="cf_importPrev" style="margin-top:10px"></div>'+
+    '</div>'+
     '<div class="row" style="margin-bottom:10px">'+
       '<div class="field"><label>搜索课名/讲师</label><input id="cf_q" placeholder="关键词"></div>'+
       '<div class="field"><label>期</label><select id="cf_term"><option value="">全部期</option>'+terms.map(t=>`<option>${esc(t)}</option>`).join('')+'</select></div>'+
@@ -830,7 +844,89 @@ function tabCourses(){
   fillSelect(el('cf_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
   ['cf_q','cf_term','cf_cat','cf_major','cf_type','cf_campus'].forEach(id=>el(id)[id==='cf_q'?'oninput':'onchange']=renderCoursesTable);
   el('cf_new').onclick=()=>courseEdit(null);
+  // ---- 批量导入 ----
+  el('cf_import').onclick=()=>el('cf_importBox').classList.toggle('hidden');
+  el('cf_importClose').onclick=()=>el('cf_importBox').classList.add('hidden');
+  el('cf_tpl').onclick=downloadCourseTemplate;
+  el('cf_file').onchange=(e)=>{ const f=e.target.files[0]; if(f) importCourseFile(f); };
+  el('cf_pasteGo').onclick=()=>{ const rows=parsePastedCourses(el('cf_paste').value); previewImport(rows); };
   renderCoursesTable();
+}
+const COURSE_COLS=['课名','讲师','类别','校区','专业','属性','期','方式','周几','开始时间','结束时间','开始日期','结束日期','会议链接'];
+function downloadCourseTemplate(){
+  const sample=['社会学导论','刘老师','大学院文科','高马','社会学','专业课','2026年10月期','线下','周三','18:00','21:00','2026-10-01','2027-01-31',''];
+  const ws=XLSX.utils.aoa_to_sheet([COURSE_COLS, sample]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'课程');
+  XLSX.writeFile(wb,'课程导入模板.xlsx');
+}
+function importCourseFile(file){
+  const reader=new FileReader();
+  reader.onload=(e)=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const rows=aoaToCourses(aoa);
+      previewImport(rows);
+    }catch(err){ el('cf_importPrev').innerHTML='<span class="badge b-err">读取失败：'+esc(err.message)+'</span>'; }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function parsePastedCourses(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  const aoa=lines.map(l=>l.split('\t'));
+  return aoaToCourses(aoa);
+}
+// 周几中文/数字 → 逗号数字（1=周一…7=周日）
+function wdToNums(s){
+  if(!s) return '';
+  const map={'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':7,'天':7,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7};
+  const out=[];
+  String(s).split(/[、,，\s\/]+/).forEach(part=>{
+    const m=part.replace(/周|星期|礼拜/g,'').trim();
+    if(map[m]!=null) out.push(map[m]);
+  });
+  return [...new Set(out)].sort().join(',');
+}
+function aoaToCourses(aoa){
+  if(!aoa.length) return [];
+  // 第一行若是表头则跳过
+  let start=0;
+  const first=(aoa[0]||[]).join('');
+  if(/课名|讲师|类别/.test(first)) start=1;
+  const rows=[];
+  for(let i=start;i<aoa.length;i++){
+    const r=aoa[i]; if(!r || !r.join('').trim()) continue;
+    const g=(idx)=>String(r[idx]==null?'':r[idx]).trim();
+    if(!g(0)) continue; // 无课名跳过
+    rows.push({
+      name:g(0), teacher:g(1)||null, category:g(2)||CATEGORIES[0], campus:g(3)||'高马',
+      major:g(4)||null, course_type:g(5)||null, term:g(6)||null, mode:g(7)||'线下',
+      weekdays:wdToNums(g(8)), start_time:g(9)||null, end_time:g(10)||null,
+      start_date:g(11)||null, end_date:g(12)||null, meeting_link:g(13)||null
+    });
+  }
+  return rows;
+}
+function previewImport(rows){
+  if(!rows.length){ el('cf_importPrev').innerHTML='<span class="badge b-err">没解析到有效课程行</span>'; return; }
+  const wdName=n=>({'1':'周一','2':'周二','3':'周三','4':'周四','5':'周五','6':'周六','7':'周日'}[n]||n);
+  let h='<div class="tip">共解析 '+rows.length+' 门课，确认无误后点「确认导入」。</div>'+
+    '<div style="overflow-x:auto;max-height:300px;overflow-y:auto"><table style="font-size:12px"><thead><tr><th>课名</th><th>讲师</th><th>类别</th><th>校区</th><th>专业</th><th>期</th><th>方式</th><th>周几</th><th>时段</th><th>日期</th></tr></thead><tbody>'+
+    rows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.teacher||'')}</td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td><td>${esc(c.major||'')}</td><td>${esc(c.term||'')}</td><td>${esc(c.mode)}</td><td>${(c.weekdays||'').split(',').filter(Boolean).map(wdName).join('、')}</td><td>${esc((c.start_time||'')+'-'+(c.end_time||''))}</td><td>${esc((c.start_date||'')+'~'+(c.end_date||''))}</td></tr>`).join('')+
+    '</tbody></table></div>'+
+    '<div style="margin-top:10px"><button class="sm" id="cf_doImport">确认导入 '+rows.length+' 门</button> <span id="cf_impWarn"></span></div>';
+  el('cf_importPrev').innerHTML=h;
+  el('cf_doImport').onclick=async()=>{
+    const btn=el('cf_doImport'); if(btn.disabled) return; btn.disabled=true; btn.textContent='导入中…';
+    let ok=0, fail=0;
+    for(const c of rows){
+      try{ await sbInsert('sched_courses', c); ok++; }catch(e){ fail++; }
+    }
+    await reloadAll();
+    el('cf_importPrev').innerHTML='<span class="badge b-ok">导入完成：成功 '+ok+' 门'+(fail?('，失败 '+fail+' 门'):'')+'</span>';
+    renderCoursesTable();
+  };
 }
 function renderCoursesTable(){
   const q=(el('cf_q').value||'').trim().toLowerCase();
