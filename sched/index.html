@@ -277,8 +277,20 @@ function renderAssignWeek(){
   }
   let legend='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'+
     Object.keys(CAT_COLORS).map(k=>{const c=CAT_COLORS[k];return `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:3px;background:${c.bg};border:1px solid ${c.bd};display:inline-block"></span>${k}</span>`;}).join('')+'</div>';
+  if(!window.WK_UM) window.WK_UM={};   // courseId -> 是否用本教室账号（默认true）
+  const boundAccName = room.meeting_account_id ? aname(room.meeting_account_id) : null;
+  let pendList='';
+  if(pend.size){
+    pendList='<div style="background:#f7faff;border:1px solid #d8e6f8;border-radius:8px;padding:8px 12px;margin-bottom:8px">'+
+      '<div style="font-size:12px;color:#555;margin-bottom:6px">待排清单（勾选每门是否占用本教室腾讯账号'+(boundAccName?('：<b>'+esc(boundAccName)+'</b>'):'，本教室未绑定账号')+'）：</div>'+
+      [...pend].map(cid=>{ const c=COURSES.find(x=>String(x.id)===String(cid))||{}; const cc=catColor(c.category);
+        const um = window.WK_UM[cid]!==false;   // 默认true
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${cc.bg};border:1px solid ${cc.bd}"></span><b>${esc(c.name||'')}</b><span class="muted">${esc(c.category||'')}</span>`+
+          `<label style="margin-left:auto;font-size:12px;cursor:pointer"><span class="wkum" data-um="${cid}" style="cursor:pointer;padding:2px 10px;border-radius:12px;border:1px solid ${um?'#2c8a4f':'#ccc'};background:${um?'#e7f6ec':'#f2f2f2'};color:${um?'#2c8a4f':'#888'}">${um?'✓ 用本教室账号':'不用账号'}</span></label></div>`;
+      }).join('')+'</div>';
+  }
   const saveBar = pend.size
-    ? `<div style="position:sticky;top:0;z-index:5;background:#eef6ff;border:1px solid #bcdcff;border-radius:8px;padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px"><b>待排 ${pend.size} 门</b><button class="sm" id="wk_save">保存排课到「${esc(room.name)}」</button><button class="ghost sm" id="wk_clear">清空待排</button><span class="muted" style="font-size:12px">保存只排教室，会议链接稍后在教室里统一设定。</span></div>`
+    ? `<div style="position:sticky;top:0;z-index:5;background:#eef6ff;border:1px solid #bcdcff;border-radius:8px;padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px"><b>待排 ${pend.size} 门</b><button class="sm" id="wk_save">保存排课到「${esc(room.name)}」</button><button class="ghost sm" id="wk_clear">清空待排</button></div>`+pendList
     : '';
   let h=saveBar+legend+`<div style="margin-bottom:6px;font-size:13px"><b>${esc(room.name)}</b> <span class="muted">${esc(room.campus)}${room.capacity?(' · '+room.capacity+'人'):''}</span> · <span class="muted" style="font-size:12px">点空格里的课名即可加入待排，可多选，最后统一保存</span></div>`+
     '<div style="overflow-x:auto"><table style="min-width:820px;table-layout:fixed"><thead><tr><th style="width:78px">时段</th>'+
@@ -321,6 +333,10 @@ function renderAssignWeek(){
     if(pend.has(id)) pend.delete(id); else pend.add(id);
     renderAssignWeek();
   });
+  el('assignTable').querySelectorAll('.wkum').forEach(u=>u.onclick=()=>{
+    const cid=u.dataset.um; window.WK_UM[cid] = (window.WK_UM[cid]===false); // 切换：默认true→false→true
+    renderAssignWeek();
+  });
   const sv=el('wk_save');
   if(sv) sv.onclick=async()=>{
     if(!pend.size) return;
@@ -329,15 +345,15 @@ function renderAssignWeek(){
     try{
       for(const cid of pend){
         const c=COURSES.find(x=>String(x.id)===String(cid)); if(!c) continue;
+        const useAcc = (window.WK_UM[cid]!==false) && !!room.meeting_account_id;
         const wdays=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(Boolean);
-        // 先删该课已有占用（避免重复）
         const existing=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(cid));
         for(const o of existing) await sbDelete('sched_bookings', o.id);
         const recs=wdays.map(wd=>({ room_id:room.id, kind:'course', course_id:c.id,
           title:c.name, user_name:c.teacher||null, recurrence:'weekly', weekday:wd,
           start_date:c.start_date||null, end_date:c.end_date||null,
           start_time:c.start_time, end_time:c.end_time,
-          uses_meeting:false, meeting_account_id:null,
+          uses_meeting:useAcc, meeting_account_id:useAcc?room.meeting_account_id:null,
           status:'confirmed', created_by:'admin', note:'排课自动生成' }));
         if(recs.length){ await sbInsert('sched_bookings', recs); done++; }
       }
