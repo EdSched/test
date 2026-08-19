@@ -38,7 +38,7 @@ async function boot(){
 }
 function render(){
   const campus=el('campus').value, date=el('date').value;
-  const rooms=ROOMS.filter(r=>r.campus===campus).map(r=>({id:r.id,name:r.name,sub:(r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人'))}));
+  const rooms=ROOMS.filter(r=>r.campus===campus && r.type!=='VIP').map(r=>({id:r.id,name:r.name,sub:(r.type==='大课'?(r.size_label+'·'+r.capacity+'人'):(r.capacity+'人'))}));
   el('meta').textContent = WEEKDAYS[weekdayOf(date)]+' '+date;
   if(!rooms.length){ el('gridBox').innerHTML='<div class="muted">该校区暂无教室</div>'; return; }
   const todays = BOOKINGS.filter(b => bookingOnDate(b, date) &&
