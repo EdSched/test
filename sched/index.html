@@ -253,7 +253,10 @@ function renderAssignWeek(){
   if(!window.WK_PENDING) window.WK_PENDING={};       // roomId -> Set(courseId) 暂存待排
   const pend = window.WK_PENDING[room.id] = window.WK_PENDING[room.id] || new Set();
   const occ=BOOKINGS.filter(b=>b.kind==='course' && String(b.room_id)===String(room.id));
-  const campusCourses=COURSES.filter(c=>!campus || c.campus===campus);
+  // 候选/时段一律以「教室所在校区」为准（不依赖顶部下拉），线上课可进任意校区教室（学生自习）
+  const roomCampus=room.campus;
+  const inCampus=c=>(c.campus===roomCampus || c.campus==='线上');
+  const campusCourses=COURSES.filter(inCampus);
   const slots=[...new Set(campusCourses.map(c=>(c.start_time||'')+'-'+(c.end_time||'')).filter(x=>x!=='-'))].sort((a,b)=>a.localeCompare(b));
   const WD=[['1','周一'],['2','周二'],['3','周三'],['4','周四'],['5','周五'],['6','周六'],['7','周日']];
   el('af_count').textContent='教室：'+room.name;
@@ -270,7 +273,7 @@ function renderAssignWeek(){
       if(((c.start_time||'')+'-'+(c.end_time||''))!==sl) return false;
       if(term && c.term!==term) return false;
       if(cat && c.category!==cat) return false;
-      if(campus && c.campus!==campus) return false;
+      if(!inCampus(c)) return false;
       if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
       return true;
     });
