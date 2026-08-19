@@ -955,12 +955,16 @@ function previewImport(rows){
   el('cf_importPrev').innerHTML=h;
   el('cf_doImport').onclick=async()=>{
     const btn=el('cf_doImport'); if(btn.disabled) return; btn.disabled=true; btn.textContent='导入中…';
-    let ok=0, fail=0;
+    let ok=0; const errs=[];
     for(const c of rows){
-      try{ await sbInsert('sched_courses', c); ok++; }catch(e){ fail++; }
+      try{ await sbInsert('sched_courses', c); ok++; }
+      catch(e){ errs.push((c.name||'?')+'：'+(e.message||e)); }
     }
     await reloadAll();
-    el('cf_importPrev').innerHTML='<span class="badge b-ok">导入完成：成功 '+ok+' 门'+(fail?('，失败 '+fail+' 门'):'')+'</span>';
+    let msg='<span class="badge b-ok">导入成功 '+ok+' 门</span>';
+    if(errs.length){ msg+='<div class="badge b-err" style="margin-top:8px">失败 '+errs.length+' 门</div>'+
+      '<div style="max-height:160px;overflow:auto;font-size:12px;color:#a33;margin-top:6px">'+errs.slice(0,20).map(esc).join('<br>')+'</div>'; }
+    el('cf_importPrev').innerHTML=msg;
     renderCoursesTable();
   };
 }
