@@ -746,10 +746,10 @@ function tabCodes(){
   CODES.slice().sort((a,b)=>(a.sort||100)-(b.sort||100)).forEach(c=>{
     const ps = new Set((c.perms?c.perms.split(','):[]).map(s=>s.trim()).filter(Boolean));
     const chips = PERM_DEFS
-      // 同页两种录入分别显示（entry_room / entry_room_full）
+      .filter(([perm])=>perm!=='entry_room_full')     // 去掉“录入(全部)”，合并为单一“教室占用录入”
       .map(([perm,label])=>{
         const on = ps.has(perm);
-        const nm = perm==='entry_room'?'录入(仅临时)':perm==='entry_room_full'?'录入(全部)':label;
+        const nm = perm==='entry_room'?'教室占用录入':label;
         return `<span class="permchip${on?' on':''}" data-perm="${perm}" data-cid="${c.id}">${on?'✓ ':''}${esc(nm)}</span>`;
       }).join(' ');
     const link = base+landingFor(c)+'?k='+encodeURIComponent(c.code);
