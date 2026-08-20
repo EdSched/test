@@ -59,10 +59,12 @@ async function reloadAll(){
     sbGet('sched_access_codes','select=*&order=id')
   ]);
   try{ MTEMPLATES = await sbGet('sched_meeting_templates','select=*&order=created_at.desc'); }catch(e){ MTEMPLATES=[]; }
+  try{ HOLIDAYS = await sbGet('sched_holidays','select=*&order=start_date'); }catch(e){ HOLIDAYS=[]; }
   const pend=BOOKINGS.filter(b=>b.status==='pending').length;
   const pn=el('pendN'); if(pn){ pn.textContent = pend||''; pn.style.display=pend?'':'none'; }
 }
 let MTEMPLATES=[];
+let HOLIDAYS=[];
 const rname=id=>{ const r=ROOMS.find(x=>String(x.id)===String(id)); return r?r.name:'—'; };
 const aname=id=>{ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?a.name:'—'; };
 
@@ -1245,6 +1247,7 @@ function renderCoursesTable(){
         '<div class="field"><label>&nbsp;</label><button class="ghost sm" id="cf_bclose">收起</button></div>'+
       '</div>'+
       '<p class="muted" style="font-size:12px;margin-top:4px" id="cf_bhint"></p>'+
+      '<div id="cf_holidayList"></div>'+
     '</div>';
   h+='<table><thead><tr><th><input type="checkbox" id="cf_all"></th><th>期</th><th>课程</th><th>类别</th><th>专业</th><th>属性</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>方式</th><th>操作</th></tr></thead><tbody>';
   if(!list.length) h+='<tr><td colspan="13" class="muted">无匹配课程</td></tr>';
@@ -1278,34 +1281,58 @@ function renderCoursesTable(){
     else if(f==='course_type'){ box.innerHTML='<select id="cf_bv"><option value="">（空）</option><option>共通课</option><option>专业课</option><option>大课</option></select>'; hint.textContent='所选课程属性统一改为此值。'; }
     else if(f==='mode'){ box.innerHTML='<select id="cf_bv"><option>线下</option><option>线上</option><option>线上+线下</option></select>'; hint.textContent='所选课程授课方式统一改为此值。'; }
     else if(f==='category'){ box.innerHTML='<select id="cf_bv">'+CATEGORIES.map(x=>`<option>${x}</option>`).join('')+'</select>'; hint.textContent='所选课程类别统一改为此值。'; }
-    else if(f==='skip_add'){ box.innerHTML='<input type="date" id="cf_bv">'; hint.textContent='给所选课程增加一个休讲日（该日不上课）。会同步更新已排教室的占用记录。可多次操作添加多个休讲日。'; }
+    else if(f==='skip_add'){
+      box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center">'+
+        '<input type="date" id="cf_bv" title="起始日"> ~ <input type="date" id="cf_bv2" title="结束日（单天可留空）">'+
+        '<input id="cf_blabel" placeholder="假期名称，如 春节假期" style="width:150px">'+
+        '<select id="cf_bcolor"><option value="red">红色（节日·喜庆）</option><option value="green">绿色（普通假日）</option></select>'+
+      '</span>';
+      hint.textContent='设定一段休假/放假（可多天）：这段时间内所有课都不上课，课表上会用所选颜色标出假期名称。此为全局假期，与是否勾选课程无关。';
+    }
   }
   el('cf_bfield').onchange=renderBatchVal;
+  // 已有假期列表（可删）
+  function renderHolidayList(){
+    const box=el('cf_holidayList'); if(!box) return;
+    if(!HOLIDAYS.length){ box.innerHTML=''; return; }
+    box.innerHTML='<div style="margin-top:8px;font-size:12px;color:#666">已设假期（点删除可移除）：</div>'+
+      HOLIDAYS.map(h=>{ const col=h.color==='green'?'#2c8a4f':'#c0392b';
+        return `<span style="display:inline-flex;align-items:center;gap:6px;margin:4px 6px 0 0;padding:2px 8px;border-radius:12px;background:${h.color==='green'?'#e7f6ec':'#fdecea'};color:${col};font-size:12px">${esc(h.label||'假期')} ${esc(h.start_date||'')}${h.end_date&&h.end_date!==h.start_date?('~'+esc(h.end_date)):''} <b data-delhol="${h.id}" style="cursor:pointer">✕</b></span>`;
+      }).join('');
+    box.querySelectorAll('[data-delhol]').forEach(x=>x.onclick=async()=>{
+      if(!confirm('删除该假期？')) return;
+      await sbDelete('sched_holidays', x.dataset.delhol); await reloadAll(); tabCourses();
+    });
+  }
+  setTimeout(renderHolidayList,0);
   el('cf_bapply').onclick=async()=>{
+    const f=el('cf_bfield').value; const v=el('cf_bv')?el('cf_bv').value:'';
+    if(f==='skip_add'){
+      const v2=el('cf_bv2')?el('cf_bv2').value:'';
+      const label=(el('cf_blabel')?el('cf_blabel').value:'').trim();
+      const color=el('cf_bcolor')?el('cf_bcolor').value:'red';
+      if(!v){ toast('请选起始日期', false); return; }
+      if(!label){ toast('请填假期名称', false); return; }
+      const btn=el('cf_bapply'); btn.disabled=true; btn.textContent='处理中…';
+      try{
+        await sbInsert('sched_holidays', {start_date:v, end_date:(v2||v), label, color});
+        await reloadAll(); el('cf_batchBox').classList.add('hidden'); tabCourses();
+        toast('已添加假期「'+label+'」'+v+(v2&&v2!==v?('~'+v2):''));
+      }catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='应用到所选'; }
+      return;
+    }
     const ids=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
     if(!ids.length){ toast('请先勾选课程', false); return; }
-    const f=el('cf_bfield').value; const v=el('cf_bv')?el('cf_bv').value:'';
-    if(f==='skip_add' && !v){ toast('请选休讲日期', false); return; }
     const btn=el('cf_bapply'); btn.disabled=true; btn.textContent='处理中…';
     let done=0;
     try{
       for(const id of ids){
         const c=COURSES.find(x=>String(x.id)===String(id)); if(!c) continue;
-        if(f==='skip_add'){
-          const cur=(c.skip_dates?c.skip_dates.split(',').map(s=>s.trim()).filter(Boolean):[]);
-          if(!cur.includes(v)) cur.push(v);
-          const sd=cur.sort().join(',');
-          await sbUpdate('sched_courses', id, {skip_dates:sd});
-          // 同步该课已排教室占用的备注（看板据 skip 排除）
-          const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
-          for(const b of bs) await sbUpdate('sched_bookings', b.id, {note:'排课自动生成；休讲:'+sd});
-        } else {
-          await sbUpdate('sched_courses', id, {[f]: v||null});
-        }
+        await sbUpdate('sched_courses', id, {[f]: v||null});
         done++;
       }
       await reloadAll(); tabCourses();
-      toast('已批量修改 '+done+' 门'+(f==='skip_add'?('（休讲日 '+v+'）'):''));
+      toast('已批量修改 '+done+' 门');
     }catch(e){ toast('部分失败：'+e.message, false); btn.disabled=false; btn.textContent='应用到所选'; }
   };
   bind('[data-edc]', id=>courseEdit(id));
