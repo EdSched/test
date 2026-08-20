@@ -364,6 +364,11 @@ function renderAssignDay(){
   // 右栏：该周几该上的课（带日期），点选排课
   const dateRange=c=>{ if(c.start_date&&c.end_date) return c.start_date.slice(5)+'~'+c.end_date.slice(5); if(c.start_date)return c.start_date.slice(5)+'起'; if(c.end_date)return '至'+c.end_date.slice(5); return '无日期'; };
   let right='<div style="font-size:13px;margin-bottom:6px"><b>'+wdNames[wd]+' 该上的课</b> <span class="muted">'+dayCourses.length+' 门 · 点课程排入教室</span></div>';
+  // 提醒：已排但还没绑会议号的课
+  const needMeeting=dayCourses.filter(c=>assignedSet.has(String(c.id)) && !(c.meeting_link||c.meeting_id));
+  if(needMeeting.length){
+    right='<div style="background:#fdf1ed;border:1px solid #f2c9ba;color:#c05a3c;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px">📌 有 '+needMeeting.length+' 门已排课还没绑会议号，排完记得去「会议链接设定」统一绑定。</div>'+right;
+  }
   if(!dayCourses.length){ right+='<div class="muted">该条件下没有课。</div>'; }
   else{
     right+=dayCourses.sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||'')).map(c=>{
@@ -379,8 +384,8 @@ function renderAssignDay(){
     '<div style="flex:1;min-width:420px">'+left+'</div>'+
     '<div style="width:340px;max-width:100%">'+right+'</div></div>';
   // 交互
-  box.querySelectorAll('.daypick').forEach(p=>p.onclick=()=>assignForm(p.dataset.pick));
-  box.querySelectorAll('.dayocc').forEach(o=>o.onclick=()=>assignForm(o.dataset.occ));
+  box.querySelectorAll('.daypick').forEach(p=>p.onclick=()=>assignRoomOnly(p.dataset.pick));
+  box.querySelectorAll('.dayocc').forEach(o=>o.onclick=()=>assignRoomOnly(o.dataset.occ));
 }
 function renderAssignWeek(){
   const campus=el('af_campus').value;
@@ -578,6 +583,63 @@ function renderAssignTable(){
   h+='</tbody></table>';
   el('assignTable').innerHTML=h;
   bind('[data-as]', id=>assignForm(id));
+}
+/* 按周排课专用：只选教室、直接生成占用，不绑会议账号（账号统一到「会议链接设定」再绑） */
+function assignRoomOnly(courseId){
+  const c=COURSES.find(x=>String(x.id)===String(courseId)); if(!c) return;
+  if(c.mode==='线上'||c.campus==='线上'){ toast('线上课不占教室', false); return; }
+  const wdays=(c.weekdays||'').split(',').map(Number).filter(Boolean);
+  const existing=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
+  const ex=existing[0]||null;
+  const noDate = !c.start_date || !c.end_date;
+  const roomFree=r=> wdays.every(wd => !BOOKINGS.some(b=>
+      b.status!=='pending' && b.recurrence==='weekly' &&
+      String(b.course_id)!==String(c.id) &&
+      String(b.room_id)===String(r.id) && Number(b.weekday)===wd &&
+      overlap(c.start_time,c.end_time,b.start_time,b.end_time) &&
+      !(c.end_date&&b.start_date&&c.end_date<b.start_date) &&
+      !(c.start_date&&b.end_date&&c.start_date>b.end_date) ));
+  let cand=ROOMS.filter(r=>r.active!==false && r.campus===c.campus);
+  if(c.est_students) cand=cand.filter(r=>!r.capacity || r.capacity>=c.est_students);
+  const roomOpts = cand.length
+    ? cand.map(r=>{ const free=roomFree(r); const sel=ex&&String(ex.room_id)===String(r.id)?' selected':'';
+        return `<option value="${r.id}"${(free||sel)?'':' disabled'}${sel}>${esc(r.name)}（${r.capacity||'?'}人）${free?'':' — 该时段已占'}</option>`; }).join('')
+    : '<option value="">无满足容量的教室</option>';
+  let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px" id="aroMask">'+
+    '<div class="card" style="width:460px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">'+(ex?'重排':'排')+'「'+esc(c.name)+'」教室</h3>'+
+    `<div class="muted" style="margin-bottom:8px">${esc(c.campus)} · ${weekdaysLabel(c.weekdays)} · ${c.start_time||''}-${c.end_time||''} · 预估${c.est_students||'?'}人</div>`;
+  if(ex){ h+='<div class="tip">当前已排：<b>'+esc(rname(ex.room_id))+'</b>。可改教室后重新生成。</div>'; }
+  if(noDate){
+    h+='<div class="tip">这门课缺开课/结课日期，排前请补上（会写回课程）。</div>'+
+      '<div class="row"><div class="field"><label>开课日</label><input type="date" id="aro_sd" value="'+(c.start_date||'')+'"></div>'+
+      '<div class="field"><label>结课日</label><input type="date" id="aro_ed" value="'+(c.end_date||'')+'"></div></div>';
+  }
+  h+='<div class="field" style="margin:8px 0"><label>选教室（容量足够）</label><select id="aro_room">'+roomOpts+'</select></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px"><button id="aro_save">确认排入</button><button class="ghost" id="aro_cancel">取消</button></div>'+
+    '<p class="muted" style="font-size:12px;margin-top:8px">只排教室，不绑会议号。排完可继续排下一门，最后统一去「会议链接设定」绑定会议号。</p>'+
+    '</div></div>';
+  const wrap=document.createElement('div'); wrap.innerHTML=h; document.body.appendChild(wrap.firstChild);
+  el('aro_cancel').onclick=()=>document.getElementById('aroMask').remove();
+  document.getElementById('aroMask').onclick=(ev)=>{ if(ev.target.id==='aroMask') ev.target.remove(); };
+  el('aro_save').onclick=async()=>{
+    const roomId=el('aro_room').value; if(!roomId){ toast('请选教室', false); return; }
+    let sd=c.start_date, ed=c.end_date;
+    if(noDate){ sd=el('aro_sd').value; ed=el('aro_ed').value; if(!sd||!ed){ toast('请补开课/结课日', false); return; } }
+    const btn=el('aro_save'); btn.disabled=true; btn.textContent='生成中…';
+    try{
+      if(noDate) await sbUpdate('sched_courses', c.id, {start_date:sd, end_date:ed});
+      for(const o of existing) await sbDelete('sched_bookings', o.id);
+      const recs=wdays.map(wd=>({ room_id:roomId, kind:'course', course_id:c.id,
+        title:c.name, user_name:c.teacher||null, recurrence:'weekly', weekday:wd,
+        start_date:sd||null, end_date:ed||null, start_time:c.start_time, end_time:c.end_time,
+        uses_meeting:false, meeting_account_id:null, status:'confirmed', created_by:'admin', note:'排课自动生成' }));
+      if(recs.length) await sbInsert('sched_bookings', recs);
+      await reloadAll();
+      document.getElementById('aroMask').remove();
+      renderAssignView();
+      toast('已排入「'+rname(roomId)+'」，可继续排下一门');
+    }catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='确认排入'; }
+  };
 }
 function assignForm(courseId){
   const c=COURSES.find(x=>String(x.id)===String(courseId));
