@@ -235,11 +235,11 @@ function tabAssign(){
   fillSelect(el('af_term'), terms, v=>v, v=>v, '全部期');
   fillSelect(el('af_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
   fillSelect(el('af_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
-  // 恢复上次筛选（操作后不重置）；首次进入默认最新期
+  // 恢复上次筛选（操作后不重置）；首次进入默认「全部期」——按周排课靠日期区间定位，不锁某一期
   const AF=window.AF_STATE;
   if(AF){
     ['af_q','af_term','af_cat','af_campus','af_status','af_week'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; });
-  } else if(terms.length){ el('af_term').value=terms[0]; }
+  }
   const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room','af_week','af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
   ['af_q','af_term','af_cat','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=()=>{ saveAF(); renderAssignView(); });
   ['af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2'].forEach(id=>{ if(el(id)) el(id).onchange=()=>{ saveAF(); renderAssignView(); }; });
