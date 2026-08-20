@@ -152,20 +152,47 @@ getRoleByCode(currentCode()).then(r=>{ if(r) el('nav').innerHTML = renderNav('ti
 let COURSES=[], EVENTS=[], curView='month', SELECTED_IDS=new Set(), EXTRA_IDS=new Set(), LANG_IDS=new Set(), TEMPLATES=[], MULTI=false, ALL_TERMS=[], SEL_TERMS=new Set();
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
+/* 每个类别一组同色系颜色，同类别的课轮流取不同色——既分类别又不单调 */
+const CAT_PALETTES={
+  '大学院文科':[{bg:'#dbe8fa',fg:'#1a3a6a'},{bg:'#cfe0f5',fg:'#20406e'},{bg:'#e2edfb',fg:'#284a78'},{bg:'#c7dcf2',fg:'#173257'}],
+  '大学院理科':[{bg:'#d7f0dd',fg:'#1a4a28'},{bg:'#c9ead2',fg:'#17532a'},{bg:'#e0f4e6',fg:'#215c34'},{bg:'#bfe6cb',fg:'#124a24'}],
+  '学部文科':[{bg:'#fbe6d3',fg:'#7a3b12'},{bg:'#f7dcc2',fg:'#8a4418'},{bg:'#fdeede',fg:'#6a3110'},{bg:'#f3d2b0',fg:'#5a2c0e'}],
+  '学部理科':[{bg:'#e7ddf5',fg:'#432a7a'},{bg:'#ddd0f0',fg:'#4a3088'},{bg:'#efe6fa',fg:'#503a90'},{bg:'#d3c2ec',fg:'#3a2470'}],
+  '语言':[{bg:'#fbdcdc',fg:'#8a2b2b'},{bg:'#f7cccc',fg:'#a03636'},{bg:'#fde8e8',fg:'#7a2424'},{bg:'#f3bebe',fg:'#902c2c'}],
+};
 const PALETTE=[
   {bg:'#ddeaf8',fg:'#1a3a6a'},{bg:'#ddf0e0',fg:'#1a4a28'},{bg:'#e8e4f8',fg:'#3a2a7a'},
   {bg:'#faecd8',fg:'#5a3010'},{bg:'#d8f0ea',fg:'#0a4038'},{bg:'#f8e4dc',fg:'#6a2818'},
   {bg:'#e6e2f5',fg:'#40308a'},{bg:'#e0eef0',fg:'#1a5060'},{bg:'#f5e6f0',fg:'#7a2860'},
   {bg:'#eef0da',fg:'#4a5010'},{bg:'#dfe8f5',fg:'#2a3a6a'},{bg:'#ece8e0',fg:'#3a3830'}
 ];
+function catKey(cat){
+  const c=cat||'';
+  if(/大学院.*文/.test(c)) return '大学院文科';
+  if(/大学院.*理/.test(c)) return '大学院理科';
+  if(/学部.*文/.test(c)) return '学部文科';
+  if(/学部.*理/.test(c)) return '学部理科';
+  if(/语言|語学/.test(c)) return '语言';
+  return CAT_PALETTES[c]?c:'';
+}
 let COLORMAP={};
 function buildColorMap(){
   COLORMAP={};
-  // 语言课优先归到一起靠前，其余按出现顺序
-  const names=[...new Set(EVENTS.map(e=>e.c.name))];
-  names.forEach((n,i)=>{ COLORMAP[n]=PALETTE[i%PALETTE.length]; });
+  const counters={};   // 每类别已用几个色
+  const seen=new Set();
+  EVENTS.map(e=>e.c).forEach(c=>{
+    if(!c||seen.has(c.name)) return; seen.add(c.name);
+    const key=catKey(c.category);
+    const grp=CAT_PALETTES[key];
+    if(grp){ const i=counters[key]||0; counters[key]=i+1; COLORMAP[c.name]=grp[i%grp.length]; }
+    else { COLORMAP[c.name]=PALETTE[Object.keys(COLORMAP).length%PALETTE.length]; }
+  });
 }
-function styleOf(name){ const p=COLORMAP[name]||PALETTE[PALETTE.length-1]; return 'background:'+p.bg+';color:'+p.fg; }
+function styleOf(c){
+  const name=(c&&typeof c==='object')?c.name:c;
+  const p=COLORMAP[name]||PALETTE[PALETTE.length-1];
+  return 'background:'+p.bg+';color:'+p.fg;
+}
 function legendHtml(){
   const names=[...new Set(EVENTS.map(e=>e.c.name))];
   if(!names.length) return '';
@@ -475,8 +502,12 @@ async function doPrint(){
     @page{ size:A4 landscape; margin:0; }
     *{ box-sizing:border-box; }
     html,body{ margin:0; padding:0; font-family:'Noto Sans SC',system-ui,sans-serif; color:#2b2822; }
-    .page{ width:297mm; min-height:209mm; page-break-after:always; position:relative; padding:12mm 12mm 10mm; margin:0 auto 6mm; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.12); }
-    .page:last-child{ page-break-after:auto; }
+    .page{ width:297mm; height:200mm; overflow:hidden; position:relative; padding:11mm 12mm; margin:0 auto 6mm; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.12); }
+    @media print{
+      html,body{ width:auto; margin:0; }
+      .page{ margin:0; box-shadow:none; }
+      .page + .page{ break-before:page; }
+    }
     .cover{ padding:0; }
     .cover .bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
     .cover .cin{ position:absolute; inset:0; z-index:1; }
@@ -485,7 +516,7 @@ async function doPrint(){
     .cover .clogo{ height:20mm; margin-bottom:5mm; }
     .cover .ctitle{ font-family:'Noto Serif SC',serif; font-size:40px; font-weight:700; letter-spacing:.05em; margin:0; line-height:1.12; }
     .cover .csub{ font-size:13px; color:#6a655c; margin:0 0 8mm; letter-spacing:.05em; }
-    .cover .cnotes{ font-size:11px; color:#5a5650; line-height:1.95; text-align:left; max-width:180mm; margin:0 auto; }
+    .cover .cnotes{ font-size:11px; color:#5a5650; line-height:2.0; text-align:left; max-width:140mm; margin:0 auto; }
     .cover .cnotes div{ margin-bottom:2mm; padding-left:1.1em; text-indent:-1.1em; }
     .phead{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; border-bottom:1px solid #ddd6c8; padding-bottom:5px; margin-bottom:10px; }
     .phead .ph-title{ font-family:'Noto Serif SC',serif; font-size:14px; font-weight:600; color:#2b2822; white-space:nowrap; }
@@ -570,7 +601,7 @@ function buildMonthPaged(){
       const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
       html+='<td class="'+dc+'"><div class="dn">'+d+'</div>'+
         evs.map(e=>e.off?('<div class="ev off">'+esc(e.c.name)+'<small>休讲/放假</small></div>')
-          :('<div class="ev" style="'+styleOf(e.c.name)+'">'+e.s+'–'+e.e+' '+esc(e.c.name)+(MULTI?'<small>'+esc(campusTag(e.c))+'</small>':'')+'</div>')).join('')+'</td>';
+          :('<div class="ev" style="'+styleOf(e.c)+'">'+e.s+'–'+e.e+' '+esc(e.c.name)+(MULTI?'<small>'+esc(campusTag(e.c))+'</small>':'')+'</div>')).join('')+'</td>';
     });
     html+='</tr></tbody></table></div>';
     blocks.push(html);
@@ -618,7 +649,7 @@ function buildMonth(){
       const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
       const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
       html+='<div class="mcell"><div class="md '+dc+'">'+d+'</div>'+
-        evs.map(e=>e.off?`<div class="ev mini off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev mini" style="${styleOf(e.c.name)}">${e.s}–${e.e} ${esc(e.c.name)}<small>${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        evs.map(e=>e.off?`<div class="ev mini off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev mini" style="${styleOf(e.c)}">${e.s}–${e.e} ${esc(e.c.name)}<small>${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
     });
     html+='</div></div>';
   });
@@ -652,7 +683,7 @@ function buildCal(){
       html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
       dates.forEach(ds=>{
         const evs=map[ds+'|'+sl]||[];
-        html+='<div class="ecell">'+evs.map(e=>e.off?`<div class="ev off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev" style="${styleOf(e.c.name)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        html+='<div class="ecell">'+evs.map(e=>e.off?`<div class="ev off">${esc(e.c.name)}<small>休讲/放假</small></div>`:`<div class="ev" style="${styleOf(e.c)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
       });
     });
     html+='</div></div>';
@@ -671,7 +702,7 @@ function buildSummary(){
     const {c,items}=groups[k]; items.sort((a,b)=>a.date.localeCompare(b.date));
     h+='<div class="grid course-block" style="display:block">';
     h+='<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px">'+
-       `<span class="ev" style="${styleOf(c.name)};padding:2px 10px">${esc(c.name)}</span>`+
+       `<span class="ev" style="${styleOf(c)};padding:2px 10px">${esc(c.name)}</span>`+
        `<span style="font-size:10px;color:var(--tm)">${items.length} 课次${SHARE?'':' · '+esc(c.teacher||'')} · ${esc(campusTag(c))} · ${esc(c.mode)}</span>`+
        (c.meeting_link?` <a href="${esc(c.meeting_link)}" target="_blank" style="font-size:11px;color:#2c7a4a;margin-left:6px">🎦 进入会议${c.meeting_id?('（'+esc(c.meeting_id)+'）'):''}</a>`:'')+`</div>`;
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">';
