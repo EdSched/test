@@ -469,7 +469,7 @@ async function doPrint(){
   const [bgData, logoData] = await Promise.all([toDataURL(base+'back.jpg'), toDataURL(base+'logo.png')]);
 
   // 月历：每月一块，块内 break-inside avoid，块间分页
-  const monthsHtml = buildMonthPaged();
+  // 月历：每月一块，见 buildMonthPaged
 
   const css = `
     @page{ size:A4 landscape; margin:0; }
@@ -490,6 +490,8 @@ async function doPrint(){
     .phead{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; border-bottom:1px solid #ddd6c8; padding-bottom:5px; margin-bottom:10px; }
     .phead .ph-title{ font-family:'Noto Serif SC',serif; font-size:14px; font-weight:600; color:#2b2822; white-space:nowrap; }
     .phead .ph-note{ font-size:11px; color:#6a655c; white-space:pre-wrap; text-align:right; }
+    .sheet{ display:flex; flex-direction:column; }
+    .pfoot{ margin-top:auto; padding-top:6px; text-align:center; font-size:10px; color:#9a958c; border-top:1px solid #ece7db; }
     .mblock{ break-inside:avoid; margin-bottom:6mm; }
     .mtitle{ font-family:'Noto Serif SC',serif; font-size:15px; margin:0 0 6px; color:#2b2822; }
     table.mg{ width:100%; border-collapse:collapse; table-layout:fixed; }
@@ -519,16 +521,26 @@ async function doPrint(){
       '</div>'+
     '</div>';
   const headTitle = [campus, firstTerm, tplName, '课程日历'].filter(Boolean).join(' ');
-  const headHtml = '<div class="phead"><div class="ph-title">'+esc(headTitle)+'</div>'+
-    (headerText?'<div class="ph-note">'+esc(headerText)+'</div>':'')+'</div>';
+  function pageHead(){
+    return '<div class="phead"><div class="ph-title">'+esc(headTitle)+'</div>'+
+      (headerText?'<div class="ph-note">'+esc(headerText)+'</div>':'')+'</div>';
+  }
+  // 每月一页，页眉+页码
+  const monthBlocks = buildMonthPaged();   // 数组，每项是一个月的表格HTML
+  const totalPages = 1 + monthBlocks.length;   // 封面 + 各月
+  let bodyPages = coverPage;
+  monthBlocks.forEach((mhtml, i)=>{
+    const pageNo = i+2;   // 封面是第1页
+    bodyPages += '<div class="page sheet">'+pageHead()+mhtml+
+      '<div class="pfoot">第 '+pageNo+' / '+totalPages+' 页</div></div>';
+  });
   const doc =
     '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>'+esc(coverTitle)+'</title>'+
     '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">'+
     '<style>'+css+'</style></head><body>'+
     '<div class="noprint">预览已生成。按 Ctrl/⌘+P 保存为 PDF；在打印对话框里【关闭「页眉和页脚」】、勾选「背景图形」，纸张选 A4 横向。</div>'+
     '<div style="height:38px" class="noprint"></div>'+
-    coverPage +
-    '<div class="page">'+headHtml+monthsHtml+'</div>'+
+    bodyPages +
     '</body></html>';
   const w=window.open('','_blank');
   if(!w){ toast('浏览器拦截了新窗口，请允许弹窗后重试', false); return; }
@@ -536,15 +548,15 @@ async function doPrint(){
 }
 /* 月历分页版：每月一块，块内不断开 */
 function buildMonthPaged(){
-  if(!EVENTS.length) return '<div style="color:#999">该条件下暂无课程</div>';
+  if(!EVENTS.length) return ['<div style="color:#999">该条件下暂无课程</div>'];
   const byDate={}; EVENTS.forEach(e=>{ (byDate[e.date]=byDate[e.date]||[]).push(e); });
   const months=[...new Set(EVENTS.map(e=>e.date.slice(0,7)))].sort();
-  let html='';
+  const blocks=[];
   months.forEach(mon=>{
     const [y,m]=mon.split('-').map(Number);
     const startCol=(new Date(y,m-1,1).getDay()+6)%7;
     const days=new Date(y,m,0).getDate();
-    html+='<div class="mblock"><div class="mtitle">'+y+'年 '+m+'月</div><table class="mg"><thead><tr>';
+    let html='<div class="mblock"><div class="mtitle">'+y+'年 '+m+'月</div><table class="mg"><thead><tr>';
     ['周一','周二','周三','周四','周五','周六','周日'].forEach((d,i)=>{ const cls=i===5?'sat':i===6?'sun':''; html+='<th class="'+cls+'">'+d+'</th>'; });
     html+='</tr></thead><tbody><tr>';
     const cells=[]; for(let i=0;i<startCol;i++) cells.push(null);
@@ -561,8 +573,9 @@ function buildMonthPaged(){
           :('<div class="ev" style="'+styleOf(e.c.name)+'">'+e.s+'–'+e.e+' '+esc(e.c.name)+(MULTI?'<small>'+esc(campusTag(e.c))+'</small>':'')+'</div>')).join('')+'</td>';
     });
     html+='</tr></tbody></table></div>';
+    blocks.push(html);
   });
-  return html;
+  return blocks;
 }
 function render(){
   const box=el('calBody');
