@@ -247,6 +247,7 @@ function gen(){
   let list=selectedCourses();
   if(SHARE && SHARE_VIEW_TERM) list=list.filter(c=>c.term===SHARE_VIEW_TERM);
   EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
+  EVENTS.push(...holidayMarkers(list));   // 全局假期一天一个横幅
   // 限制日期范围
   if(el('ttLimit') && el('ttLimit').value==='1'){
     const s=el('ttStart').value, e=el('ttEnd').value;
@@ -467,19 +468,35 @@ function expand(c){
   let d=c.start_date, guard=0;
   while(d<=c.end_date && guard++<400){
     if(wds.includes(weekdayOf(d))){
-      const hol=holidayOf(d);
-      if(hol) out.push({date:d, s:c.start_time, e:c.end_time, c, off:true, holiday:hol});   // 假期
-      else if(skip.has(d)) out.push({date:d, s:c.start_time, e:c.end_time, c, off:true});   // 休讲
+      if(holidayOf(d)){ /* 全局假期：课表上不显示这门课，由假期横幅统一标 */ }
+      else if(skip.has(d)) out.push({date:d, s:c.start_time, e:c.end_time, c, off:true});   // 个别休讲
       else out.push({date:d, s:c.start_time, e:c.end_time, c});
     }
     d=addDays(d,1);
   }
   return out;
 }
+/* 全局假期标记：一天一个（含没课的日子），范围取所选课程的整体日期跨度 */
+function holidayMarkers(courses){
+  if(!HOLIDAYS.length) return [];
+  const starts=courses.map(c=>c.start_date).filter(Boolean).sort();
+  const ends=courses.map(c=>c.end_date).filter(Boolean).sort();
+  if(!starts.length||!ends.length) return [];
+  const lo=starts[0], hi=ends[ends.length-1];
+  const seen=new Set(), marks=[];
+  HOLIDAYS.forEach(h=>{
+    let d=h.start_date, e=h.end_date||h.start_date, guard=0;
+    while(d && d<=e && guard++<400){
+      if(d>=lo && d<=hi && !seen.has(d)){ seen.add(d); marks.push({date:d, holiday:h, isHoliday:true}); }
+      d=addDays(d,1);
+    }
+  });
+  return marks;
+}
 function holColor(h){ return h && h.color==='green' ? {bg:'#e2f2e6',fg:'#1f6b3a'} : {bg:'#fbe3e0',fg:'#a5281c'}; }
 function evOffHtml(e, mini){
-  if(e.holiday){ const c=holColor(e.holiday);
-    return '<div class="ev'+(mini?' mini':'')+'" style="background:'+c.bg+';color:'+c.fg+'">'+esc(e.holiday.label||'假期')+'<small>'+esc(e.c.name)+'</small></div>';
+  if(e.isHoliday || e.holiday){ const c=holColor(e.holiday);
+    return '<div class="ev'+(mini?' mini':'')+'" style="background:'+c.bg+';color:'+c.fg+';font-weight:600;text-align:center">'+esc(e.holiday.label||'放假')+'</div>';
   }
   return '<div class="ev'+(mini?' mini':'')+' off">'+esc(e.c.name)+'<small>休讲/放假</small></div>';
 }
@@ -607,9 +624,9 @@ function buildMonthPaged(){
       if(d===null){ html+='<td></td>'; return; }
       const ds=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
       const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
-      const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
+      const evs=(byDate[ds]||[]).sort((a,b)=>((a.isHoliday?"":a.s||"")).localeCompare(b.isHoliday?"":b.s||""));
       html+='<td class="'+dc+'"><div class="dn">'+d+'</div>'+
-        evs.map(e=>e.off?evOffHtml(e,false)
+        evs.map(e=>(e.off||e.isHoliday)?evOffHtml(e,false)
           :('<div class="ev" style="'+styleOf(e.c)+'">'+e.s+'–'+e.e+' '+esc(e.c.name)+(MULTI?'<small>'+esc(campusTag(e.c))+'</small>':'')+'</div>')).join('')+'</td>';
     });
     html+='</tr></tbody></table></div>';
@@ -656,9 +673,9 @@ function buildMonth(){
       if(d===null){ html+='<div class="mcell empty"></div>'; return; }
       const ds=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
       const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
-      const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
+      const evs=(byDate[ds]||[]).sort((a,b)=>((a.isHoliday?"":a.s||"")).localeCompare(b.isHoliday?"":b.s||""));
       html+='<div class="mcell"><div class="md '+dc+'">'+d+'</div>'+
-        evs.map(e=>e.off?evOffHtml(e,true):`<div class="ev mini" style="${styleOf(e.c)}">${e.s}–${e.e} ${esc(e.c.name)}<small>${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        evs.map(e=>(e.off||e.isHoliday)?evOffHtml(e,true):`<div class="ev mini" style="${styleOf(e.c)}">${e.s}–${e.e} ${esc(e.c.name)}<small>${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
     });
     html+='</div></div>';
   });
@@ -692,7 +709,7 @@ function buildCal(){
       html+='<div class="tcell">'+ss+'–\n'+ee+'</div>';
       dates.forEach(ds=>{
         const evs=map[ds+'|'+sl]||[];
-        html+='<div class="ecell">'+evs.map(e=>e.off?evOffHtml(e,false):`<div class="ev" style="${styleOf(e.c)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
+        html+='<div class="ecell">'+evs.map(e=>(e.off||e.isHoliday)?evOffHtml(e,false):`<div class="ev" style="${styleOf(e.c)}">${esc(e.c.name)}<small>${e.s}–${e.e} ${SHARE?'':esc(e.c.teacher||'')}${MULTI?' · '+esc(campusTag(e.c)):''}</small></div>`).join('')+'</div>';
       });
     });
     html+='</div></div>';
