@@ -52,16 +52,22 @@
 @media print{
   #nav,.card.filters,#cal .vt,#calBody{ display:none !important; }
   #cal{ border:none; padding:0; }
-  #printHead{ display:flex; align-items:center; gap:16px; padding:0 0 12px; margin-bottom:16px; border-bottom:2px solid #2c4a8a; }
-  #printHead img{ height:56px; width:auto; }
-  #printHead .pt{ font-family:'Noto Serif SC',serif; font-size:20px; font-weight:600; color:#1a1814; }
-  #printHead .ps{ font-size:11px; color:#5a5650; margin-top:3px; letter-spacing:.03em; }
+  #printHead{ display:none; }
   #printBlock{ display:block !important; }
-  .print-sec{ margin-bottom:20px; }
-  .print-sec > h3{ font-family:'Noto Serif SC',serif; font-size:15px; margin:0 0 10px; color:#2c4a8a; }
+  /* 封面页：back.jpg 铺满 A4 横版，标题+说明居中叠图上 */
+  .cover{ position:relative; width:100%; height:190mm; break-after:page; overflow:hidden; }
+  .cover img.bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .cover .cov-in{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 30mm; }
+  .cover .cov-logo{ height:22mm; width:auto; margin-bottom:8mm; }
+  .cover .cov-title{ font-family:'Noto Serif SC',serif; font-size:26px; font-weight:700; color:#2b2822; letter-spacing:.04em; margin-bottom:2mm; }
+  .cover .cov-sub{ font-size:13px; color:#6a655c; margin-bottom:10mm; letter-spacing:.05em; }
+  .cover .cov-notes{ font-size:11px; color:#5a5650; line-height:1.9; text-align:left; max-width:170mm; }
+  .cover .cov-notes .nt{ margin-bottom:2mm; padding-left:1.2em; text-indent:-1.2em; }
+  .cover .cov-extra{ margin-top:8mm; font-size:11px; color:#7a756c; white-space:pre-wrap; }
+  .print-sec{ margin-bottom:16px; }
+  .print-sec > h3{ font-family:'Noto Serif SC',serif; font-size:15px; margin:0 0 10px; color:#2b2822; }
   .wk{ break-inside:avoid; }
-  .course-block{ break-inside:avoid; }
-  @page{ margin:14mm; }
+  @page{ size: A4 landscape; margin:10mm; }
 }
 #cal .mcell .md{ font-size:10px; color:var(--tm); font-weight:500; }
 #cal .mcell .md.sat{ color:var(--sat); } #cal .mcell .md.sun{ color:var(--sun); }
@@ -91,6 +97,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
       <div class="field"><label>是否含语言课</label><select id="lang"><option value="1">含语言课</option><option value="0">不含</option></select></div>
       <div class="field"><label>校区（可选）</label><select id="campus"></select></div>
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
+      <div class="field" style="flex:1;min-width:200px"><label>附加说明（选填，会出现在封面说明下方）</label><input id="pdfExtra" placeholder="如：本课表更新于X月，仅供参考"></div>
       <div class="field"><label>&nbsp;</label><button class="ghost" id="print">打印 / 存PDF</button></div>
     </div>
     <div class="field" style="margin-top:12px">
@@ -134,7 +141,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
   </div>
 </div>
 
-<script src="logo.js"></script>
+
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('timetable.html');
@@ -440,15 +447,32 @@ function expand(c){
 function campusTag(c){ return c.mode==='线上'?'线上':(c.campus||''); }
 function doPrint(){
   if(!EVENTS.length){ toast('先生成课表再打印', false); return; }
-  const title=(el('major').value||el('cat').value||'全部')+' 课程安排';
-  const meta=[termLabel(), el('campus').value||'全部校区'].filter(Boolean).join(' · ');
-  const logo = window.TRANSFORM_LOGO ? '<img src="'+window.TRANSFORM_LOGO+'" alt="唯新">' : '';
-  el('printHead').innerHTML = logo +
-    '<div><div class="pt">唯新教育 · '+esc(title)+'</div>'+
-    '<div class="ps">'+esc(meta)+' ｜ 生成日期 '+todayStr()+'</div></div>';
-  el('printBlock').innerHTML =
-    '<div class="print-sec"><h3>日历（月历）</h3>'+buildMonth()+'</div>'+
-    '<div class="print-sec" style="break-before:page"><h3>课程详解</h3>'+buildSummary()+'</div>';
+  // 标题：第一个期 + 校区 + 模板名 + 课程表（多期也按第一期显示）
+  const firstTerm = SEL_TERMS.size ? [...SEL_TERMS][0] : '';
+  const campus = el('campus').value || '';
+  const tplName = (el('tplLabel').value||'').trim();
+  const titleParts = [firstTerm, campus, tplName, '课程表'].filter(Boolean);
+  const coverTitle = titleParts.join(' ');
+  const subMeta = SEL_TERMS.size>1 ? ('含 '+[...SEL_TERMS].join('、')) : '';
+  const extra = (el('pdfExtra').value||'').trim();
+  const NOTES = [
+    '上课顺序和具体时间有调整的可能性，若有变动，将会在班级群内通知，一切以群内通知为准。',
+    '校内考系列课程届时会根据同学实际出愿情况详细安排。',
+    '定期面谈、升学规划、出愿材料指导、研究计划书修改等，均为班主任预约制1对1辅导，不显示在课表内。'
+  ];
+  const cover =
+    '<div class="cover">'+
+      '<img class="bg" src="back.jpg" alt="">'+
+      '<div class="cov-in">'+
+        '<img class="cov-logo" src="logo.png" alt="唯新教育">'+
+        '<div class="cov-title">'+esc(coverTitle)+'</div>'+
+        (subMeta?'<div class="cov-sub">'+esc(subMeta)+'</div>':'<div class="cov-sub">唯新教育</div>')+
+        '<div class="cov-notes">'+NOTES.map(n=>'<div class="nt">· '+esc(n)+'</div>').join('')+'</div>'+
+        (extra?'<div class="cov-extra">'+esc(extra)+'</div>':'')+
+      '</div>'+
+    '</div>';
+  el('printBlock').innerHTML = cover +
+    '<div class="print-sec">'+buildMonth()+'</div>';
   window.print();
 }
 function render(){
