@@ -7,14 +7,10 @@
   html,body{ height:100%; margin:0; overflow:hidden; }
   .wrap{ height:100vh; max-width:none; width:100%; padding:6px 14px 4px; box-sizing:border-box; display:flex; flex-direction:column; gap:5px; }
   .wrap > .card{ margin:0; }
-  /* 顶部标题行压扁 */
+  /* 顶部标题+筛选一行 */
   .wrap > div:first-child{ margin-bottom:0 !important; }
-  .wrap > div:first-child h2{ font-size:16px !important; }
-  /* 筛选卡片压扁 */
-  #filterCard{ padding:5px 10px; }
-  #filterCard .row{ margin:0; gap:10px; }
-  #filterCard .field label{ font-size:10px; margin-bottom:1px; }
-  #filterCard .field input,#filterCard .field select,#filterCard .field button{ padding:3px 8px; font-size:13px; }
+  #filterBar .field label{ font-size:10px; margin-bottom:1px; }
+  #filterBar select,#filterBar input,#filterBar button{ padding:3px 8px; font-size:13px; }
   #boardCard{ flex:1; min-height:0; display:flex; padding:5px; }
   .board{ flex:1; min-height:0; overflow:hidden; }
   #gridBox{ height:100%; }
@@ -33,16 +29,14 @@
 </style>
 </head><body>
 <div class="wrap">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-    <h2 style="margin:0;font-size:18px">唯新 · 今日教室课表</h2>
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <h2 style="margin:0;font-size:16px">唯新 · 今日教室课表</h2>
     <span class="muted" id="meta" style="font-size:13px"></span>
-  </div>
-  <div class="card" id="filterCard">
-    <div class="row">
-      <div class="field"><label>校区</label><select id="campus"></select></div>
-      <div class="field"><label>日期</label><input type="date" id="date"></div>
-      <div class="field"><label>&nbsp;</label><button class="ghost sm" id="today">今天</button></div>
-    </div>
+    <span id="filterBar" style="display:inline-flex;align-items:center;gap:10px;margin-left:auto">
+      <span class="field" style="margin:0"><label style="font-size:10px">校区</label><select id="campus"></select></span>
+      <span class="field" style="margin:0"><label style="font-size:10px">日期</label><input type="date" id="date"></span>
+      <button class="ghost sm" id="today" style="align-self:flex-end">今天</button>
+    </span>
   </div>
   <div class="card" id="boardCard"><div class="board" id="gridBox"><div class="muted">加载中…</div></div></div>
   <p class="foot-note">仅显示上课安排。如需教室预约或管理，请使用管理员发放的专属链接。</p>
