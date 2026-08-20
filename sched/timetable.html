@@ -479,11 +479,13 @@ async function doPrint(){
     .page:last-child{ page-break-after:auto; }
     .cover{ padding:0; }
     .cover .bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
-    .cover .cin{ position:absolute; inset:0; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 34mm; }
+    .cover .cin{ position:absolute; inset:0; z-index:1; }
+    .cover .cin-top{ position:absolute; left:0; right:0; bottom:50%; padding:0 34mm 6mm; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+    .cover .cin-bottom{ position:absolute; left:0; right:0; top:50%; padding:7mm 34mm 0; text-align:center; }
     .cover .clogo{ height:20mm; margin-bottom:5mm; }
-    .cover .ctitle{ font-family:'Noto Serif SC',serif; font-size:34px; font-weight:700; letter-spacing:.05em; margin:0 0 3mm; line-height:1.15; }
-    .cover .csub{ font-size:13px; color:#6a655c; margin-bottom:9mm; letter-spacing:.05em; }
-    .cover .cnotes{ font-size:11px; color:#5a5650; line-height:1.95; text-align:left; max-width:180mm; }
+    .cover .ctitle{ font-family:'Noto Serif SC',serif; font-size:40px; font-weight:700; letter-spacing:.05em; margin:0; line-height:1.12; }
+    .cover .csub{ font-size:13px; color:#6a655c; margin:0 0 8mm; letter-spacing:.05em; }
+    .cover .cnotes{ font-size:11px; color:#5a5650; line-height:1.95; text-align:left; max-width:180mm; margin:0 auto; }
     .cover .cnotes div{ margin-bottom:2mm; padding-left:1.1em; text-indent:-1.1em; }
     .phead{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; border-bottom:1px solid #ddd6c8; padding-bottom:5px; margin-bottom:10px; }
     .phead .ph-title{ font-family:'Noto Serif SC',serif; font-size:14px; font-weight:600; color:#2b2822; white-space:nowrap; }
@@ -506,10 +508,14 @@ async function doPrint(){
     '<div class="page cover">'+
       (bgData?'<img class="bg" src="'+bgData+'">':'')+
       '<div class="cin">'+
-        (logoData?'<img class="clogo" src="'+logoData+'">':'')+
-        '<div class="ctitle">'+esc(coverTitle)+'</div>'+
-        '<div class="csub">'+esc(subMeta)+'</div>'+
-        (coverLines.length?('<div class="cnotes">'+coverLines.map(l=>'<div>'+esc(l)+'</div>').join('')+'</div>'):'')+
+        '<div class="cin-top">'+
+          (logoData?'<img class="clogo" src="'+logoData+'">':'')+
+          '<div class="ctitle">'+esc(coverTitle)+'</div>'+
+        '</div>'+
+        '<div class="cin-bottom">'+
+          '<div class="csub">'+esc(subMeta)+'</div>'+
+          (coverLines.length?('<div class="cnotes">'+coverLines.map(l=>'<div>'+esc(l)+'</div>').join('')+'</div>'):'')+
+        '</div>'+
       '</div>'+
     '</div>';
   const headTitle = [campus, firstTerm, tplName, '课程日历'].filter(Boolean).join(' ');
