@@ -97,8 +97,11 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
       <div class="field"><label>是否含语言课</label><select id="lang"><option value="1">含语言课</option><option value="0">不含</option></select></div>
       <div class="field"><label>校区（可选）</label><select id="campus"></select></div>
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
-      <div class="field" style="flex:1;min-width:200px"><label>附加说明（选填，会出现在封面说明下方）</label><input id="pdfExtra" placeholder="如：本课表更新于X月，仅供参考"></div>
-      <div class="field"><label>&nbsp;</label><button class="ghost" id="print">打印 / 存PDF</button></div>
+      <div class="field"><label>&nbsp;</label><button class="ghost" id="print">生成PDF预览</button></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1;min-width:280px"><label>封面说明（每行一条，可自由换行）</label><textarea id="pdfCover" rows="4" placeholder="上课顺序和具体时间有调整的可能性，若有变动，将会在班级群内通知，一切以群内通知为准。&#10;校内考系列课程届时会根据同学实际出愿情况详细安排。&#10;定期面谈、升学规划、出愿材料指导、研究计划书修改等，均为班主任预约制1对1辅导，不显示在课表内。" style="width:100%;font-size:12px;line-height:1.7"></textarea></div>
+      <div class="field" style="flex:1;min-width:220px"><label>页眉说明（每页顶部，选填）</label><textarea id="pdfHeader" rows="4" placeholder="如：唯新教育 · 社会人文课程表 · 2026年10月期" style="width:100%;font-size:12px;line-height:1.7"></textarea></div>
     </div>
     <div class="field" style="margin-top:12px">
       <label>专业/共通课程（点选加入，可多选；不选=该专业全部）</label>
@@ -445,35 +448,111 @@ function expand(c){
   return out;
 }
 function campusTag(c){ return c.mode==='线上'?'线上':(c.campus||''); }
-function doPrint(){
+async function doPrint(){
   if(!EVENTS.length){ toast('先生成课表再打印', false); return; }
-  // 标题：第一个期 + 校区 + 模板名 + 课程表（多期也按第一期显示）
   const firstTerm = SEL_TERMS.size ? [...SEL_TERMS][0] : '';
   const campus = el('campus').value || '';
   const tplName = (el('tplLabel').value||'').trim();
-  const titleParts = [firstTerm, campus, tplName, '课程表'].filter(Boolean);
-  const coverTitle = titleParts.join(' ');
-  const subMeta = SEL_TERMS.size>1 ? ('含 '+[...SEL_TERMS].join('、')) : '';
-  const extra = (el('pdfExtra').value||'').trim();
-  const NOTES = [
-    '上课顺序和具体时间有调整的可能性，若有变动，将会在班级群内通知，一切以群内通知为准。',
-    '校内考系列课程届时会根据同学实际出愿情况详细安排。',
-    '定期面谈、升学规划、出愿材料指导、研究计划书修改等，均为班主任预约制1对1辅导，不显示在课表内。'
-  ];
-  const cover =
-    '<div class="cover">'+
-      '<img class="bg" src="back.jpg" alt="">'+
-      '<div class="cov-in">'+
-        '<img class="cov-logo" src="logo.png" alt="唯新教育">'+
-        '<div class="cov-title">'+esc(coverTitle)+'</div>'+
-        (subMeta?'<div class="cov-sub">'+esc(subMeta)+'</div>':'<div class="cov-sub">唯新教育</div>')+
-        '<div class="cov-notes">'+NOTES.map(n=>'<div class="nt">· '+esc(n)+'</div>').join('')+'</div>'+
-        (extra?'<div class="cov-extra">'+esc(extra)+'</div>':'')+
+  const coverTitle = [firstTerm, campus, tplName, '课程表'].filter(Boolean).join(' ');
+  const subMeta = SEL_TERMS.size>1 ? ('含 '+[...SEL_TERMS].join('、')) : '唯新教育';
+  const coverText = (el('pdfCover')?el('pdfCover').value:'').trim();
+  const headerText = (el('pdfHeader')?el('pdfHeader').value:'').trim();
+  const coverLines = coverText? coverText.split(/\n/).filter(x=>x.trim()) : [];
+
+  // 图片转 base64（内嵌，打印一定显示）
+  const base = location.origin + location.pathname.replace(/[^/]*$/,'');
+  async function toDataURL(url){
+    try{ const r=await fetch(url); const b=await r.blob();
+      return await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b); });
+    }catch(e){ return ''; }
+  }
+  const [bgData, logoData] = await Promise.all([toDataURL(base+'back.jpg'), toDataURL(base+'logo.png')]);
+
+  // 月历：每月一块，块内 break-inside avoid，块间分页
+  const monthsHtml = buildMonthPaged();
+
+  const css = `
+    @page{ size:A4 landscape; margin:0; }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; font-family:'Noto Sans SC',system-ui,sans-serif; color:#2b2822; }
+    .page{ width:297mm; min-height:209mm; page-break-after:always; position:relative; padding:12mm 12mm 10mm; }
+    .page:last-child{ page-break-after:auto; }
+    .cover{ padding:0; }
+    .cover .bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
+    .cover .cin{ position:absolute; inset:0; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 34mm; }
+    .cover .clogo{ height:22mm; margin-bottom:8mm; }
+    .cover .ctitle{ font-family:'Noto Serif SC',serif; font-size:26px; font-weight:700; letter-spacing:.04em; margin-bottom:2mm; }
+    .cover .csub{ font-size:13px; color:#6a655c; margin-bottom:9mm; letter-spacing:.05em; }
+    .cover .cnotes{ font-size:11px; color:#5a5650; line-height:1.95; text-align:left; max-width:180mm; }
+    .cover .cnotes div{ margin-bottom:2mm; padding-left:1.1em; text-indent:-1.1em; }
+    .phead{ font-size:11px; color:#6a655c; border-bottom:1px solid #ddd6c8; padding-bottom:4px; margin-bottom:8px; white-space:pre-wrap; }
+    .mblock{ break-inside:avoid; margin-bottom:6mm; }
+    .mtitle{ font-family:'Noto Serif SC',serif; font-size:15px; margin:0 0 6px; color:#2b2822; }
+    table.mg{ width:100%; border-collapse:collapse; table-layout:fixed; }
+    table.mg th{ background:#f3efe6; font-size:10px; font-weight:600; padding:4px 2px; border:1px solid #e5ded0; color:#6a655c; }
+    table.mg th.sat{ color:#3a6ea5; } table.mg th.sun{ color:#c0504d; }
+    table.mg td{ border:1px solid #ece7db; vertical-align:top; height:26mm; width:14.28%; padding:2px 3px; background:#fff; }
+    table.mg td .dn{ font-size:10px; color:#9a958c; font-weight:600; }
+    table.mg td.sat .dn{ color:#3a6ea5; } table.mg td.sun .dn{ color:#c0504d; }
+    .ev{ border-radius:3px; padding:2px 4px; font-size:9px; line-height:1.3; margin-top:2px; }
+    .ev small{ display:block; font-size:8px; opacity:.72; }
+    .ev.off{ background:#eee; color:#999; text-decoration:line-through; }
+    .noprint{ position:fixed; top:0; left:0; right:0; background:#fff3cd; color:#7a5c00; font-size:13px; padding:8px 14px; text-align:center; z-index:99; }
+    @media print{ .noprint{ display:none; } }
+  `;
+  const coverPage =
+    '<div class="page cover">'+
+      (bgData?'<img class="bg" src="'+bgData+'">':'')+
+      '<div class="cin">'+
+        (logoData?'<img class="clogo" src="'+logoData+'">':'')+
+        '<div class="ctitle">'+esc(coverTitle)+'</div>'+
+        '<div class="csub">'+esc(subMeta)+'</div>'+
+        (coverLines.length?('<div class="cnotes">'+coverLines.map(l=>'<div>'+esc(l)+'</div>').join('')+'</div>'):'')+
       '</div>'+
     '</div>';
-  el('printBlock').innerHTML = cover +
-    '<div class="print-sec">'+buildMonth()+'</div>';
-  window.print();
+  const headHtml = headerText? '<div class="phead">'+esc(headerText)+'</div>' : '';
+  const doc =
+    '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>'+esc(coverTitle)+'</title>'+
+    '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">'+
+    '<style>'+css+'</style></head><body>'+
+    '<div class="noprint">预览已生成。按 Ctrl/⌘+P 保存为 PDF；在打印对话框里【关闭「页眉和页脚」】、勾选「背景图形」，纸张选 A4 横向。</div>'+
+    '<div style="height:38px" class="noprint"></div>'+
+    coverPage +
+    '<div class="page">'+headHtml+monthsHtml+'</div>'+
+    '</body></html>';
+  const w=window.open('','_blank');
+  if(!w){ toast('浏览器拦截了新窗口，请允许弹窗后重试', false); return; }
+  w.document.write(doc); w.document.close();
+}
+/* 月历分页版：每月一块，块内不断开 */
+function buildMonthPaged(){
+  if(!EVENTS.length) return '<div style="color:#999">该条件下暂无课程</div>';
+  const byDate={}; EVENTS.forEach(e=>{ (byDate[e.date]=byDate[e.date]||[]).push(e); });
+  const months=[...new Set(EVENTS.map(e=>e.date.slice(0,7)))].sort();
+  let html='';
+  months.forEach(mon=>{
+    const [y,m]=mon.split('-').map(Number);
+    const startCol=(new Date(y,m-1,1).getDay()+6)%7;
+    const days=new Date(y,m,0).getDate();
+    html+='<div class="mblock"><div class="mtitle">'+y+'年 '+m+'月</div><table class="mg"><thead><tr>';
+    ['周一','周二','周三','周四','周五','周六','周日'].forEach((d,i)=>{ const cls=i===5?'sat':i===6?'sun':''; html+='<th class="'+cls+'">'+d+'</th>'; });
+    html+='</tr></thead><tbody><tr>';
+    const cells=[]; for(let i=0;i<startCol;i++) cells.push(null);
+    for(let d=1;d<=days;d++) cells.push(d);
+    while(cells.length%7) cells.push(null);
+    cells.forEach((d,idx)=>{
+      if(idx>0 && idx%7===0) html+='</tr><tr>';
+      if(d===null){ html+='<td></td>'; return; }
+      const ds=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const w=new Date(y,m-1,d).getDay(); const dc=w===6?'sat':w===0?'sun':'';
+      const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
+      html+='<td class="'+dc+'"><div class="dn">'+d+'</div>'+
+        evs.map(e=>e.off?('<div class="ev off">'+esc(e.c.name)+'<small>休讲/放假</small></div>')
+          :('<div class="ev" style="'+styleOf(e.c.name)+'">'+e.s+'–'+e.e+' '+esc(e.c.name)+'<small>'+(SHARE?'':esc(e.c.teacher||''))+(MULTI?' · '+esc(campusTag(e.c)):'')+'</small></div>')).join('')+'</td>';
+    });
+    html+='</tr></tbody></table></div>';
+  });
+  return html;
 }
 function render(){
   const box=el('calBody');
