@@ -208,6 +208,8 @@ function tabAssign(){
       '<button type="button" class="ghost sm asview" data-v="week">教室周历</button>'+
       '<span id="wkRoomWrap" class="hidden" style="display:inline-flex;gap:6px;align-items:flex-end;margin-left:8px">'+
         '<span class="field" style="margin:0"><label style="font-size:11px">选教室（看它一周占空）</label><select id="af_room" style="min-width:160px"></select></span>'+
+        '<span class="field" style="margin:0"><label style="font-size:11px">定位到某一周（只看那周在上的课）</label><input type="date" id="af_week"></span>'+
+        '<span class="field" style="margin:0"><label style="font-size:11px">&nbsp;</label><button type="button" class="ghost sm" id="af_weekclr">全部周</button></span>'+
       '</span>'+
       '<button type="button" class="ghost sm" id="af_clear" style="margin-left:auto">清空筛选</button>'+
     '</div>'+
@@ -220,10 +222,12 @@ function tabAssign(){
   // 恢复上次筛选（操作后不重置）；首次进入默认最新期
   const AF=window.AF_STATE;
   if(AF){
-    ['af_q','af_term','af_cat','af_campus','af_status'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; });
+    ['af_q','af_term','af_cat','af_campus','af_status','af_week'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; });
   } else if(terms.length){ el('af_term').value=terms[0]; }
-  const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
+  const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room','af_week'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
   ['af_q','af_term','af_cat','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=()=>{ saveAF(); renderAssignView(); });
+  if(el('af_week')) el('af_week').onchange=()=>{ saveAF(); renderAssignView(); };
+  if(el('af_weekclr')) el('af_weekclr').onclick=()=>{ el('af_week').value=''; saveAF(); renderAssignView(); };
   window.AS_VIEW = window.AS_VIEW || 'week';
   function syncRoomPicker(){
     const show = window.AS_VIEW==='week';
@@ -272,6 +276,23 @@ function renderAssignWeek(){
   const assignedSet=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
   const q=(el('af_q').value||'').trim().toLowerCase();
   const term=el('af_term').value, cat=el('af_cat').value;
+  // 定位到某一周：算出该周一~周日范围；未选则不限
+  const weekPick=el('af_week')?el('af_week').value:'';
+  let weekStart=null, weekEnd=null, weekLabel='';
+  if(weekPick){
+    const w=weekdayOf(weekPick); const wnum=(w===0?7:w);
+    weekStart=addDays(weekPick, -(wnum-1)); weekEnd=addDays(weekStart, 6);
+    weekLabel='本周 '+weekStart+' ~ '+weekEnd;
+  }
+  // 某课是否在选定周内上课（无日期的课视为一直在上）
+  const activeInWeek=c=>{
+    if(!weekStart) return true;
+    if(!c.start_date && !c.end_date) return true;
+    if(c.start_date && c.start_date>weekEnd) return false;
+    if(c.end_date && c.end_date<weekStart) return false;
+    return true;
+  };
+  const dateRange=c=>{ if(c.start_date&&c.end_date) return c.start_date.slice(5)+'~'+c.end_date.slice(5); if(c.start_date)return c.start_date.slice(5)+'起'; if(c.end_date)return '至'+c.end_date.slice(5); return '无日期'; };
   function candFor(wd,sl){
     return COURSES.filter(c=>{
       if(assignedSet.has(String(c.id))) return false;
@@ -281,6 +302,7 @@ function renderAssignWeek(){
       if(term && c.term!==term) return false;
       if(cat && c.category!==cat) return false;
       if(!inCampus(c)) return false;
+      if(!activeInWeek(c)) return false;
       if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
       return true;
     });
@@ -302,7 +324,7 @@ function renderAssignWeek(){
   const saveBar = pend.size
     ? `<div style="position:sticky;top:0;z-index:5;background:#eef6ff;border:1px solid #bcdcff;border-radius:8px;padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px"><b>待排 ${pend.size} 门</b><button class="sm" id="wk_save">保存排课到「${esc(room.name)}」</button><button class="ghost sm" id="wk_clear">清空待排</button></div>`+pendList
     : '';
-  let h=saveBar+legend+`<div style="margin-bottom:6px;font-size:13px"><b>${esc(room.name)}</b> <span class="muted">${esc(room.campus)}${room.capacity?(' · '+room.capacity+'人'):''}</span> · <span class="muted" style="font-size:12px">点空格里的课名即可加入待排，可多选，最后统一保存</span></div>`+
+  let h=saveBar+legend+`<div style="margin-bottom:6px;font-size:13px"><b>${esc(room.name)}</b> <span class="muted">${esc(room.campus)}${room.capacity?(' · '+room.capacity+'人'):''}</span>${weekLabel?(' · <span class="badge b-ok">'+esc(weekLabel)+'</span>'):' · <span class="muted" style="font-size:12px">全部周（未定位到具体某周）</span>'}</div>`+
     '<div style="overflow-x:auto"><table style="min-width:820px;table-layout:fixed"><thead><tr><th style="width:78px">时段</th>'+
     WD.map(w=>`<th>${w[1]}</th>`).join('')+'</tr></thead><tbody>';
   slots.forEach(sl=>{
@@ -318,14 +340,14 @@ function renderAssignWeek(){
       h+='<td style="vertical-align:top;padding:3px">';
       // 已排入本教室的课
       taken.forEach(b=>{ const c=COURSES.find(x=>String(x.id)===String(b.course_id))||{}; const cc=catColor(c.category);
-        h+=`<div class="wkcard" data-as="${b.course_id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:6px;padding:4px 6px;font-size:11px;line-height:1.3;margin-bottom:3px"><b>${esc(c.name||'课程')}</b><br>${esc(c.category||'')}</div>`;
+        h+=`<div class="wkcard" data-as="${b.course_id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:6px;padding:4px 6px;font-size:11px;line-height:1.3;margin-bottom:3px"><b>${esc(c.name||'课程')}</b><br>${esc(c.category||'')}<br><span style="font-size:10px;opacity:.75">📅 ${esc(dateRange(c))}</span></div>`;
       });
       // 候选课（可点选加入待排）
       if(!taken.length){
         const cand=candFor(wd,sl);
         if(cand.length){
           cand.forEach(c=>{ const cc=catColor(c.category); const on=pend.has(String(c.id));
-            h+=`<div class="wkpick" data-pick="${c.id}" style="cursor:pointer;background:${on?cc.bg:'#fff'};border:1px ${on?'solid':'dashed'} ${cc.bd};color:${cc.tx};border-radius:6px;padding:3px 6px;font-size:11px;line-height:1.3;margin-bottom:3px">${on?'✓ ':'+ '}<b>${esc(c.name)}</b><br><span style="font-size:10px">${esc(c.category)}·${esc(c.teacher||'')}</span></div>`;
+            h+=`<div class="wkpick" data-pick="${c.id}" style="cursor:pointer;background:${on?cc.bg:'#fff'};border:1px ${on?'solid':'dashed'} ${cc.bd};color:${cc.tx};border-radius:6px;padding:3px 6px;font-size:11px;line-height:1.3;margin-bottom:3px">${on?'✓ ':'+ '}<b>${esc(c.name)}</b><br><span style="font-size:10px">${esc(c.category)}·${esc(c.teacher||'')}</span><br><span style="font-size:10px;opacity:.7">📅 ${esc(dateRange(c))}</span></div>`;
           });
         } else {
           h+='<div style="text-align:center;color:#ccd;font-size:11px;padding:4px 0">—</div>';
