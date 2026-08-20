@@ -206,8 +206,15 @@ function tabAssign(){
       '<div class="field"><label>&nbsp;</label><span class="muted" id="af_count"></span></div>'+
     '</div>'+
     '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:flex-end;flex-wrap:wrap">'+
+      '<button type="button" class="ghost sm asview" data-v="day">按天排课</button>'+
+      '<button type="button" class="ghost sm asview" data-v="week">周历查看</button>'+
       '<button type="button" class="ghost sm asview" data-v="table">表格</button>'+
-      '<button type="button" class="ghost sm asview" data-v="week">教室周历</button>'+
+      '<span id="dayCtrl" class="hidden" style="display:inline-flex;gap:6px;align-items:flex-end;margin-left:8px;flex-wrap:wrap">'+
+        '<span class="field" style="margin:0"><label style="font-size:11px">周几</label><select id="af_wd">'+
+          '<option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option></select></span>'+
+        '<span class="field" style="margin:0"><label style="font-size:11px">日期区间 起</label><input type="date" id="af_dstart"></span>'+
+        '<span class="field" style="margin:0"><label style="font-size:11px">止</label><input type="date" id="af_dend"></span>'+
+      '</span>'+
       '<span id="wkRoomWrap" class="hidden" style="display:inline-flex;gap:6px;align-items:flex-end;margin-left:8px">'+
         '<span class="field" style="margin:0"><label style="font-size:11px">选教室（看它一周占空）</label><select id="af_room" style="min-width:160px"></select></span>'+
         '<span class="field" style="margin:0"><label style="font-size:11px">定位到某一周（只看那周在上的课）</label><input type="date" id="af_week"></span>'+
@@ -226,15 +233,19 @@ function tabAssign(){
   if(AF){
     ['af_q','af_term','af_cat','af_campus','af_status','af_week'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; });
   } else if(terms.length){ el('af_term').value=terms[0]; }
-  const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room','af_week'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
+  const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room','af_week','af_wd','af_dstart','af_dend'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
   ['af_q','af_term','af_cat','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=()=>{ saveAF(); renderAssignView(); });
+  ['af_wd','af_dstart','af_dend'].forEach(id=>{ if(el(id)) el(id).onchange=()=>{ saveAF(); renderAssignView(); }; });
+  if(AF){ ['af_wd','af_dstart','af_dend'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; }); }
   if(el('af_week')) el('af_week').onchange=()=>{ saveAF(); renderAssignView(); };
   if(el('af_weekclr')) el('af_weekclr').onclick=()=>{ el('af_week').value=''; saveAF(); renderAssignView(); };
-  window.AS_VIEW = window.AS_VIEW || 'week';
+  window.AS_VIEW = window.AS_VIEW || 'day';
   function syncRoomPicker(){
-    const show = window.AS_VIEW==='week';
-    el('wkRoomWrap').classList.toggle('hidden', !show);
-    if(show){
+    const isWeek = window.AS_VIEW==='week';
+    const isDay = window.AS_VIEW==='day';
+    el('wkRoomWrap').classList.toggle('hidden', !isWeek);
+    if(el('dayCtrl')) el('dayCtrl').classList.toggle('hidden', !isDay);
+    if(isWeek){
       const campus=el('af_campus').value;
       let rms=ROOMS.filter(r=>r.active!==false && (!campus || r.campus===campus));
       const cur=(window.AF_STATE&&window.AF_STATE.af_room) || (el('af_room')?el('af_room').value:'');
@@ -251,12 +262,98 @@ function tabAssign(){
       syncRoomPicker(); renderAssignView(); };
   });
   el('af_campus').addEventListener('change', ()=>{ saveAF(); syncRoomPicker(); saveAF(); renderAssignView(); });
-  const clr=el('af_clear'); if(clr) clr.onclick=()=>{ window.AF_STATE=null; window.AS_VIEW='week'; tabAssign(); };
+  const clr=el('af_clear'); if(clr) clr.onclick=()=>{ window.AF_STATE=null; window.AS_VIEW='day'; tabAssign(); };
   syncRoomPicker();
   renderAssignView();
 }
 function renderAssignView(){
-  if(window.AS_VIEW==='week') renderAssignWeek(); else renderAssignTable();
+  if(window.AS_VIEW==='week') renderAssignWeek();
+  else if(window.AS_VIEW==='day') renderAssignDay();
+  else renderAssignTable();
+}
+/* 按天两栏：左=时段×教室占空（选校区+周几+日期区间），右=该周几该上的课（可点选排课） */
+function renderAssignDay(){
+  const box=el('assignTable');
+  const campus=el('af_campus').value;
+  const wd=el('af_wd')?el('af_wd').value:'1';
+  const ds=el('af_dstart')?el('af_dstart').value:'';
+  const de=el('af_dend')?el('af_dend').value:'';
+  const term=el('af_term').value, cat=el('af_cat').value, q=(el('af_q').value||'').trim().toLowerCase();
+  if(!campus){ box.innerHTML='<div class="muted">请先在上方选「校区」，再选周几和日期区间。</div>'; return; }
+  const rooms=ROOMS.filter(r=>r.active!==false && r.campus===campus);
+  if(!rooms.length){ box.innerHTML='<div class="muted">该校区没有教室。</div>'; return; }
+  // 某课在选定周几、日期区间内是否“活跃”（用于判断占用/候选）
+  const activeInRange=c=>{
+    if(!(c.weekdays||'').split(',').map(s=>s.trim()).includes(wd)) return false;
+    if(ds && c.end_date && c.end_date<ds) return false;   // 已结课
+    if(de && c.start_date && c.start_date>de) return false; // 还没开课
+    return true;
+  };
+  // 该周几、该校区、该日期区间内在上的课
+  let dayCourses=COURSES.filter(c=>{
+    if(c.campus!==campus && c.campus!=='线上') return false;
+    if(!activeInRange(c)) return false;
+    if(term && c.term!==term) return false;
+    if(cat && c.category!==cat) return false;
+    if(q && !((c.name||'').toLowerCase().includes(q)||(c.teacher||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  // 时段集合
+  const slots=[...new Set(dayCourses.map(c=>(c.start_time||'')+'-'+(c.end_time||'')).filter(x=>x!=='-'))].sort();
+  // 已排：booking kind=course, weekday=wd，其课在区间内活跃
+  const assignedSet=new Set(BOOKINGS.filter(b=>b.kind==='course').map(b=>String(b.course_id)));
+  function occAt(roomId, slot){
+    return BOOKINGS.filter(b=>{
+      if(b.kind!=='course' || String(b.room_id)!==String(roomId)) return false;
+      if(String(b.weekday)!==String(wd)) return false;
+      const c=COURSES.find(x=>String(x.id)===String(b.course_id)); if(!c) return false;
+      if(((c.start_time||'')+'-'+(c.end_time||''))!==slot) return false;
+      if(ds && c.end_date && c.end_date<ds) return false;
+      if(de && c.start_date && c.start_date>de) return false;
+      return true;
+    });
+  }
+  const wdName={'1':'周一','2':'周二','3':'周三','4':'周四','5':'周五','6':'周六','7':'周日'}[wd];
+  // 左栏表格
+  let left='<div style="font-size:13px;margin-bottom:6px"><b>'+esc(campus)+' · '+wdName+'</b> <span class="muted">'+(ds||'…')+' ~ '+(de||'…')+' 的教室占空</span></div>';
+  if(!slots.length){ left+='<div class="muted">该条件下暂无课程时段。</div>'; }
+  else{
+    left+='<div style="overflow-x:auto"><table style="min-width:'+(120+rooms.length*90)+'px;font-size:12px;table-layout:fixed"><thead><tr><th style="width:80px">时段</th>'+
+      rooms.map(r=>`<th style="width:90px">${esc(r.name)}<br><small class="muted">${r.capacity?r.capacity+'人':''}</small></th>`).join('')+'</tr></thead><tbody>';
+    slots.forEach(sl=>{
+      left+=`<tr><td class="muted" style="font-size:11px;white-space:nowrap">${sl}</td>`;
+      rooms.forEach(r=>{
+        const occ=occAt(r.id, sl);
+        if(occ.length){ const c=COURSES.find(x=>String(x.id)===String(occ[0].course_id))||{}; const cc=catColor(c.category);
+          left+=`<td style="padding:2px"><div class="dayocc" data-occ="${occ[0].course_id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:5px;padding:3px 5px;font-size:11px;line-height:1.25"><b>${esc(c.name||'')}</b></div></td>`;
+        } else {
+          left+=`<td style="padding:2px;text-align:center;color:#bfc4cc;font-size:11px">空</td>`;
+        }
+      });
+      left+='</tr>';
+    });
+    left+='</tbody></table></div>';
+  }
+  // 右栏：该周几该上的课（带日期），点选排课
+  const dateRange=c=>{ if(c.start_date&&c.end_date) return c.start_date.slice(5)+'~'+c.end_date.slice(5); if(c.start_date)return c.start_date.slice(5)+'起'; if(c.end_date)return '至'+c.end_date.slice(5); return '无日期'; };
+  let right='<div style="font-size:13px;margin-bottom:6px"><b>'+wdName+' 该上的课</b> <span class="muted">'+dayCourses.length+' 门 · 点课程排入教室</span></div>';
+  if(!dayCourses.length){ right+='<div class="muted">该条件下没有课。</div>'; }
+  else{
+    right+=dayCourses.sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||'')).map(c=>{
+      const done=assignedSet.has(String(c.id)); const cc=catColor(c.category);
+      const rm = done ? (()=>{ const b=BOOKINGS.find(x=>x.kind==='course'&&String(x.course_id)===String(c.id)&&String(x.weekday)===String(wd)); const r=b?ROOMS.find(rr=>String(rr.id)===String(b.room_id)):null; return r?r.name:''; })() : '';
+      return `<div class="daypick" data-pick="${c.id}" style="cursor:pointer;border:1px solid ${done?'#cfe0d3':cc.bd};background:${done?'#f2f8f4':'#fff'};border-radius:7px;padding:7px 9px;margin-bottom:6px">`+
+        `<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:${cc.bg};border:1px solid ${cc.bd};display:inline-block"></span><b style="font-size:13px">${esc(c.name)}</b>`+
+        (done?`<span class="badge b-ok" style="margin-left:auto">已排 ${esc(rm)}</span>`:`<span class="badge b-warn" style="margin-left:auto">未排</span>`)+'</div>'+
+        `<div class="muted" style="font-size:11px;margin-top:3px">${esc(c.category||'')}${c.teacher?' · '+esc(c.teacher):''} · ${c.start_time||''}-${c.end_time||''} · 📅 ${esc(dateRange(c))}</div></div>`;
+    }).join('');
+  }
+  box.innerHTML='<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">'+
+    '<div style="flex:1;min-width:420px">'+left+'</div>'+
+    '<div style="width:340px;max-width:100%">'+right+'</div></div>';
+  // 交互
+  box.querySelectorAll('.daypick').forEach(p=>p.onclick=()=>assignForm(p.dataset.pick));
+  box.querySelectorAll('.dayocc').forEach(o=>o.onclick=()=>assignForm(o.dataset.occ));
 }
 function renderAssignWeek(){
   const campus=el('af_campus').value;
