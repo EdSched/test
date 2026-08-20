@@ -170,10 +170,11 @@ function isCommon(c){ return c && (c.course_type==='共通课' || /共通/.test(
 let COLORMAP={};
 function buildColorMap(){
   COLORMAP={};
-  const names=[...new Set(EVENTS.map(e=>e.c.name))];
+  const courseEvents=EVENTS.filter(e=>e.c);   // 排除假期标记（无课程）
+  const names=[...new Set(courseEvents.map(e=>e.c.name))];
   names.forEach((n,i)=>{ COLORMAP[n]=PALETTE[i%PALETTE.length]; });
   // 共通课统一用专属色，避免和语言课撞
-  EVENTS.map(e=>e.c).forEach(c=>{ if(isCommon(c)) COLORMAP[c.name]=COMMON_COLOR; });
+  courseEvents.map(e=>e.c).forEach(c=>{ if(isCommon(c)) COLORMAP[c.name]=COMMON_COLOR; });
 }
 function styleOf(c){
   const name=(c&&typeof c==='object')?c.name:c;
@@ -181,7 +182,7 @@ function styleOf(c){
   return 'background:'+p.bg+';color:'+p.fg;
 }
 function legendHtml(){
-  const names=[...new Set(EVENTS.map(e=>e.c.name))];
+  const names=[...new Set(EVENTS.filter(e=>e.c).map(e=>e.c.name))];
   if(!names.length) return '';
   return '<div class="legend">'+names.map(n=>'<div class="lg"><i style="'+styleOf(n)+'"></i>'+esc(n)+'</div>').join('')+'</div>';
 }
@@ -254,7 +255,7 @@ function gen(){
     if(s) EVENTS=EVENTS.filter(ev=>ev.date>=s);
     if(e) EVENTS=EVENTS.filter(ev=>ev.date<=e);
   }
-  MULTI = new Set(EVENTS.map(e=>e.c.mode==='线上'?'线上':e.c.campus)).size>1;
+  MULTI = new Set(EVENTS.filter(e=>e.c).map(e=>e.c.mode==='线上'?'线上':e.c.campus)).size>1;
   buildColorMap();
   render();
 }
@@ -684,7 +685,7 @@ function buildMonth(){
 function buildCal(){
   if(!EVENTS.length) return '<div class="muted" style="font-family:inherit">该条件下暂无课程</div>';
   // 全局统一时段行（按开始时间排序）
-  const slots=[...new Set(EVENTS.map(e=>e.s+'–'+e.e))].sort((a,b)=>a.localeCompare(b));
+  const slots=[...new Set(EVENTS.filter(e=>e.c).map(e=>e.s+'–'+e.e))].sort((a,b)=>a.localeCompare(b));
   // 分周
   const weeks={};
   EVENTS.forEach(e=>{ const mon=mondayOf(e.date); (weeks[mon]=weeks[mon]||[]).push(e); });
@@ -720,7 +721,7 @@ function buildSummary(){
   if(!EVENTS.length) return '<div class="muted" style="font-family:inherit">该条件下暂无课程</div>';
   // 按课程分组
   const groups={};
-  EVENTS.forEach(e=>{ (groups[e.c.id]=groups[e.c.id]||{c:e.c,items:[]}).items.push(e); });
+  EVENTS.filter(e=>e.c).forEach(e=>{ (groups[e.c.id]=groups[e.c.id]||{c:e.c,items:[]}).items.push(e); });
   const keys=Object.keys(groups).sort((a,b)=>{
     const da=groups[a].items[0].date, db=groups[b].items[0].date; return da.localeCompare(db); });
   let h='<div style="display:flex;flex-direction:column;gap:1rem">';
