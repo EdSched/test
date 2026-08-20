@@ -578,11 +578,18 @@ function renderAssignTable(){
       `<td>${noDate?'<span class="badge b-warn">缺日期</span>':(c.start_date+' ~ '+c.end_date)}</td>`+
       `<td>${c.est_students||'?'}</td><td>${esc(c.mode)}</td>`+
       `<td>${done?'<span class="badge b-ok">已排 · '+esc(where)+'</span>':'<span class="badge b-mute">未排</span>'}</td>`+
-      `<td><button class="sm" data-as="${c.id}">${done?'重排':'排教室'}</button></td></tr>`;
+      `<td><button class="sm" data-as="${c.id}">${done?'重排':'排教室'}</button>${done?(' <button class="sm ghost" data-clr="'+c.id+'">清空教室</button>'):''}</td></tr>`;
   });
   h+='</tbody></table>';
   el('assignTable').innerHTML=h;
-  bind('[data-as]', id=>assignForm(id));
+  bind('[data-as]', id=>assignRoomOnly(id));
+  bind('[data-clr]', async id=>{
+    const c=COURSES.find(x=>String(x.id)===String(id))||{};
+    if(!confirm('把「'+(c.name||'')+'」清空教室（改回未排）？将删除它的教室占用记录，会议号绑定不受影响。')) return;
+    const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
+    for(const b of bs) await sbDelete('sched_bookings', b.id);
+    await reloadAll(); renderAssignView(); toast('已清空教室，改为未排');
+  });
 }
 /* 按周排课专用：只选教室、直接生成占用，不绑会议账号（账号统一到「会议链接设定」再绑） */
 function assignRoomOnly(courseId){
@@ -615,12 +622,19 @@ function assignRoomOnly(courseId){
       '<div class="field"><label>结课日</label><input type="date" id="aro_ed" value="'+(c.end_date||'')+'"></div></div>';
   }
   h+='<div class="field" style="margin:8px 0"><label>选教室（容量足够）</label><select id="aro_room">'+roomOpts+'</select></div>'+
-    '<div style="display:flex;gap:8px;margin-top:12px"><button id="aro_save">确认排入</button><button class="ghost" id="aro_cancel">取消</button></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px"><button id="aro_save">确认排入</button>'+
+    (ex?'<button class="danger" id="aro_clear">清空教室（改回未排）</button>':'')+
+    '<button class="ghost" id="aro_cancel">取消</button></div>'+
     '<p class="muted" style="font-size:12px;margin-top:8px">只排教室，不绑会议号。排完可继续排下一门，最后统一去「会议链接设定」绑定会议号。</p>'+
     '</div></div>';
   const wrap=document.createElement('div'); wrap.innerHTML=h; document.body.appendChild(wrap.firstChild);
   el('aro_cancel').onclick=()=>document.getElementById('aroMask').remove();
   document.getElementById('aroMask').onclick=(ev)=>{ if(ev.target.id==='aroMask') ev.target.remove(); };
+  if(el('aro_clear')) el('aro_clear').onclick=async()=>{
+    if(!confirm('把「'+c.name+'」清空教室（改回未排）？将删除它的教室占用记录。')) return;
+    for(const o of existing) await sbDelete('sched_bookings', o.id);
+    await reloadAll(); document.getElementById('aroMask').remove(); renderAssignView(); toast('已清空教室，改为未排');
+  };
   el('aro_save').onclick=async()=>{
     const roomId=el('aro_room').value; if(!roomId){ toast('请选教室', false); return; }
     let sd=c.start_date, ed=c.end_date;
