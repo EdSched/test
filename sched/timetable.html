@@ -475,17 +475,19 @@ async function doPrint(){
     @page{ size:A4 landscape; margin:0; }
     *{ box-sizing:border-box; }
     html,body{ margin:0; padding:0; font-family:'Noto Sans SC',system-ui,sans-serif; color:#2b2822; }
-    .page{ width:297mm; min-height:209mm; page-break-after:always; position:relative; padding:12mm 12mm 10mm; }
+    .page{ width:297mm; min-height:209mm; page-break-after:always; position:relative; padding:12mm 12mm 10mm; margin:0 auto 6mm; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.12); }
     .page:last-child{ page-break-after:auto; }
     .cover{ padding:0; }
     .cover .bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
     .cover .cin{ position:absolute; inset:0; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 34mm; }
-    .cover .clogo{ height:22mm; margin-bottom:8mm; }
-    .cover .ctitle{ font-family:'Noto Serif SC',serif; font-size:26px; font-weight:700; letter-spacing:.04em; margin-bottom:2mm; }
+    .cover .clogo{ height:20mm; margin-bottom:5mm; }
+    .cover .ctitle{ font-family:'Noto Serif SC',serif; font-size:34px; font-weight:700; letter-spacing:.05em; margin:0 0 3mm; line-height:1.15; }
     .cover .csub{ font-size:13px; color:#6a655c; margin-bottom:9mm; letter-spacing:.05em; }
     .cover .cnotes{ font-size:11px; color:#5a5650; line-height:1.95; text-align:left; max-width:180mm; }
     .cover .cnotes div{ margin-bottom:2mm; padding-left:1.1em; text-indent:-1.1em; }
-    .phead{ font-size:11px; color:#6a655c; border-bottom:1px solid #ddd6c8; padding-bottom:4px; margin-bottom:8px; white-space:pre-wrap; }
+    .phead{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; border-bottom:1px solid #ddd6c8; padding-bottom:5px; margin-bottom:10px; }
+    .phead .ph-title{ font-family:'Noto Serif SC',serif; font-size:14px; font-weight:600; color:#2b2822; white-space:nowrap; }
+    .phead .ph-note{ font-size:11px; color:#6a655c; white-space:pre-wrap; text-align:right; }
     .mblock{ break-inside:avoid; margin-bottom:6mm; }
     .mtitle{ font-family:'Noto Serif SC',serif; font-size:15px; margin:0 0 6px; color:#2b2822; }
     table.mg{ width:100%; border-collapse:collapse; table-layout:fixed; }
@@ -510,7 +512,9 @@ async function doPrint(){
         (coverLines.length?('<div class="cnotes">'+coverLines.map(l=>'<div>'+esc(l)+'</div>').join('')+'</div>'):'')+
       '</div>'+
     '</div>';
-  const headHtml = headerText? '<div class="phead">'+esc(headerText)+'</div>' : '';
+  const headTitle = [campus, firstTerm, tplName, '课程日历'].filter(Boolean).join(' ');
+  const headHtml = '<div class="phead"><div class="ph-title">'+esc(headTitle)+'</div>'+
+    (headerText?'<div class="ph-note">'+esc(headerText)+'</div>':'')+'</div>';
   const doc =
     '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>'+esc(coverTitle)+'</title>'+
     '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">'+
@@ -548,7 +552,7 @@ function buildMonthPaged(){
       const evs=(byDate[ds]||[]).sort((a,b)=>a.s.localeCompare(b.s));
       html+='<td class="'+dc+'"><div class="dn">'+d+'</div>'+
         evs.map(e=>e.off?('<div class="ev off">'+esc(e.c.name)+'<small>休讲/放假</small></div>')
-          :('<div class="ev" style="'+styleOf(e.c.name)+'">'+e.s+'–'+e.e+' '+esc(e.c.name)+'<small>'+(SHARE?'':esc(e.c.teacher||''))+(MULTI?' · '+esc(campusTag(e.c)):'')+'</small></div>')).join('')+'</td>';
+          :('<div class="ev" style="'+styleOf(e.c.name)+'">'+e.s+'–'+e.e+' '+esc(e.c.name)+(MULTI?'<small>'+esc(campusTag(e.c))+'</small>':'')+'</div>')).join('')+'</td>';
     });
     html+='</tr></tbody></table></div>';
   });
