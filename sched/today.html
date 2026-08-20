@@ -3,6 +3,26 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>唯新 · 今日教室课表</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  html,body{ height:100%; margin:0; overflow:hidden; }
+  .wrap{ height:100vh; max-width:none; width:100%; padding:12px 18px 8px; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; }
+  .wrap > .card{ margin:0; }
+  #boardCard{ flex:1; min-height:0; display:flex; padding:6px; }
+  .board{ flex:1; min-height:0; overflow:hidden; }
+  #gridBox{ height:100%; }
+  /* 表格撑满可用高度，行均分——一屏显示完，不用滚动 */
+  #gridBox table{ width:100%; height:100%; table-layout:fixed; border-collapse:collapse; }
+  #gridBox th,#gridBox td{ border:1px solid var(--line); }
+  #gridBox thead th{ font-size:15px; padding:6px 4px; }
+  #gridBox thead th small{ font-size:11px; }
+  #gridBox td.tcol,#gridBox th.tcol{ width:78px; font-size:13px; color:var(--sub); white-space:nowrap; }
+  #gridBox td{ text-align:center; vertical-align:middle; }
+  #gridBox .occ-in{ font-size:15px; font-weight:600; line-height:1.25; }
+  #gridBox .occ-in small{ display:block; font-size:12px; font-weight:400; opacity:.8; }
+  #gridBox .freetag{ font-size:12px; color:#c8ccd2; }
+  .foot-note{ font-size:11px; text-align:center; color:var(--sub); margin:0; }
+  @media (max-width:900px){ html,body{ overflow:auto; } .wrap{ height:auto; } #boardCard{ display:block; } #gridBox{ height:auto; } #gridBox table{ height:auto; } }
+</style>
 </head><body>
 <div class="wrap">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -16,8 +36,8 @@
       <div class="field"><label>&nbsp;</label><button class="ghost sm" id="today">今天</button></div>
     </div>
   </div>
-  <div class="card"><div class="board" id="gridBox"><div class="muted">加载中…</div></div></div>
-  <p class="muted" style="font-size:12px;text-align:center">仅显示上课安排。如需教室预约或管理，请使用管理员发放的专属链接。</p>
+  <div class="card" id="boardCard"><div class="board" id="gridBox"><div class="muted">加载中…</div></div></div>
+  <p class="foot-note">仅显示上课安排。如需教室预约或管理，请使用管理员发放的专属链接。</p>
 </div>
 <script src="common.js"></script>
 <script>
