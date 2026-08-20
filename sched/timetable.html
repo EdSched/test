@@ -99,6 +99,12 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
       <div class="field"><label>&nbsp;</label><button id="go">生成课表</button></div>
       <div class="field"><label>&nbsp;</label><button class="ghost" id="print">生成PDF预览</button></div>
     </div>
+    <div class="row" style="margin-top:8px;align-items:flex-end">
+      <div class="field"><label>限制日期范围</label><select id="ttLimit"><option value="0">不限（全部）</option><option value="1">只看某段时间</option></select></div>
+      <div class="field ttRange hidden"><label>起</label><input type="date" id="ttStart"></div>
+      <div class="field ttRange hidden"><label>止</label><input type="date" id="ttEnd"></div>
+      <div class="field ttRange hidden"><label>&nbsp;</label><span class="muted" style="font-size:12px">只生成这段时间内在上的课，跨度大时更清爽</span></div>
+    </div>
     <div class="row" style="margin-top:8px">
       <div class="field" style="flex:1;min-width:280px"><label>封面说明（每行一条，可自由换行）</label><textarea id="pdfCover" rows="4" placeholder="上课顺序和具体时间有调整的可能性，若有变动，将会在班级群内通知，一切以群内通知为准。&#10;校内考系列课程届时会根据同学实际出愿情况详细安排。&#10;定期面谈、升学规划、出愿材料指导、研究计划书修改等，均为班主任预约制1对1辅导，不显示在课表内。" style="width:100%;font-size:12px;line-height:1.7"></textarea></div>
       <div class="field" style="flex:1;min-width:220px"><label>页眉说明（每页顶部，选填）</label><textarea id="pdfHeader" rows="4" placeholder="如：唯新教育 · 社会人文课程表 · 2026年10月期" style="width:100%;font-size:12px;line-height:1.7"></textarea></div>
@@ -215,6 +221,7 @@ async function boot(){
   el('x_major').onchange=refreshExtraList;
   el('x_q').oninput=refreshExtraList;
   el('go').onclick=gen; el('print').onclick=doPrint;
+  if(el('ttLimit')) el('ttLimit').onchange=()=>{ document.querySelectorAll('.ttRange').forEach(x=>x.classList.toggle('hidden', el('ttLimit').value!=='1')); };
   el('tplSave').onclick=saveTpl; el('tplDel').onclick=delTpl; el('tpl').onchange=loadTpl;
   await fillTplSelect();
   fillMajors(); fillXMajors(); refreshCourseTags(); refreshExtraList();
@@ -240,6 +247,12 @@ function gen(){
   let list=selectedCourses();
   if(SHARE && SHARE_VIEW_TERM) list=list.filter(c=>c.term===SHARE_VIEW_TERM);
   EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
+  // 限制日期范围
+  if(el('ttLimit') && el('ttLimit').value==='1'){
+    const s=el('ttStart').value, e=el('ttEnd').value;
+    if(s) EVENTS=EVENTS.filter(ev=>ev.date>=s);
+    if(e) EVENTS=EVENTS.filter(ev=>ev.date<=e);
+  }
   MULTI = new Set(EVENTS.map(e=>e.c.mode==='线上'?'线上':e.c.campus)).size>1;
   buildColorMap();
   render();
