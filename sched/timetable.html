@@ -152,41 +152,22 @@ getRoleByCode(currentCode()).then(r=>{ if(r) el('nav').innerHTML = renderNav('ti
 let COURSES=[], EVENTS=[], curView='month', SELECTED_IDS=new Set(), EXTRA_IDS=new Set(), LANG_IDS=new Set(), TEMPLATES=[], MULTI=false, ALL_TERMS=[], SEL_TERMS=new Set();
 const DOW=['周日','周一','周二','周三','周四','周五','周六'];
 
-/* 每个类别一组同色系颜色，同类别的课轮流取不同色——既分类别又不单调 */
-const CAT_PALETTES={
-  '大学院文科':[{bg:'#dbe8fa',fg:'#1a3a6a'},{bg:'#cfe0f5',fg:'#20406e'},{bg:'#e2edfb',fg:'#284a78'},{bg:'#c7dcf2',fg:'#173257'}],
-  '大学院理科':[{bg:'#d7f0dd',fg:'#1a4a28'},{bg:'#c9ead2',fg:'#17532a'},{bg:'#e0f4e6',fg:'#215c34'},{bg:'#bfe6cb',fg:'#124a24'}],
-  '学部文科':[{bg:'#fbe6d3',fg:'#7a3b12'},{bg:'#f7dcc2',fg:'#8a4418'},{bg:'#fdeede',fg:'#6a3110'},{bg:'#f3d2b0',fg:'#5a2c0e'}],
-  '学部理科':[{bg:'#e7ddf5',fg:'#432a7a'},{bg:'#ddd0f0',fg:'#4a3088'},{bg:'#efe6fa',fg:'#503a90'},{bg:'#d3c2ec',fg:'#3a2470'}],
-  '语言':[{bg:'#fbdcdc',fg:'#8a2b2b'},{bg:'#f7cccc',fg:'#a03636'},{bg:'#fde8e8',fg:'#7a2424'},{bg:'#f3bebe',fg:'#902c2c'}],
-};
 const PALETTE=[
   {bg:'#ddeaf8',fg:'#1a3a6a'},{bg:'#ddf0e0',fg:'#1a4a28'},{bg:'#e8e4f8',fg:'#3a2a7a'},
   {bg:'#faecd8',fg:'#5a3010'},{bg:'#d8f0ea',fg:'#0a4038'},{bg:'#f8e4dc',fg:'#6a2818'},
   {bg:'#e6e2f5',fg:'#40308a'},{bg:'#e0eef0',fg:'#1a5060'},{bg:'#f5e6f0',fg:'#7a2860'},
   {bg:'#eef0da',fg:'#4a5010'},{bg:'#dfe8f5',fg:'#2a3a6a'},{bg:'#ece8e0',fg:'#3a3830'}
 ];
-function catKey(cat){
-  const c=cat||'';
-  if(/大学院.*文/.test(c)) return '大学院文科';
-  if(/大学院.*理/.test(c)) return '大学院理科';
-  if(/学部.*文/.test(c)) return '学部文科';
-  if(/学部.*理/.test(c)) return '学部理科';
-  if(/语言|語学/.test(c)) return '语言';
-  return CAT_PALETTES[c]?c:'';
-}
+// 共通课专属色（靛蓝，明显区别于语言课的绿）
+const COMMON_COLOR={bg:'#e3e0f7',fg:'#332a78'};
+function isCommon(c){ return c && (c.course_type==='共通课' || /共通/.test(c.name||'')); }
 let COLORMAP={};
 function buildColorMap(){
   COLORMAP={};
-  const counters={};   // 每类别已用几个色
-  const seen=new Set();
-  EVENTS.map(e=>e.c).forEach(c=>{
-    if(!c||seen.has(c.name)) return; seen.add(c.name);
-    const key=catKey(c.category);
-    const grp=CAT_PALETTES[key];
-    if(grp){ const i=counters[key]||0; counters[key]=i+1; COLORMAP[c.name]=grp[i%grp.length]; }
-    else { COLORMAP[c.name]=PALETTE[Object.keys(COLORMAP).length%PALETTE.length]; }
-  });
+  const names=[...new Set(EVENTS.map(e=>e.c.name))];
+  names.forEach((n,i)=>{ COLORMAP[n]=PALETTE[i%PALETTE.length]; });
+  // 共通课统一用专属色，避免和语言课撞
+  EVENTS.map(e=>e.c).forEach(c=>{ if(isCommon(c)) COLORMAP[c.name]=COMMON_COLOR; });
 }
 function styleOf(c){
   const name=(c&&typeof c==='object')?c.name:c;
