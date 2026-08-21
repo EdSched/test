@@ -101,7 +101,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
     </div>
     <div class="row" style="margin-top:8px;align-items:flex-end">
       <div class="field"><label>限制日期范围</label><select id="ttLimit"><option value="0">不限（全部）</option><option value="1">只看某段时间</option></select></div>
-      <div class="field"><label>课表页显示课程小标</label><select id="ttLegend"><option value="0">不显示</option><option value="1">显示</option></select></div>
+      <div class="field"><label>封面显示课程小标</label><select id="ttLegend"><option value="1">显示</option><option value="0">不显示</option></select></div>
       <div class="field ttRange hidden"><label>起</label><input type="date" id="ttStart"></div>
       <div class="field ttRange hidden"><label>止</label><input type="date" id="ttEnd"></div>
       <div class="field ttRange hidden"><label>&nbsp;</label><span class="muted" style="font-size:12px">只生成这段时间内在上的课，跨度大时更清爽</span></div>
@@ -546,7 +546,7 @@ async function doPrint(){
   const legendSeen=new Set(), legendItems=[];
   EVENTS.filter(e=>e.c).forEach(e=>{ const nm=e.c.merge_name||e.c.name; if(legendSeen.has(nm))return; legendSeen.add(nm);
     legendItems.push('<span class="cleg"><i style="'+styleOf(e.c)+'"></i>'+esc(nm)+'</span>'); });
-  const coverLegend = legendItems.length ? ('<div class="cleg-wrap">'+legendItems.join('')+'</div>') : '';
+  const coverLegend = (legendItems.length && el('ttLegend') && el('ttLegend').value==='1') ? ('<div class="cleg-wrap">'+legendItems.join('')+'</div>') : '';
   const headerText = (el('pdfHeader')?el('pdfHeader').value:'').trim();
   const coverLines = coverText? coverText.split(/\n/).filter(x=>x.trim()) : [];
 
@@ -628,15 +628,13 @@ async function doPrint(){
     return '<div class="phead"><div class="ph-title">'+esc(headTitle)+'</div>'+
       (headerText?'<div class="ph-note">'+esc(headerText)+'</div>':'')+'</div>';
   }
-  // 每月一页，页眉+页码；可选课程小标
-  const showLegend = el('ttLegend') && el('ttLegend').value==='1' && coverLegend;
-  const pageLegend = showLegend ? '<div class="page-legend">'+legendItems.join('')+'</div>' : '';
+  // 每月一页，页眉+页码
   const monthBlocks = buildMonthPaged();   // 数组，每项是一个月的表格HTML
   const totalPages = 1 + monthBlocks.length;   // 封面 + 各月
   let bodyPages = coverPage;
   monthBlocks.forEach((mhtml, i)=>{
     const pageNo = i+2;   // 封面是第1页
-    bodyPages += '<div class="page sheet">'+pageHead()+pageLegend+mhtml+
+    bodyPages += '<div class="page sheet">'+pageHead()+mhtml+
       '<div class="pfoot">第 '+pageNo+' / '+totalPages+' 页</div></div>';
   });
   const doc =
