@@ -247,7 +247,12 @@ function enterShareMode(t){
 function gen(){
   let list=selectedCourses();
   if(SHARE && SHARE_VIEW_TERM) list=list.filter(c=>c.term===SHARE_VIEW_TERM);
-  EVENTS=[]; list.forEach(c=>EVENTS.push(...expand(c)));
+  EVENTS=[];
+  // 合并组按顺序轮流出现；非合并课正常展开
+  const groups={}, singles=[];
+  list.forEach(c=>{ if(c.merge_group){ (groups[c.merge_group]=groups[c.merge_group]||[]).push(c); } else singles.push(c); });
+  singles.forEach(c=>EVENTS.push(...expand(c)));
+  Object.values(groups).forEach(gc=>EVENTS.push(...expandMergedGroup(gc)));
   EVENTS.push(...holidayMarkers(list));   // 全局假期一天一个横幅
   // 限制日期范围
   if(el('ttLimit') && el('ttLimit').value==='1'){
@@ -472,6 +477,34 @@ function expand(c){
       if(holidayOf(d)){ /* 全局假期：课表上不显示这门课，由假期横幅统一标 */ }
       else if(skip.has(d)) out.push({date:d, s:c.start_time, e:c.end_time, c, off:true});   // 个别休讲
       else out.push({date:d, s:c.start_time, e:c.end_time, c});
+    }
+    d=addDays(d,1);
+  }
+  return out;
+}
+/* 合并组：同周几/时段，按 merge_order 在连续上课日轮流出现（第1个上课日=order1，第2个=order2…循环） */
+function expandMergedGroup(gc){
+  const out=[];
+  const grp=gc.slice().sort((a,b)=>(a.merge_order||99)-(b.merge_order||99));
+  const ref=grp[0];
+  if(!ref.weekdays||!ref.start_time) return out;
+  const wds=ref.weekdays.split(',').map(Number);
+  const starts=grp.map(c=>c.start_date).filter(Boolean).sort();
+  const ends=grp.map(c=>c.end_date).filter(Boolean).sort();
+  if(!starts.length||!ends.length) return out;
+  const lo=starts[0], hi=ends[ends.length-1];
+  let d=lo, guard=0, idx=0;
+  while(d<=hi && guard++<500){
+    if(wds.includes(weekdayOf(d))){
+      const cur=grp[idx % grp.length];   // 轮到哪门课
+      idx++;
+      const inRange=(!cur.start_date||d>=cur.start_date)&&(!cur.end_date||d<=cur.end_date);
+      if(inRange){
+        const skip=new Set((cur.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
+        if(holidayOf(d)){ /* 假期由横幅统一标，课不显示 */ }
+        else if(skip.has(d)) out.push({date:d, s:cur.start_time, e:cur.end_time, c:cur, off:true});
+        else out.push({date:d, s:cur.start_time, e:cur.end_time, c:cur});
+      }
     }
     d=addDays(d,1);
   }
