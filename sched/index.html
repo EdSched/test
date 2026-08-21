@@ -209,6 +209,7 @@ function tabAssign(){
       '<button type="button" class="ghost sm asview" data-v="day">按周排课</button>'+
       '<button type="button" class="ghost sm asview" data-v="table">表格</button>'+
       '<span id="dayCtrl" class="hidden" style="display:inline-flex;gap:6px;align-items:flex-end;margin-left:8px;flex-wrap:wrap">'+
+        '<span class="field" style="margin:0"><label style="font-size:11px">课程类型</label><select id="af_mode"><option value="offline">线下课（按校区排教室）</option><option value="online">线上课</option></select></span>'+
         '<span class="field" style="margin:0"><label style="font-size:11px">周几</label><select id="af_wd">'+
           '<option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option></select></span>'+
         '<span class="field" style="margin:0"><label style="font-size:11px">日期区间 起</label><input type="date" id="af_dstart"></span>'+
@@ -234,16 +235,16 @@ function tabAssign(){
   const terms=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort().reverse();
   fillSelect(el('af_term'), terms, v=>v, v=>v, '全部期');
   fillSelect(el('af_cat'), CATEGORIES, v=>v, v=>v, '全部类别');
-  fillSelect(el('af_campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
+  fillSelect(el('af_campus'), ['高马','市谷'], v=>v, v=>v, '全部校区');
   // 恢复上次筛选（操作后不重置）；首次进入默认「全部期」——按周排课靠日期区间定位，不锁某一期
   const AF=window.AF_STATE;
   if(AF){
     ['af_q','af_term','af_cat','af_campus','af_status','af_week'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; });
   }
-  const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room','af_week','af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
+  const saveAF=()=>{ window.AF_STATE={}; ['af_q','af_term','af_cat','af_campus','af_status','af_room','af_week','af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2','af_mode'].forEach(id=>{ if(el(id)) window.AF_STATE[id]=el(id).value; }); };
   ['af_q','af_term','af_cat','af_status'].forEach(id=>el(id)[id==='af_q'?'oninput':'onchange']=()=>{ saveAF(); renderAssignView(); });
-  ['af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2'].forEach(id=>{ if(el(id)) el(id).onchange=()=>{ saveAF(); renderAssignView(); }; });
-  if(AF){ ['af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; }); }
+  ['af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2','af_mode'].forEach(id=>{ if(el(id)) el(id).onchange=()=>{ saveAF(); renderAssignView(); }; });
+  if(AF){ ['af_wd','af_dstart','af_dend','af_wd2','af_dstart2','af_dend2','af_mode'].forEach(id=>{ if(AF[id]!=null && el(id)) el(id).value=AF[id]; }); }
   if(el('af_addrange')) el('af_addrange').onclick=()=>{ el('dayCtrl2').classList.remove('hidden'); window.AF_RANGE2=true; renderAssignView(); };
   if(el('af_delrange')) el('af_delrange').onclick=()=>{ el('dayCtrl2').classList.add('hidden'); window.AF_RANGE2=false; renderAssignView(); };
   if(window.AF_RANGE2 && el('dayCtrl2')) el('dayCtrl2').classList.remove('hidden');
@@ -278,7 +279,8 @@ function renderAssignDay(){
   const ds=el('af_dstart')?el('af_dstart').value:'';
   const de=el('af_dend')?el('af_dend').value:'';
   const term=el('af_term').value, cat=el('af_cat').value, q=(el('af_q').value||'').trim().toLowerCase();
-  if(!campus){ box.innerHTML='<div class="muted">请先在上方选「校区」，再选周几和日期区间。</div>'; return; }
+  const isOnline = el('af_mode') && el('af_mode').value==='online';
+  if(!campus){ box.innerHTML='<div class="muted">请先在上方选「校区」（线上课占教室时也需要选校区教室），再选周几和日期区间。</div>'; return; }
   const rooms=ROOMS.filter(r=>r.active!==false && r.campus===campus);
   if(!rooms.length){ box.innerHTML='<div class="muted">该校区没有教室。</div>'; return; }
   // 某课在选定周几、日期区间内是否“活跃”（用于判断占用/候选）
@@ -288,10 +290,11 @@ function renderAssignDay(){
     if(de && c.start_date && c.start_date>de) return false; // 还没开课
     return true;
   };
-  // 该周几、该校区、该日期区间内在上的课（排除线上课——线上不占教室）
+  // 线下模式：读该校区线下课；线上模式：只读线上课（不管原校区）
   let dayCourses=COURSES.filter(c=>{
-    if(c.mode==='线上' || c.campus==='线上') return false;   // 线上课不进教室安排
-    if(c.campus!==campus) return false;
+    const online = c.mode==='线上' || c.campus==='线上';
+    if(isOnline){ if(!online) return false; }
+    else { if(online) return false; if(c.campus!==campus) return false; }
     if(!activeInRange(c)) return false;
     if(term && c.term!==term) return false;
     if(cat && c.category!==cat) return false;
@@ -599,7 +602,7 @@ function renderAssignTable(){
 /* 按周排课专用：只选教室、直接生成占用，不绑会议账号（账号统一到「会议链接设定」再绑） */
 function assignRoomOnly(courseId){
   const c=COURSES.find(x=>String(x.id)===String(courseId)); if(!c) return;
-  if(c.mode==='线上'||c.campus==='线上'){ toast('线上课不占教室', false); return; }
+  const isOnlineCourse = c.mode==='线上'||c.campus==='线上';
   // 合并组：整组共用一间教室，一起排/一起清
   const groupCourses = c.merge_group ? COURSES.filter(x=>x.merge_group===c.merge_group) : [c];
   const groupIds = groupCourses.map(x=>String(x.id));
@@ -615,7 +618,9 @@ function assignRoomOnly(courseId){
       overlap(c.start_time,c.end_time,b.start_time,b.end_time) &&
       !(c.end_date&&b.start_date&&c.end_date<b.start_date) &&
       !(c.start_date&&b.end_date&&c.start_date>b.end_date) ));
-  let cand=ROOMS.filter(r=>r.active!==false && r.campus===c.campus);
+  // 线上课占教室时，用当前筛选的校区（高马/市谷）的教室；线下课用课程自己的校区
+  const roomCampus = isOnlineCourse ? (el('af_campus')?el('af_campus').value:'') : c.campus;
+  let cand=ROOMS.filter(r=>r.active!==false && r.campus===roomCampus);
   if(c.est_students) cand=cand.filter(r=>!r.capacity || r.capacity>=c.est_students);
   const roomOpts = cand.length
     ? cand.map(r=>{ const free=roomFree(r); const sel=ex&&String(ex.room_id)===String(r.id)?' selected':'';
@@ -631,14 +636,32 @@ function assignRoomOnly(courseId){
       '<div class="field"><label>结课日</label><input type="date" id="aro_ed" value="'+(c.end_date||'')+'"></div></div>';
   }
   h+='<div class="field" style="margin:8px 0"><label>选教室（容量足够）</label><select id="aro_room">'+roomOpts+'</select></div>'+
-    '<div style="display:flex;gap:8px;margin-top:12px"><button id="aro_save">确认排入</button>'+
+    '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button id="aro_save">'+(isOnlineCourse?'占用此教室':'确认排入')+'</button>'+
+    (isOnlineCourse?'<button class="ghost" id="aro_noroom">不安排教室（仅腾讯会议）</button>':'')+
     (ex?'<button class="danger" id="aro_clear">清空教室（改回未排）</button>':'')+
     '<button class="ghost" id="aro_cancel">取消</button></div>'+
-    '<p class="muted" style="font-size:12px;margin-top:8px">只排教室，不绑会议号。排完可继续排下一门，最后统一去「会议链接设定」绑定会议号。</p>'+
+    '<p class="muted" style="font-size:12px;margin-top:8px">'+(isOnlineCourse?'线上课：如学生要来自习就占一间教室；纯线上就点「不安排教室」，同样算排完，之后去绑腾讯会议即可。':'只排教室，不绑会议号。排完可继续排下一门，最后统一去「会议链接设定」绑定会议号。')+'</p>'+
     '</div></div>';
   const wrap=document.createElement('div'); wrap.innerHTML=h; document.body.appendChild(wrap.firstChild);
   el('aro_cancel').onclick=()=>document.getElementById('aroMask').remove();
   document.getElementById('aroMask').onclick=(ev)=>{ if(ev.target.id==='aroMask') ev.target.remove(); };
+  if(el('aro_noroom')) el('aro_noroom').onclick=async()=>{
+    let sd=c.start_date, ed=c.end_date;
+    if(noDate){ sd=el('aro_sd').value; ed=el('aro_ed').value; if(!sd||!ed){ toast('请补开课/结课日', false); return; } }
+    const btn=el('aro_noroom'); btn.disabled=true; btn.textContent='处理中…';
+    try{
+      for(const gc of groupCourses){ if(noDate) await sbUpdate('sched_courses', gc.id, {start_date:sd, end_date:ed}); }
+      for(const o of existing) await sbDelete('sched_bookings', o.id);
+      let recs=[];
+      groupCourses.forEach(gc=>{ wdays.forEach(wd=>recs.push({ room_id:null, kind:'course', course_id:gc.id,
+        title:dispName, user_name:gc.teacher||null, recurrence:'weekly', weekday:wd,
+        start_date:sd||gc.start_date||null, end_date:ed||gc.end_date||null, start_time:gc.start_time, end_time:gc.end_time,
+        uses_meeting:true, meeting_account_id:null, status:'confirmed', created_by:'admin', note:'线上课·无教室' })); });
+      if(recs.length) await sbInsert('sched_bookings', recs);
+      await reloadAll(); document.getElementById('aroMask').remove(); renderAssignView();
+      toast('已标记为「仅腾讯会议」，记得去「会议链接设定」绑定会议号');
+    }catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='不安排教室（仅腾讯会议）'; }
+  };
   if(el('aro_clear')) el('aro_clear').onclick=async()=>{
     if(!confirm('把「'+dispName+'」清空教室（改回未排）？将删除整组的教室占用记录。')) return;
     for(const o of existing) await sbDelete('sched_bookings', o.id);
