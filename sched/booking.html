@@ -47,6 +47,7 @@
     <h3 style="margin-top:2px">录入占用 · <span id="m_room"></span></h3>
     <div id="m_when" class="muted" style="font-size:13px;margin-bottom:8px"></div>
     <div class="field"><label>用途/说明</label><input id="m_title" placeholder="如 VIP面试指导 / 谭老师外借"></div>
+    <div class="field" style="margin-top:8px"><label>对外看板(today)显示</label><select id="m_showtitle"><option value="0">只标「占用」（不露用途）</option><option value="1">显示用途标题</option></select></div>
     <div class="field" style="margin-top:8px"><label>使用人/单位</label><input id="m_user"></div>
     <div class="field" style="margin-top:8px"><label>是否占用会议账号</label><select id="m_um">
       <option value="false">否</option><option value="true">是（占该教室固定账号）</option></select></div>
@@ -201,7 +202,7 @@ async function submit(){
     for(const date of dates){
       const rec={ room_id:CUR.id, kind:use, title: el('m_title').value.trim()||KIND_LABEL[use]||null,
         user_name: el('m_user').value.trim()||null, recurrence: 'once', weekday: weekdayOf(date), booking_date:date, start_time:s, end_time:e,
-        uses_meeting:um, meeting_account_id:accId,
+        uses_meeting:um, meeting_account_id:accId, show_title: el('m_showtitle')?el('m_showtitle').value==='1':false,
         status:'confirmed', created_by:'admin', note: el('m_note').value.trim()||null };
       const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
     }
