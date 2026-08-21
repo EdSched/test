@@ -1521,11 +1521,25 @@ function renderCoursesTable(){
     else if(f==='category'){ box.innerHTML='<select id="cf_bv">'+CATEGORIES.map(x=>`<option>${x}</option>`).join('')+'</select>'; hint.textContent='所选课程类别统一改为此值。'; }
     else if(f==='skip_add'){
       box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center">'+
+        '<select id="cf_htype" style="min-width:200px">'+
+          '<option value="red">🔴 节日（全局·所有课放假）</option>'+
+          '<option value="green">🟢 假日（全局·所有课放假）</option>'+
+          '<option value="skip">🟡 休讲（仅所选课·保留课名+划线）</option>'+
+          '<option value="except">⚪ 豁免（所选课在全局假期照常上课）</option>'+
+        '</select>'+
         '<input type="date" id="cf_bv" title="起始日"> ~ <input type="date" id="cf_bv2" title="结束日（单天可留空）">'+
-        '<input id="cf_blabel" placeholder="假期名称，如 春节假期" style="width:150px">'+
-        '<select id="cf_bcolor"><option value="red">红色（节日·喜庆）</option><option value="green">绿色（普通假日）</option></select>'+
+        '<input id="cf_blabel" placeholder="名称/原因" style="width:150px">'+
       '</span>';
-      hint.textContent='设定一段休假/放假（可多天）：这段时间内所有课都不上课，课表上会用所选颜色标出假期名称。此为全局假期，与是否勾选课程无关。';
+      const upd=()=>{ const t=el('cf_htype').value;
+        const lb=el('cf_blabel');
+        if(t==='red'||t==='green'){ lb.placeholder='假期名称，如 春节假期'; lb.style.display='';
+          hint.textContent='全局假期：这段时间内所有课都放假，课表用红/绿标出假期名。与勾选哪些课无关。'; }
+        else if(t==='skip'){ lb.placeholder='休讲原因，如 老师请假'; lb.style.display='';
+          hint.textContent='个别休讲：只给「勾选的课」在这段日期停课。课表上会保留原课名并划下划线，标注原因。需先勾选课程。'; }
+        else { lb.style.display='none';
+          hint.textContent='假期豁免：让「勾选的课」在这段日期照常上课（即使撞上全局假期）。用于全局放假但某些课要上的情况。需先勾选课程。'; }
+      };
+      el('cf_htype').onchange=upd; upd();
     }
     else if(f==='merge'){
       box.innerHTML='<input id="cf_bv" placeholder="合并显示名，如 日语写作/口语" style="width:200px">';
@@ -1554,16 +1568,47 @@ function renderCoursesTable(){
   el('cf_bapply').onclick=async()=>{
     const f=el('cf_bfield').value; const v=el('cf_bv')?el('cf_bv').value:'';
     if(f==='skip_add'){
+      const t=el('cf_htype')?el('cf_htype').value:'red';
       const v2=el('cf_bv2')?el('cf_bv2').value:'';
       const label=(el('cf_blabel')?el('cf_blabel').value:'').trim();
-      const color=el('cf_bcolor')?el('cf_bcolor').value:'red';
       if(!v){ toast('请选起始日期', false); return; }
-      if(!label){ toast('请填假期名称', false); return; }
+      const dstart=v, dend=(v2||v);
+      // 展开日期区间为日期数组
+      const dates=[]; { let d=dstart, g=0; while(d<=dend && g++<400){ dates.push(d); d=addDays(d,1); } }
+      // 红/绿：全局假期，与选课无关
+      if(t==='red'||t==='green'){
+        if(!label){ toast('请填假期名称', false); return; }
+        const btn=el('cf_bapply'); btn.disabled=true; btn.textContent='处理中…';
+        try{
+          await sbInsert('sched_holidays', {start_date:dstart, end_date:dend, label, color:t});
+          await reloadAll(); el('cf_batchBox').classList.add('hidden'); tabCourses();
+          toast('已添加全局假期「'+label+'」');
+        }catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='应用到所选'; }
+        return;
+      }
+      // 黄/豁免：只作用于选中课
+      const ids0=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
+      if(!ids0.length){ toast('请先勾选课程', false); return; }
       const btn=el('cf_bapply'); btn.disabled=true; btn.textContent='处理中…';
       try{
-        await sbInsert('sched_holidays', {start_date:v, end_date:(v2||v), label, color});
+        for(const id of ids0){
+          const c=COURSES.find(x=>String(x.id)===String(id)); if(!c) continue;
+          if(t==='skip'){
+            const cur=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
+            dates.forEach(d=>cur.add(d));
+            // 原因映射
+            const rmap={}; (c.skip_reasons||'').split(';').forEach(p=>{ const [k,val]=p.split('='); if(k) rmap[k.trim()]=val||''; });
+            if(label) dates.forEach(d=>rmap[d]=label);
+            const rstr=Object.keys(rmap).filter(k=>rmap[k]).map(k=>k+'='+rmap[k]).join(';');
+            await sbUpdate('sched_courses', id, {skip_dates:[...cur].sort().join(','), skip_reasons:rstr});
+          } else { // except 豁免
+            const cur=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
+            dates.forEach(d=>cur.add(d));
+            await sbUpdate('sched_courses', id, {holiday_except:[...cur].sort().join(',')});
+          }
+        }
         await reloadAll(); el('cf_batchBox').classList.add('hidden'); tabCourses();
-        toast('已添加假期「'+label+'」'+v+(v2&&v2!==v?('~'+v2):''));
+        toast(t==='skip'?('已给 '+ids0.length+' 门课加休讲'):('已豁免 '+ids0.length+' 门课（照常上课）'));
       }catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='应用到所选'; }
       return;
     }
