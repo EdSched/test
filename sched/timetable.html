@@ -101,6 +101,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
     </div>
     <div class="row" style="margin-top:8px;align-items:flex-end">
       <div class="field"><label>限制日期范围</label><select id="ttLimit"><option value="0">不限（全部）</option><option value="1">只看某段时间</option></select></div>
+      <div class="field"><label>课表页显示课程小标</label><select id="ttLegend"><option value="0">不显示</option><option value="1">显示</option></select></div>
       <div class="field ttRange hidden"><label>起</label><input type="date" id="ttStart"></div>
       <div class="field ttRange hidden"><label>止</label><input type="date" id="ttEnd"></div>
       <div class="field ttRange hidden"><label>&nbsp;</label><span class="muted" style="font-size:12px">只生成这段时间内在上的课，跨度大时更清爽</span></div>
@@ -120,7 +121,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
       <div id="courseTags" style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:3px"></div>
     </div>
     <div class="field" id="langWrap" style="margin-top:16px;border-top:2px dashed #cfe3d6;padding-top:12px">
-      <label style="color:#2f6b4f;font-weight:600">🗣️ 语言课（与专业课分开，点选加入；不选=全部语言课）</label>
+      <label style="color:#2f6b4f;font-weight:600">🗣️ 语言课（与专业课分开，点选加入；不选则不含语言课）</label>
       <div class="row" style="margin:4px 0 6px">
         <div class="field"><label style="font-size:11px">语种</label><select id="l_type" style="min-width:90px"><option value="">日语+英语</option><option value="日语">仅日语</option><option value="英语">仅英语</option></select></div>
         <div class="field"><label style="font-size:11px">班级性质</label><select id="l_kind" style="min-width:110px"><option value="">全部性质</option></select></div>
@@ -565,7 +566,8 @@ async function doPrint(){
     @page{ size:A4 landscape; margin:0; }
     *{ box-sizing:border-box; }
     html,body{ margin:0; padding:0; font-family:'Noto Sans SC',system-ui,sans-serif; color:#2b2822; }
-    .page{ width:297mm; height:200mm; overflow:hidden; position:relative; padding:11mm 12mm; margin:0 auto 6mm; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.12); }
+    .page{ width:297mm; min-height:120mm; overflow:visible; position:relative; padding:11mm 12mm; margin:0 auto 6mm; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.12); }
+    .cover{ height:200mm; overflow:hidden; }
     @media print{
       html,body{ width:auto; margin:0; }
       .page{ margin:0; box-shadow:none; }
@@ -588,6 +590,9 @@ async function doPrint(){
     .phead .ph-title{ font-family:'Noto Serif SC',serif; font-size:14px; font-weight:600; color:#2b2822; white-space:nowrap; }
     .phead .ph-note{ font-size:11px; color:#6a655c; white-space:pre-wrap; text-align:right; }
     .sheet{ display:flex; flex-direction:column; }
+    .page-legend{ display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 0 8px; padding-bottom:6px; border-bottom:1px dashed #e0dccf; }
+    .page-legend .cleg{ display:inline-flex; align-items:center; gap:5px; font-size:10px; color:#5a5650; }
+    .page-legend .cleg i{ width:9px; height:9px; border-radius:2px; display:inline-block; }
     .pfoot{ margin-top:auto; padding-top:6px; text-align:center; font-size:10px; color:#9a958c; border-top:1px solid #ece7db; }
     .mblock{ break-inside:avoid; margin-bottom:6mm; }
     .mtitle{ font-family:'Noto Serif SC',serif; font-size:15px; margin:0 0 6px; color:#2b2822; }
@@ -623,13 +628,15 @@ async function doPrint(){
     return '<div class="phead"><div class="ph-title">'+esc(headTitle)+'</div>'+
       (headerText?'<div class="ph-note">'+esc(headerText)+'</div>':'')+'</div>';
   }
-  // 每月一页，页眉+页码
+  // 每月一页，页眉+页码；可选课程小标
+  const showLegend = el('ttLegend') && el('ttLegend').value==='1' && coverLegend;
+  const pageLegend = showLegend ? '<div class="page-legend">'+legendItems.join('')+'</div>' : '';
   const monthBlocks = buildMonthPaged();   // 数组，每项是一个月的表格HTML
   const totalPages = 1 + monthBlocks.length;   // 封面 + 各月
   let bodyPages = coverPage;
   monthBlocks.forEach((mhtml, i)=>{
     const pageNo = i+2;   // 封面是第1页
-    bodyPages += '<div class="page sheet">'+pageHead()+mhtml+
+    bodyPages += '<div class="page sheet">'+pageHead()+pageLegend+mhtml+
       '<div class="pfoot">第 '+pageNo+' / '+totalPages+' 页</div></div>';
   });
   const doc =
