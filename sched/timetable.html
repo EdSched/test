@@ -110,7 +110,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
       <div class="field" style="flex:1;min-width:220px"><label>页眉说明（每页顶部，选填）</label><textarea id="pdfHeader" rows="4" placeholder="如：唯新教育 · 社会人文课程表 · 2026年10月期" style="width:100%;font-size:12px;line-height:1.7"></textarea></div>
     </div>
     <div class="field" style="margin-top:12px">
-      <label>专业/共通课程（点选加入，可多选；不选=该专业全部）</label>
+      <label>专业/共通课程（点选加入，可多选；可用「全选当前结果」一次全选；不选则不含专业课）</label>
       <div class="row" style="margin:4px 0 6px">
         <div class="field"><label style="font-size:11px">班级性质</label><select id="c_kind" style="min-width:110px"><option value="">全部性质</option></select></div>
         <div class="field" style="flex:1;min-width:160px"><label style="font-size:11px">搜索课名</label><input id="c_q" placeholder="关键词过滤"></div>
@@ -399,14 +399,12 @@ function refreshExtraList(){
   });
 }
 function selectedCourses(){
-  let base=baseCourses(), out;
-  const langSel = LANG_IDS.size>0;
-  if(SELECTED_IDS.size || langSel){
-    out = base.filter(c=>{
-      if(c.category==='语言') return langSel ? LANG_IDS.has(String(c.id)) : true;
-      return SELECTED_IDS.size ? SELECTED_IDS.has(String(c.id)) : true;
-    });
-  } else out = base.slice();
+  let base=baseCourses(), out=[];
+  // 只包含明确勾选的课；不勾=不选（配合“全选当前结果”按钮）
+  base.forEach(c=>{
+    if(c.category==='语言'){ if(LANG_IDS.has(String(c.id))) out.push(c); }
+    else { if(SELECTED_IDS.has(String(c.id))) out.push(c); }
+  });
   EXTRA_IDS.forEach(id=>{ const c=COURSES.find(x=>String(x.id)===id); if(c && !out.includes(c)) out.push(c); });
   return out;
 }
