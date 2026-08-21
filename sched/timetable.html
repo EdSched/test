@@ -637,13 +637,36 @@ async function doPrint(){
     bodyPages += '<div class="page sheet">'+pageHead()+mhtml+
       '<div class="pfoot">第 '+pageNo+' / '+totalPages+' 页</div></div>';
   });
+  const safeTitle = coverTitle.replace(/[\\/:*?"<>|]/g,'_');
   const doc =
     '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>'+esc(coverTitle)+'</title>'+
     '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>'+
     '<style>'+css+'</style></head><body>'+
-    '<div class="noprint">预览已生成。按 Ctrl/⌘+P 保存为 PDF；在打印对话框里【关闭「页眉和页脚」】、勾选「背景图形」，纸张选 A4 横向。</div>'+
-    '<div style="height:38px" class="noprint"></div>'+
+    '<div class="noprint" style="display:flex;align-items:center;gap:12px;justify-content:center">'+
+      '<span>预览已生成。</span>'+
+      '<button id="dlpdf" style="padding:6px 16px;border:none;border-radius:6px;background:#2c6b4f;color:#fff;font-size:13px;cursor:pointer">⬇ 下载 PDF（推荐，无空白页）</button>'+
+      '<span style="font-size:12px;color:#8a7c00">或按 Ctrl/⌘+P 打印，需关闭「页眉页脚」、勾「背景图形」</span>'+
+    '</div>'+
+    '<div style="height:44px" class="noprint"></div>'+
     bodyPages +
+    '<script>'+
+    'document.getElementById("dlpdf").onclick=async function(){'+
+    ' var btn=this; btn.disabled=true; btn.textContent="生成中…";'+
+    ' try{'+
+    '  var pages=document.querySelectorAll(".page"); var jsPDF=window.jspdf.jsPDF; var pdf=null;'+
+    '  for(var i=0;i<pages.length;i++){'+
+    '   var cv=await html2canvas(pages[i],{scale:2,useCORS:true,backgroundColor:"#ffffff"});'+
+    '   var w=297, h=cv.height*w/cv.width;'+
+    '   if(!pdf){ pdf=new jsPDF({orientation:"landscape",unit:"mm",format:[w,h]}); } else { pdf.addPage([w,h],"landscape"); }'+
+    '   pdf.addImage(cv.toDataURL("image/jpeg",0.92),"JPEG",0,0,w,h);'+
+    '  }'+
+    '  pdf.save('+JSON.stringify(safeTitle+'.pdf')+');'+
+    '  btn.textContent="✓ 已下载"; setTimeout(function(){btn.disabled=false;btn.textContent="⬇ 下载 PDF（推荐，无空白页）";},2000);'+
+    ' }catch(e){ alert("生成失败："+e.message); btn.disabled=false; btn.textContent="⬇ 下载 PDF（推荐，无空白页）"; }'+
+    '};'+
+    '<\/script>'+
     '</body></html>';
   const w=window.open('','_blank');
   if(!w){ toast('浏览器拦截了新窗口，请允许弹窗后重试', false); return; }
