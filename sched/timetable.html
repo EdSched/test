@@ -557,7 +557,7 @@ async function doPrint(){
       return await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b); });
     }catch(e){ return ''; }
   }
-  const [bgData, logoData] = await Promise.all([toDataURL(base+'back.jpg'), toDataURL(base+'logo.png')]);
+  const [bgData, logoData] = await Promise.all([toDataURL(base+'back2.jpg'), toDataURL(base+'logo.png')]);
 
   // 月历：每月一块，块内 break-inside avoid，块间分页
   // 月历：每月一块，见 buildMonthPaged
