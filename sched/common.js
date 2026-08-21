@@ -218,9 +218,14 @@ function renderOccupancyGrid(rooms, items, keyField, opts){
         let label;
         if(opts.labelOnly){
           label = KIND_LABEL[b.kind]||'占用';
-        } else {
+        } else if(b.course_id){
           label = b.title||KIND_LABEL[b.kind]||'占用';
-          if(opts.nameOf && b.course_id){ const nm=opts.nameOf(b.course_id); if(nm) label=nm; }
+          if(opts.nameOf){ const nm=opts.nameOf(b.course_id); if(nm) label=nm; }
+        } else {
+          // 非课程占用（临时/租借等）
+          let showT = !opts.hideOccTitle;                       // 全局开关（兼容旧用法）
+          if(opts.perItemTitle) showT = (b.show_title===true);  // 按每条记录录入时的设置
+          label = showT ? (b.title||KIND_LABEL[b.kind]||'占用') : (KIND_LABEL[b.kind]||'占用');
         }
         // 按类别上色（opts.catOf 传入 course_id→category 的查找）
         let styleAttr='', cc=null;
