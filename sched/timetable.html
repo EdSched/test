@@ -662,12 +662,10 @@ async function doPrint(){
     ' try{'+
     '  var pages=document.querySelectorAll(".page"); var jsPDF=window.jspdf.jsPDF; var pdf=null;'+
     '  for(var i=0;i<pages.length;i++){'+
-    '   var el0=pages[i]; var pw=el0.scrollWidth, ph=el0.scrollHeight;'+
-    '   var sc=1.6; if(ph*sc>14000){ sc=Math.max(1, 14000/ph); }'+
-    '   var cv=await html2canvas(el0,{scale:sc,useCORS:true,backgroundColor:"#ffffff",width:pw,height:ph,windowWidth:pw,windowHeight:ph,scrollX:0,scrollY:0,x:0,y:0});'+
-    '   var w=297, h=cv.height*w/cv.width;'+
+    '   var cv=await html2canvas(pages[i],{scale:2,useCORS:true,backgroundColor:"#ffffff"});'+
+    '   var w=297, h=Math.round(cv.height*w/cv.width*100)/100;'+
     '   if(!pdf){ pdf=new jsPDF({orientation:"landscape",unit:"mm",format:[w,h]}); } else { pdf.addPage([w,h],"landscape"); }'+
-    '   pdf.addImage(cv.toDataURL("image/jpeg",0.92),"JPEG",0,0,w,h);'+
+    '   pdf.addImage(cv.toDataURL("image/jpeg",0.94),"JPEG",0,0,w,h);'+
     '  }'+
     '  pdf.save('+JSON.stringify(safeTitle+'.pdf')+');'+
     '  btn.textContent="✓ 已下载"; setTimeout(function(){btn.disabled=false;btn.textContent="⬇ 下载 PDF（无空白页）";},2000);'+
