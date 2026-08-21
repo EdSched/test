@@ -543,6 +543,11 @@ async function doPrint(){
   const coverTitle = [firstTerm, campus, tplName, '课程表'].filter(Boolean).join(' ');
   const subMeta = SEL_TERMS.size>1 ? ('含 '+[...SEL_TERMS].join('、')) : '唯新教育';
   const coverText = (el('pdfCover')?el('pdfCover').value:'').trim();
+  // 封面课程颜色图例（合并课用合并名去重）
+  const legendSeen=new Set(), legendItems=[];
+  EVENTS.filter(e=>e.c).forEach(e=>{ const nm=e.c.merge_name||e.c.name; if(legendSeen.has(nm))return; legendSeen.add(nm);
+    legendItems.push('<span class="cleg"><i style="'+styleOf(e.c)+'"></i>'+esc(nm)+'</span>'); });
+  const coverLegend = legendItems.length ? ('<div class="cleg-wrap">'+legendItems.join('')+'</div>') : '';
   const headerText = (el('pdfHeader')?el('pdfHeader').value:'').trim();
   const coverLines = coverText? coverText.split(/\n/).filter(x=>x.trim()) : [];
 
@@ -573,6 +578,9 @@ async function doPrint(){
     .cover .cin{ position:absolute; inset:0; z-index:1; }
     .cover .cin-top{ position:absolute; left:0; right:0; bottom:50%; padding:0 34mm 6mm; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
     .cover .cin-bottom{ position:absolute; left:0; right:0; top:50%; padding:7mm 34mm 0; text-align:center; }
+    .cover .cleg-wrap{ display:flex; flex-wrap:wrap; gap:5px 14px; justify-content:center; margin-top:7mm; max-width:200mm; margin-left:auto; margin-right:auto; }
+    .cover .cleg{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; color:#5a5650; }
+    .cover .cleg i{ width:9px; height:9px; border-radius:2px; display:inline-block; }
     .cover .clogo{ height:20mm; margin-bottom:5mm; }
     .cover .ctitle{ font-family:'Noto Serif SC',serif; font-size:40px; font-weight:700; letter-spacing:.05em; margin:0; line-height:1.12; }
     .cover .csub{ font-size:13px; color:#6a655c; margin:0 0 8mm; letter-spacing:.05em; }
@@ -608,6 +616,7 @@ async function doPrint(){
         '<div class="cin-bottom">'+
           '<div class="csub">'+esc(subMeta)+'</div>'+
           (coverLines.length?('<div class="cnotes">'+coverLines.map(l=>'<div>'+esc(l)+'</div>').join('')+'</div>'):'')+
+          coverLegend+
         '</div>'+
       '</div>'+
     '</div>';
