@@ -663,9 +663,8 @@ async function doPrint(){
     '  var pages=document.querySelectorAll(".page"); var jsPDF=window.jspdf.jsPDF; var pdf=null;'+
     '  for(var i=0;i<pages.length;i++){'+
     '   var cv=await html2canvas(pages[i],{scale:2,useCORS:true,backgroundColor:"#ffffff"});'+
-    '   var w=297, h=Math.round(cv.height*w/cv.width*100)/100;'+
-    '   var ori=(h>w)?"p":"l";'+   // 高>宽用竖向，避免 jsPDF 为凑横向而把宽高对调
-    '   if(!pdf){ pdf=new jsPDF({orientation:ori,unit:"mm",format:[w,h]}); } else { pdf.addPage([w,h],ori); }'+
+    '   var w=cv.width, h=cv.height;'+   // 直接用画布像素尺寸，宽度对所有页一致，高度随内容
+    '   if(!pdf){ pdf=new jsPDF({unit:"px",format:[w,h]}); } else { pdf.addPage([w,h]); }'+
     '   pdf.addImage(cv.toDataURL("image/jpeg",0.94),"JPEG",0,0,w,h);'+
     '  }'+
     '  pdf.save('+JSON.stringify(safeTitle+'.pdf')+');'+
