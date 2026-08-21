@@ -640,19 +640,20 @@ async function doPrint(){
   const doc =
     '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>'+esc(coverTitle)+'</title>'+
     '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">'+
-    '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>'+
-    '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>'+
     '<style>'+css+'</style></head><body>'+
-    '<div class="noprint" style="display:flex;align-items:center;gap:12px;justify-content:center">'+
-      '<span>预览已生成。</span>'+
-      '<button id="dlpdf" style="padding:6px 16px;border:none;border-radius:6px;background:#2c6b4f;color:#fff;font-size:13px;cursor:pointer">⬇ 下载 PDF（推荐，无空白页）</button>'+
-      '<span style="font-size:12px;color:#8a7c00">或按 Ctrl/⌘+P 打印，需关闭「页眉页脚」、勾「背景图形」</span>'+
+    '<div class="topbar" style="background:#f4efe4;border-bottom:1px solid #e0d8c4;padding:14px 20px;text-align:center;position:sticky;top:0;z-index:99">'+
+      '<button id="dlpdf" style="padding:10px 26px;border:none;border-radius:8px;background:#2c6b4f;color:#fff;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(44,107,79,.3)">⬇ 下载 PDF（无空白页）</button>'+
+      '<div style="font-size:12px;color:#8a7c00;margin-top:8px">点上方按钮直接下载 PDF；或按 Ctrl/⌘+P 打印（需关「页眉页脚」、勾「背景图形」）</div>'+
     '</div>'+
-    '<div style="height:44px" class="noprint"></div>'+
+    '<div style="height:16px"></div>'+
     bodyPages +
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" async><\/script>'+
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" async><\/script>'+
     '<script>'+
     'document.getElementById("dlpdf").onclick=async function(){'+
-    ' var btn=this; btn.disabled=true; btn.textContent="生成中…";'+
+    ' var btn=this;'+
+    ' if(typeof html2canvas==="undefined"||!window.jspdf){ alert("PDF 组件还在加载或被网络拦截，请稍等几秒重试；若一直不行请改用 Ctrl/⌘+P 打印。"); return; }'+
+    ' btn.disabled=true; btn.textContent="生成中…";'+
     ' try{'+
     '  var pages=document.querySelectorAll(".page"); var jsPDF=window.jspdf.jsPDF; var pdf=null;'+
     '  for(var i=0;i<pages.length;i++){'+
@@ -662,8 +663,8 @@ async function doPrint(){
     '   pdf.addImage(cv.toDataURL("image/jpeg",0.92),"JPEG",0,0,w,h);'+
     '  }'+
     '  pdf.save('+JSON.stringify(safeTitle+'.pdf')+');'+
-    '  btn.textContent="✓ 已下载"; setTimeout(function(){btn.disabled=false;btn.textContent="⬇ 下载 PDF（推荐，无空白页）";},2000);'+
-    ' }catch(e){ alert("生成失败："+e.message); btn.disabled=false; btn.textContent="⬇ 下载 PDF（推荐，无空白页）"; }'+
+    '  btn.textContent="✓ 已下载"; setTimeout(function(){btn.disabled=false;btn.textContent="⬇ 下载 PDF（无空白页）";},2000);'+
+    ' }catch(e){ alert("生成失败："+e.message); btn.disabled=false; btn.textContent="⬇ 下载 PDF（无空白页）"; }'+
     '};'+
     '<\/script>'+
     '</body></html>';
