@@ -663,8 +663,8 @@ async function doPrint(){
     '  var pages=document.querySelectorAll(".page"); var jsPDF=window.jspdf.jsPDF; var pdf=null;'+
     '  for(var i=0;i<pages.length;i++){'+
     '   var cv=await html2canvas(pages[i],{scale:2,useCORS:true,backgroundColor:"#ffffff"});'+
-    '   var w=cv.width, h=cv.height; var ori=(w>=h)?"l":"p";'+   // 方向跟着形状走，jsPDF 就不会对调宽高
-    '   if(!pdf){ pdf=new jsPDF({orientation:ori,unit:"px",format:[w,h]}); } else { pdf.addPage([w,h],ori); }'+
+    '   var w=297, h=Math.round(cv.height*w/cv.width*100)/100; var ori=(w>=h)?"l":"p";'+   // 页面物理尺寸正常(297mm宽)，方向跟形状走
+    '   if(!pdf){ pdf=new jsPDF({orientation:ori,unit:"mm",format:[w,h]}); } else { pdf.addPage([w,h],ori); }'+
     '   pdf.addImage(cv.toDataURL("image/jpeg",0.94),"JPEG",0,0,w,h);'+
     '  }'+
     '  pdf.save('+JSON.stringify(safeTitle+'.pdf')+');'+
