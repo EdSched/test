@@ -102,8 +102,11 @@ const isCosmo=r=>/コスモ|cosmo|外借/i.test((r.name||'')+(r.campus||''));
 // 用途决定候选教室：VIP→只VIP；meeting→VIP+会议室；其它→全部
 function poolFor(use, campus){
   let p=ROOMS.filter(r=>r.campus===campus);
-  if(use==='vip') p=p.filter(r=>r.type==='VIP');
-  else if(use==='meeting') p=p.filter(r=>r.type==='VIP'||r.type==='会议室');
+  // VIP/开会优先用专用教室，但专用不够时也可用大教室——全部列出，专用排前
+  if(use==='vip'||use==='meeting'){
+    const pref = use==='vip' ? (r=>r.type==='VIP') : (r=>r.type==='VIP'||r.type==='会议室');
+    p=p.slice().sort((a,b)=>{ const pa=pref(a)?0:1, pb=pref(b)?0:1; return pa-pb; });
+  }
   return p;
 }
 function renderGrid(){
