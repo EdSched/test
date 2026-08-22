@@ -1452,13 +1452,18 @@ function mtgSetForm(courseId, room){
       const btn=el('ms_save'); btn.disabled=true; btn.textContent='保存中…';
       try{
         await sbUpdate('sched_courses', c.id, {meeting_link:link, meeting_id:mid});
+        // 同步该课在本教室的占用：标记占用教室绑定的会议账号，看板/搜索才显示网络与账号
+        if(room && room.meeting_account_id){
+          const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id)&&String(b.room_id)===String(room.id));
+          for(const b of bs) await sbUpdate('sched_bookings', b.id, {uses_meeting:true, meeting_account_id:room.meeting_account_id});
+        }
         // 存为本期通用会议
         if(!chosenTpl && el('ms_saveTplChip') && el('ms_saveTplChip').dataset.on==='1'){
           const tplTitle=(el('ms_tplTitle').value.trim())||el('ms_title').value.trim()||null;
           await sbInsert('sched_meeting_templates', { term:c.term||null, major:c.major||null, title:tplTitle,
             meeting_link:link, meeting_id:mid, start_time:c.start_time||null, end_time:c.end_time||null });
         }
-        await reloadAll(); el('ms_form').innerHTML=''; renderMtgRoom(); toast('已保存会议链接');
+        await reloadAll(); el('ms_form').innerHTML=''; renderMtgRoom(); toast('已保存会议链接'+(room&&room.meeting_account_id?'（已绑定教室账号）':''));
       }
       catch(e){ toast(esc(e.message), false); btn.disabled=false; btn.textContent='保存链接'; }
     };
@@ -1488,7 +1493,9 @@ function mtgCopyForm(courseId, room){
     el('ms_covdo').onclick=async()=>{
       if(!sel.size){ toast('未选择', false); return; }
       const btn=el('ms_covdo'); btn.disabled=true; btn.textContent='覆盖中…';
-      try{ for(const id of sel) await sbUpdate('sched_courses', id, {meeting_link:src.meeting_link||null, meeting_id:src.meeting_id||null});
+      try{ for(const id of sel){ await sbUpdate('sched_courses', id, {meeting_link:src.meeting_link||null, meeting_id:src.meeting_id||null});
+          if(room && room.meeting_account_id){ const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id)&&String(b.room_id)===String(room.id));
+            for(const b of bs) await sbUpdate('sched_bookings', b.id, {uses_meeting:true, meeting_account_id:room.meeting_account_id}); } }
         await reloadAll(); el('ms_form').innerHTML=''; renderMtgRoom(); toast('已覆盖 '+sel.size+' 门课'); }
       catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='覆盖到所选'; }
     };
