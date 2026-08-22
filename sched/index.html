@@ -63,7 +63,7 @@ async function reloadAll(){
   try{ MTEMPLATES = await sbGet('sched_meeting_templates','select=*&order=created_at.desc'); }catch(e){ MTEMPLATES=[]; }
   try{ HOLIDAYS = await sbGet('sched_holidays','select=*&order=start_date'); }catch(e){ HOLIDAYS=[]; }
   try{ CHANGELOG = await sbGet('sched_change_log','select=*&order=created_at.desc&limit=50'); }catch(e){ CHANGELOG=[]; }
-  await autoFixEnds();   // 按回数+假期自动重算结课日并回写（回数定死）
+  // 自动重算已关闭：改由「回数审查」面板 + 编辑时推算提醒，由用户自己拍板
   const pend=BOOKINGS.filter(b=>b.status==='pending').length;
   const pn=el('pendN'); if(pn){ pn.textContent = pend||''; pn.style.display=pend?'':'none'; }
 }
@@ -75,8 +75,8 @@ async function autoFixEnds(){
     for(const c of COURSES){
       if(!c.sessions || !c.start_date || !c.weekdays) continue;
       const real=computeEndByCount(c);
-      // 只在回数不足时顺延（算出的结课日晚于当前）；回数够则不动，避免误缩短
-      if(real && (!c.end_date || real>c.end_date)){ changed.push({c, real}); }
+      // 精确对齐：结课日=第N次课那天，多了缩短、少了延长
+      if(real && real!==c.end_date){ changed.push({c, real}); }
     }
     for(const {c,real} of changed){
       try{
@@ -1843,7 +1843,7 @@ function renderCoursesTable(){
     '<button class="ghost sm" id="cf_batch">批量修改所选</button>'+
     '<button class="danger sm" id="cf_delsel">删除所选</button>'+
     (isAdmin?('<button class="ghost sm" id="cf_trash">已删除'+(DELETED_COURSES.length?('（'+DELETED_COURSES.length+'）'):'')+'</button>'+
-             '<button class="ghost sm" id="cf_fixend">按回数重算结课日</button>'+
+             '<button class="ghost sm" id="cf_review">回数审查</button>'+
              '<button class="ghost sm" id="cf_backup">下载全部课程备份</button>'):'')+
     '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>'+
     '<div id="cf_trashBox"></div>'+
@@ -1900,7 +1900,7 @@ function renderCoursesTable(){
   if(el('cf_showless')) el('cf_showless').onclick=()=>{ window.CF_SHOWALL=false; renderCoursesTable(); };
   if(el('cf_trash')) el('cf_trash').onclick=()=>{ const b=el('cf_trashBox'); if(b.dataset.open==='1'){ b.innerHTML=''; b.dataset.open=''; } else { b.dataset.open='1'; renderTrash(); } };
   if(el('cf_backup')) el('cf_backup').onclick=()=>downloadCourseBackup();
-  if(el('cf_fixend')) el('cf_fixend').onclick=()=>fixEndByCount(list);
+  if(el('cf_review')) el('cf_review').onclick=()=>{ const b=el('cf_trashBox'); if(b.dataset.open==='review'){ b.innerHTML=''; b.dataset.open=''; } else { b.dataset.open='review'; renderReview(list); } };
   // ---- 批量修改 ----
   el('cf_batch').onclick=()=>{ el('cf_batchBox').classList.toggle('hidden'); renderBatchVal(); };
   el('cf_bclose').onclick=()=>el('cf_batchBox').classList.add('hidden');
@@ -2145,7 +2145,9 @@ function courseEdit(id){
       '<div id="e_skipList" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>'+
       '<div class="row"><input type="date" id="e_skipAdd"><button type="button" class="ghost sm" id="e_skipBtn">添加休讲日</button>'+
       '<button type="button" class="ghost sm" id="e_postpone">按休讲次数顺延结课日</button></div>'+
-      '<div class="muted" id="e_skipInfo" style="font-size:12px;margin-top:4px"></div></div>'+
+      '<div class="muted" id="e_skipInfo" style="font-size:12px;margin-top:4px"></div>'+
+      '<div id="e_recalc" style="font-size:12px;margin-top:8px;padding:8px 10px;border-radius:6px;background:#f8fafd;border:1px solid #cdd8e6"></div>'+
+      '<div style="margin-top:6px"><button type="button" class="ghost sm" id="e_useEnd">用推算结课日</button> <button type="button" class="ghost sm" id="e_useStart">按结课日倒推开课日</button></div></div>'+
     '<div id="e_warn" class="hidden" style="margin-top:8px"></div>'+
     '<div style="margin-top:12px"><button id="e_save">保存</button> <button class="ghost" id="e_cancel">取消</button>'+
     '<span class="muted" style="font-size:12px;margin-left:8px">若已排教室，改动周几/时间后建议去「排教室」重排。</span></div></div></div>';
@@ -2167,6 +2169,27 @@ function courseEdit(id){
     el('e_skipInfo').textContent = SKIP.length? ('共 '+SKIP.length+' 次休讲；顺延会把结课日按上课周期往后推 '+SKIP.length+' 周') : '';
   }
   renderSkip();
+  // 实时推算：按当前表单的开课日+回数+周几+休讲，算应有结课日和命中假期
+  function curFormCourse(){
+    const days=[...box.querySelectorAll('button[data-on="1"]')].map(b=>Number(b.dataset.d)).join(',');
+    return { start_date:el('e_sd').value||null, end_date:el('e_ed').value||null, weekdays:days,
+      sessions:el('e_sess').value?Number(el('e_sess').value):null, skip_dates:SKIP.join(','), holiday_except:c.holiday_except };
+  }
+  function refreshRecalc(){
+    const fc=curFormCourse(); const rb=el('e_recalc'); if(!rb) return;
+    if(!fc.start_date||!fc.sessions||!fc.weekdays){ rb.innerHTML='<span class="muted">填好开课日、回数、周几后，这里会推算应有结课日。</span>'; return; }
+    const det=computeEndDetail(fc);
+    const blocked=det.blocked.length?('，跳过 '+det.blocked.length+' 天（'+det.blocked.map(b=>b.date+'·'+b.why).join('、')+'）'):'（无假期/休讲命中）';
+    const cur=el('e_ed').value;
+    const same=cur===det.end;
+    rb.innerHTML='按回数 <b>'+fc.sessions+'</b> 从 '+esc(fc.start_date)+' 排'+esc(blocked)+'，应有结课日：<b style="color:#2c5aa0">'+esc(det.end||'—')+'</b>'+
+      (cur?(same?' <span class="badge b-ok" style="font-size:10px">与当前一致</span>':' <span class="badge b-warn" style="font-size:10px">当前填的是 '+esc(cur)+'，不一致</span>'):'');
+  }
+  ['e_sd','e_ed','e_sess'].forEach(id=>{ if(el(id)) el(id).addEventListener('input', refreshRecalc); });
+  box.querySelectorAll('button').forEach(b=>b.addEventListener('click', ()=>setTimeout(refreshRecalc,0)));
+  const _rs=renderSkip; renderSkip=function(){ _rs(); refreshRecalc(); }; refreshRecalc();
+  if(el('e_useEnd')) el('e_useEnd').onclick=()=>{ const det=computeEndDetail(curFormCourse()); if(det.end){ el('e_ed').value=det.end; refreshRecalc(); } };
+  if(el('e_useStart')) el('e_useStart').onclick=()=>{ const fc=curFormCourse(); if(!fc.end_date){ toast('请先填结课日', false); return; } const sd=computeStartByCount(fc); if(sd){ el('e_sd').value=sd; refreshRecalc(); } };
   el('e_skipBtn').onclick=()=>{ const d=el('e_skipAdd').value; if(d && !SKIP.includes(d)){ SKIP.push(d); SKIP.sort(); renderSkip(); } };
   el('e_postpone').onclick=()=>{
     const ed=el('e_ed').value; const days=[...box.querySelectorAll('button[data-on="1"]')].map(b=>Number(b.dataset.d));
@@ -2192,10 +2215,14 @@ function courseEdit(id){
       skip_dates: SKIP.length? SKIP.join(',') : null };
     if(el('e_morder')) patch.merge_order = el('e_morder').value?Number(el('e_morder').value):null;
     if(!patch.name){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">请填课程名</span>'; return; }
-    // 按回数保证结课日：跳过假期/休讲后不足回数则顺延结课日（回数够则不变）
+    // 按回数核对结课日：与推算不一致时提醒，让用户选用推算值还是保留手填
     if(patch.sessions && patch.start_date && patch.weekdays){
       const realEnd=computeEndByCount({start_date:patch.start_date, end_date:patch.end_date, weekdays:patch.weekdays, sessions:patch.sessions, skip_dates:patch.skip_dates, holiday_except:c.holiday_except});
-      if(realEnd && (!patch.end_date || realEnd>patch.end_date)) patch.end_date=realEnd;
+      const sessChanged = String(c.sessions||'')!==String(patch.sessions||'');
+      if(realEnd && realEnd!==patch.end_date){
+        const useReal=confirm((sessChanged?'回数改为 '+patch.sessions+' 后，':'')+'按回数+假期推算，结课日应为：\n\n'+realEnd+'\n\n你当前填的是：'+(patch.end_date||'（空）')+'\n\n点「确定」用推算的 '+realEnd+'；点「取消」保留你填的。');
+        if(useReal) patch.end_date=realEnd;
+      }
     }
     try{
       if(isNew){
@@ -2219,6 +2246,58 @@ function courseEdit(id){
   };
 }
 
+function renderReview(list){
+  const box=el('cf_trashBox'); if(!box) return;
+  const cs=(list||COURSES).filter(c=>c.sessions&&c.start_date&&c.weekdays);
+  if(!cs.length){ box.innerHTML='<div class="muted" style="margin:8px 0;padding:10px;border:1px dashed var(--line);border-radius:8px">没有可审查的课（需填回数、开课日、周几）。</div>'; return; }
+  let h='<div style="border:1px solid #cdd8e6;background:#f8fafd;border-radius:8px;padding:10px 12px;margin:8px 0">'+
+    '<div style="font-size:13px;margin-bottom:4px"><b>回数审查</b> <span class="muted" style="font-size:12px">保证回数的前提下，命中的假期/休讲、应有结课日。你自己判断是否应用。</span></div>'+
+    '<div style="margin-bottom:8px"><button class="sm" id="rv_applyall">把所有「应有结课日」一次性应用</button> <span class="muted" style="font-size:11px">（也可每行单独应用；不点则不改）</span></div>'+
+    '<table style="font-size:12px"><thead><tr><th>课程</th><th>回数</th><th>开课日</th><th>当前结课日</th><th>命中假期/休讲</th><th>应有结课日(正推)</th><th>操作</th></tr></thead><tbody>';
+  const rows=[];
+  cs.forEach(c=>{
+    const det=computeEndDetail(c);
+    const match = det.end===c.end_date;
+    const blockedTxt = det.blocked.length? det.blocked.map(b=>b.date+'('+b.why+')').join('、') : '—';
+    rows.push({c, det});
+    h+=`<tr${match?'':' style="background:#fff8f0"'}><td><b>${esc(c.name)}</b></td><td>${esc(String(c.sessions))}</td><td>${esc(c.start_date||'')}</td>`+
+      `<td>${esc(c.end_date||'（空）')}${match?' <span class="badge b-ok" style="font-size:10px">一致</span>':''}</td>`+
+      `<td class="muted" style="max-width:220px">${esc(blockedTxt)}</td>`+
+      `<td><b>${esc(det.end||'')}</b>${match?'':' <span class="badge b-warn" style="font-size:10px">需调整</span>'}</td>`+
+      `<td>${match?'—':('<button class="sm ghost" data-rvend="'+c.id+'" data-end="'+esc(det.end||'')+'">用此结课日</button>')} <button class="sm ghost" data-rvback="'+c.id+'">倒推开课日</button></td></tr>`;
+  });
+  h+='</tbody></table><div class="muted" style="font-size:11px;margin-top:6px">「倒推开课日」= 固定当前结课日，按回数往前算应有开课日（用于反向核对）。</div></div>';
+  box.innerHTML=h;
+  // 单行应用结课日
+  box.querySelectorAll('[data-rvend]').forEach(x=>x.onclick=async()=>{
+    const id=x.dataset.rvend, nd=x.dataset.end; if(!nd) return;
+    if(!confirm('把该课结课日改为 '+nd+'？（同步更新教室占用）')) return;
+    await applyEnd(id, nd); await reloadAll(); tabCourses(); el('cf_trashBox').dataset.open='review'; renderReview(); toast('已更新结课日');
+  });
+  // 倒推开课日
+  box.querySelectorAll('[data-rvback]').forEach(x=>x.onclick=async()=>{
+    const c=COURSES.find(y=>String(y.id)===String(x.dataset.rvback)); if(!c) return;
+    const sd=computeStartByCount(c);
+    if(!confirm('固定结课日 '+esc(c.end_date||'')+'，按回数 '+c.sessions+' 倒推，应有开课日为：\n\n'+sd+'\n\n把开课日改为这个？')) return;
+    await sbUpdate('sched_courses', c.id, {start_date:sd});
+    const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
+    for(const b of bs) await sbUpdate('sched_bookings', b.id, {start_date:sd});
+    await reloadAll(); tabCourses(); el('cf_trashBox').dataset.open='review'; renderReview(); toast('已更新开课日');
+  });
+  // 全部应用
+  const aa=el('rv_applyall'); if(aa) aa.onclick=async()=>{
+    const need=rows.filter(r=>r.det.end&&r.det.end!==r.c.end_date);
+    if(!need.length){ toast('全部一致，无需应用'); return; }
+    if(!confirm('把 '+need.length+' 门课的结课日改为「应有结课日」？（同步更新教室占用）')) return;
+    let done=0; for(const r of need){ try{ await applyEnd(r.c.id, r.det.end); done++; }catch(e){} }
+    await reloadAll(); tabCourses(); el('cf_trashBox').dataset.open='review'; renderReview(); toast('已应用 '+done+' 门');
+  };
+}
+async function applyEnd(courseId, nd){
+  await sbUpdate('sched_courses', courseId, {end_date:nd});
+  const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(courseId));
+  for(const b of bs) await sbUpdate('sched_bookings', b.id, {end_date:nd});
+}
 async function fixEndByCount(list){
   const targets=[];
   (list||COURSES).forEach(c=>{
@@ -2241,6 +2320,52 @@ async function fixEndByCount(list){
   await reloadAll(); tabCourses(); toast('已按回数重算 '+done+' 门课的结课日');
 }
 /* 按回数算真实结束日：从开课日按周几排，跳过全局假期和个别休讲（豁免的照常计），数满 sessions 次 */
+/* 正推带明细：从开课日按回数排，返回 {end, blocked:[命中的假期/休讲日期], classDates:[实际上课日]} */
+function computeEndDetail(c){
+  const out={end:c.end_date||null, blocked:[], classDates:[]};
+  if(!c.start_date || !c.weekdays || !c.sessions) return out;
+  const wds=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x));
+  if(!wds.length) return out;
+  const N=Number(c.sessions); if(!N||N<1) return out;
+  const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
+  const except=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
+  const inHoliday=d=>{ for(const h of HOLIDAYS){ const s=h.start_date, e=h.end_date||h.start_date; if(s&&d>=s&&d<=e) return {label:h.label||'假期'}; } return null; };
+  let d=c.start_date, cnt=0, guard=0, last=c.start_date;
+  while(cnt<N && guard++<3000){
+    const wd=weekdayOf(d), wdN=(wd===0?7:wd);
+    if(wds.includes(wdN)||wds.includes(wd)){
+      const hol=inHoliday(d); const isSkip=skip.has(d);
+      const blocked=(hol&&!except.has(d))||isSkip;
+      if(blocked){ out.blocked.push({date:d, why: isSkip?'休讲':(hol?hol.label:'假期')}); }
+      else { cnt++; last=d; out.classDates.push(d); }
+    }
+    if(cnt>=N) break;
+    d=addDays(d,1);
+  }
+  out.end=last;
+  return out;
+}
+/* 倒推：从结课日往前按回数排，返回应有的开课日 */
+function computeStartByCount(c){
+  if(!c.end_date || !c.weekdays || !c.sessions) return c.start_date||null;
+  const wds=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x));
+  if(!wds.length) return c.start_date||null;
+  const N=Number(c.sessions); if(!N||N<1) return c.start_date||null;
+  const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
+  const except=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
+  const inHoliday=d=>{ for(const h of HOLIDAYS){ const s=h.start_date, e=h.end_date||h.start_date; if(s&&d>=s&&d<=e) return true; } return false; };
+  let d=c.end_date, cnt=0, guard=0, first=c.end_date;
+  while(cnt<N && guard++<3000){
+    const wd=weekdayOf(d), wdN=(wd===0?7:wd);
+    if(wds.includes(wdN)||wds.includes(wd)){
+      const blocked=(inHoliday(d)&&!except.has(d))||skip.has(d);
+      if(!blocked){ cnt++; first=d; }
+    }
+    if(cnt>=N) break;
+    d=addDays(d,-1);
+  }
+  return first;
+}
 function computeEndByCount(c){
   if(!c.start_date || !c.weekdays || !c.sessions) return c.end_date||null;
   const wds=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x));
