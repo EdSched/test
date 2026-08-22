@@ -374,7 +374,7 @@ function renderAssignDay(){
   // 提醒：已排但还没绑会议号的课
   const needMeeting=dayCourses.filter(c=>assignedSet.has(String(c.id)) && !(c.meeting_link||c.meeting_id));
   if(needMeeting.length){
-    right='<div style="background:#fdf1ed;border:1px solid #f2c9ba;color:#c05a3c;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px">📌 有 '+needMeeting.length+' 门已排课还没绑会议号，排完记得去「会议链接设定」统一绑定。</div>'+right;
+    right='<div style="background:#fdf1ed;border:1px solid #f2c9ba;color:#c05a3c;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px">有 '+needMeeting.length+' 门已排课还没绑会议号，排完记得去「会议链接设定」统一绑定。</div>'+right;
   }
   if(!dayCourses.length){ right+='<div class="muted">该条件下没有课。</div>'; }
   else{
@@ -384,7 +384,7 @@ function renderAssignDay(){
       return `<div class="daypick" data-pick="${c.id}" style="cursor:pointer;border:1px solid ${done?'#cfe0d3':cc.bd};background:${done?'#f2f8f4':'#fff'};border-radius:7px;padding:7px 9px;margin-bottom:6px">`+
         `<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:${cc.bg};border:1px solid ${cc.bd};display:inline-block"></span><b style="font-size:13px">${esc(c.merge_name||c.name)}</b>${c.merge_group?'<span class="badge b-mute" style="font-size:10px">合并</span>':''}`+
         (done?`<span class="badge b-ok" style="margin-left:auto">已排 ${esc(rm)}</span>`:`<span class="badge b-warn" style="margin-left:auto">未排</span>`)+'</div>'+
-        `<div class="muted" style="font-size:11px;margin-top:3px">${esc(c.category||'')}${c.teacher?' · '+esc(c.teacher):''} · ${c.start_time||''}-${c.end_time||''} · 📅 ${esc(dateRange(c))}</div></div>`;
+        `<div class="muted" style="font-size:11px;margin-top:3px">${esc(c.category||'')}${c.teacher?' · '+esc(c.teacher):''} · ${c.start_time||''}-${c.end_time||''} · 日期 ${esc(dateRange(c))}</div></div>`;
     }).join('');
   }
   box.innerHTML='<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">'+
@@ -478,14 +478,14 @@ function renderAssignWeek(){
       h+='<td style="vertical-align:top;padding:3px">';
       // 已排入本教室的课
       taken.forEach(b=>{ const c=COURSES.find(x=>String(x.id)===String(b.course_id))||{}; const cc=catColor(c.category);
-        h+=`<div class="wkcard" data-as="${b.course_id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:6px;padding:4px 6px;font-size:11px;line-height:1.3;margin-bottom:3px"><b>${esc(c.name||'课程')}</b><br>${esc(c.category||'')}<br><span style="font-size:10px;opacity:.75">📅 ${esc(dateRange(c))}</span></div>`;
+        h+=`<div class="wkcard" data-as="${b.course_id}" style="cursor:pointer;background:${cc.bg};border:1px solid ${cc.bd};color:${cc.tx};border-radius:6px;padding:4px 6px;font-size:11px;line-height:1.3;margin-bottom:3px"><b>${esc(c.name||'课程')}</b><br>${esc(c.category||'')}<br><span style="font-size:10px;opacity:.75">日期 ${esc(dateRange(c))}</span></div>`;
       });
       // 候选课（可点选加入待排）
       if(!taken.length){
         const cand=candFor(wd,sl);
         if(cand.length){
           cand.forEach(c=>{ const cc=catColor(c.category); const on=pend.has(String(c.id));
-            h+=`<div class="wkpick" data-pick="${c.id}" style="cursor:pointer;background:${on?cc.bg:'#fff'};border:1px ${on?'solid':'dashed'} ${cc.bd};color:${cc.tx};border-radius:6px;padding:3px 6px;font-size:11px;line-height:1.3;margin-bottom:3px">${on?'✓ ':'+ '}<b>${esc(c.name)}</b><br><span style="font-size:10px">${esc(c.category)}·${esc(c.teacher||'')}</span><br><span style="font-size:10px;opacity:.7">📅 ${esc(dateRange(c))}</span></div>`;
+            h+=`<div class="wkpick" data-pick="${c.id}" style="cursor:pointer;background:${on?cc.bg:'#fff'};border:1px ${on?'solid':'dashed'} ${cc.bd};color:${cc.tx};border-radius:6px;padding:3px 6px;font-size:11px;line-height:1.3;margin-bottom:3px">${on?'✓ ':'+ '}<b>${esc(c.name)}</b><br><span style="font-size:10px">${esc(c.category)}·${esc(c.teacher||'')}</span><br><span style="font-size:10px;opacity:.7">日期 ${esc(dateRange(c))}</span></div>`;
           });
         } else {
           h+='<div style="text-align:center;color:#ccd;font-size:11px;padding:4px 0">—</div>';
@@ -1043,12 +1043,12 @@ function runConflict(){
     const ovTxt = x.ovLo===x.ovHi ? x.ovLo : (x.ovLo+' ~ '+x.ovHi);
     const side=(d,bk)=>`<div style="flex:1;min-width:200px;border:1px solid var(--line);border-radius:8px;padding:8px 10px">`+
       `<div style="font-weight:600">${esc(d.name)} <span class="badge b-mute" style="font-size:10px">${esc(d.kind)}</span></div>`+
-      `<div class="muted" style="font-size:12px;margin-top:3px">${d.who?('👤 '+esc(d.who)+' · '):''}${esc(d.campus||'')}</div>`+
-      `<div class="muted" style="font-size:12px">🕐 ${esc(d.time)} · 📅 ${esc(d.span[0]||'')}${d.span[1]&&d.span[1]!==d.span[0]?('~'+esc(d.span[1])):''}</div>`+
+      `<div class="muted" style="font-size:12px;margin-top:3px">${d.who?('老师：'+esc(d.who)+' · '):''}${esc(d.campus||'')}</div>`+
+      `<div class="muted" style="font-size:12px">时段 ${esc(d.time)} · 日期 ${esc(d.span[0]||'')}${d.span[1]&&d.span[1]!==d.span[0]?('~'+esc(d.span[1])):''}</div>`+
       `</div>`;
     return `<div style="border:1px solid #f2c9ba;background:#fdf6f3;border-radius:10px;padding:10px 12px;margin-bottom:10px">`+
-      `<div style="font-size:13px;margin-bottom:6px">📍 <b>${esc(x.label)}</b> · ${esc(wds)} · <span style="color:#c0392b">冲突日期：${esc(ovTxt)}</span></div>`+
-      `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch">${side(da)}<div style="align-self:center;color:#c0392b;font-weight:700">✕</div>${side(db)}</div>`+
+      `<div style="font-size:13px;margin-bottom:6px"><b>${esc(x.label)}</b> · ${esc(wds)} · <span style="color:#c0392b">冲突日期：${esc(ovTxt)}</span></div>`+
+      `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch">${side(da)}${side(db)}</div>`+
       `</div>`;
   };
   let h=`<div class="muted" style="margin-bottom:8px">${esc(headLabel)}${campus?('· '+esc(campus)):''}</div>`;
@@ -1077,17 +1077,30 @@ function renderCourseConflicts(lo, hi, campus, scope){
     return true;
   });
   const wdsOf=c=>(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x)).map(w=>w===0?7:w);
+  // 某课已排的教室id集合
+  const roomsOfCourse=cid=>[...new Set(BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(cid)&&b.room_id).map(b=>String(b.room_id)))];
   const issues=[], acked=[];
   for(let i=0;i<pool.length;i++) for(let j=i+1;j<pool.length;j++){
     const a=pool[i],b=pool[j];
     if(a.merge_group && a.merge_group===b.merge_group) continue; // 合并组内不算
+    if((a.campus||'')!==(b.campus||'')) continue;               // 不同校区不冲突
     if(!overlap(a.start_time,a.end_time,b.start_time,b.end_time)) continue;
     const wa=new Set(wdsOf(a)), shared=wdsOf(b).filter(w=>wa.has(w));
     if(!shared.length) continue;
+    // 教室判断：都排了且不同教室=不冲突；同教室=真冲突；有一方没排=潜在竞争
+    const ra=roomsOfCourse(a.id), rb=roomsOfCourse(b.id);
+    let kind;
+    if(ra.length && rb.length){
+      const same=ra.some(x=>rb.includes(x));
+      if(!same) continue;              // 分别排在不同教室，不冲突
+      kind='same';                     // 同一间教室，真撞车
+    } else {
+      kind='compete';                  // 至少一方未排，竞争同校区空教室
+    }
     const ovLo=[a.start_date,b.start_date,lo].filter(Boolean).sort().pop();
     const ovHi=[a.end_date,b.end_date,hi].filter(Boolean).sort()[0];
     if(ovLo>ovHi) continue;
-    const rec={a,b,shared,ovLo,ovHi};
+    const rec={a,b,shared,ovLo,ovHi,kind,ra,rb};
     (isAcked(a.id,b.id)?acked:issues).push(rec);
   }
   const wdTxt=arr=>arr.map(w=>WD_NAME[w]).join('、');
@@ -1095,16 +1108,21 @@ function renderCourseConflicts(lo, hi, campus, scope){
     const da=bDetail({course_id:x.a.id, start_time:x.a.start_time, end_time:x.a.end_time, kind:'course'});
     const db=bDetail({course_id:x.b.id, start_time:x.b.start_time, end_time:x.b.end_time, kind:'course'});
     const ovTxt=x.ovLo===x.ovHi?x.ovLo:(x.ovLo+' ~ '+x.ovHi);
+    const isSame = x.kind==='same';
+    const roomTxt = isSame ? ('同一教室：'+x.ra.filter(r=>x.rb.includes(r)).map(rid=>rname(rid)).join('、'))
+                           : '竞争空教室（有课还没排教室）';
+    const kindBadge = isSame ? '<span class="badge b-err" style="font-size:10px">同教室·真撞车</span>' : '<span class="badge b-warn" style="font-size:10px">潜在竞争</span>';
     const side=(c,d)=>`<div style="flex:1;min-width:200px;border:1px solid var(--line);border-radius:8px;padding:8px 10px">`+
       `<div style="font-weight:600">${esc(c.merge_name||c.name)}</div>`+
-      `<div class="muted" style="font-size:12px;margin-top:3px">${esc(courseScope(c))}${c.teacher?(' · 👤 '+esc(c.teacher)):''} · ${esc(c.campus||'')}</div>`+
-      `<div class="muted" style="font-size:12px">🕐 ${esc(c.start_time)}-${esc(c.end_time)} · 📅 ${esc(c.start_date||'')}~${esc(c.end_date||'')}</div>`+
+      `<div class="muted" style="font-size:12px;margin-top:3px">${esc(courseScope(c))}${c.teacher?(' · 老师：'+esc(c.teacher)):''} · ${esc(c.campus||'')}</div>`+
+      `<div class="muted" style="font-size:12px">时段 ${esc(c.start_time)}-${esc(c.end_time)} · 日期 ${esc(c.start_date||'')}~${esc(c.end_date||'')}</div>`+
       `<div style="margin-top:5px"><button class="sm ghost" data-cfedit="${c.id}">去调整</button></div>`+
       `</div>`;
     const bg=isAck?'#f2f6f4':'#fff8f0', bd=isAck?'#cfe0d3':'#f0d9b3';
     return `<div style="border:1px solid ${bd};background:${bg};border-radius:10px;padding:10px 12px;margin-bottom:10px">`+
-      `<div style="font-size:13px;margin-bottom:6px">🗓 ${wdTxt(x.shared)} · <span style="color:#b5651d">叠加日期：${esc(ovTxt)}</span>${isAck?' <span class="badge b-ok" style="font-size:10px">已确认无碍</span>':''}</div>`+
-      `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch">${side(x.a)}<div style="align-self:center;color:#b5651d;font-weight:700">⇄</div>${side(x.b)}</div>`+
+      `<div style="font-size:13px;margin-bottom:6px">${wdTxt(x.shared)} · <span style="color:#b5651d">叠加日期：${esc(ovTxt)}</span> ${kindBadge}${isAck?' <span class="badge b-ok" style="font-size:10px">已确认无碍</span>':''}</div>`+
+      `<div class="muted" style="font-size:11px;margin-bottom:6px">教室：${esc(roomTxt)}</div>`+
+      `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch">${side(x.a)}${side(x.b)}</div>`+
       `<div style="margin-top:8px;display:flex;gap:8px">`+
         (isAck?`<button class="sm ghost" data-cfunack="${x.a.id}|${x.b.id}">重新标为冲突</button>`
               :`<button class="sm ghost" data-cfack="${x.a.id}|${x.b.id}">确认无碍（不再提示）</button>`)+
