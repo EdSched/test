@@ -159,6 +159,7 @@ function renderChangeAlerts(){
     renderChangeAlerts();
   });
 }
+function reminderHtml(){
   try{
     if(typeof schedulingReminders!=='function' || !ROLE) return '';
     const ps=permSet(ROLE);
