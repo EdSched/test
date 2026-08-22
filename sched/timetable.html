@@ -527,11 +527,13 @@ function holidayMarkers(courses){
   const ends=courses.map(c=>c.end_date).filter(Boolean).sort();
   if(!starts.length||!ends.length) return [];
   const lo=starts[0], hi=ends[ends.length-1];
+  // 已有真实上课（含被豁免照常上的课）的日期：这些日子不再显示假期横幅
+  const classDates=new Set(EVENTS.filter(ev=>ev.c && !ev.off).map(ev=>ev.date));
   const seen=new Set(), marks=[];
   HOLIDAYS.forEach(h=>{
     let d=h.start_date, e=h.end_date||h.start_date, guard=0;
     while(d && d<=e && guard++<400){
-      if(d>=lo && d<=hi && !seen.has(d)){ seen.add(d); marks.push({date:d, holiday:h, isHoliday:true}); }
+      if(d>=lo && d<=hi && !seen.has(d) && !classDates.has(d)){ seen.add(d); marks.push({date:d, holiday:h, isHoliday:true}); }
       d=addDays(d,1);
     }
   });
