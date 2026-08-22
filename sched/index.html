@@ -63,8 +63,30 @@ async function reloadAll(){
   try{ MTEMPLATES = await sbGet('sched_meeting_templates','select=*&order=created_at.desc'); }catch(e){ MTEMPLATES=[]; }
   try{ HOLIDAYS = await sbGet('sched_holidays','select=*&order=start_date'); }catch(e){ HOLIDAYS=[]; }
   try{ CHANGELOG = await sbGet('sched_change_log','select=*&order=created_at.desc&limit=50'); }catch(e){ CHANGELOG=[]; }
+  await autoFixEnds();   // 按回数+假期自动重算结课日并回写（回数定死）
   const pend=BOOKINGS.filter(b=>b.status==='pending').length;
   const pn=el('pendN'); if(pn){ pn.textContent = pend||''; pn.style.display=pend?'':'none'; }
+}
+// 自动把每门课的结课日锁到「第N次课」那天（跳过假期/休讲），有差异才回写
+async function autoFixEnds(){
+  if(window.__autofixing) return; window.__autofixing=true;
+  try{
+    const changed=[];
+    for(const c of COURSES){
+      if(!c.sessions || !c.start_date || !c.weekdays) continue;
+      const real=computeEndByCount(c);
+      // 只在回数不足时顺延（算出的结课日晚于当前）；回数够则不动，避免误缩短
+      if(real && (!c.end_date || real>c.end_date)){ changed.push({c, real}); }
+    }
+    for(const {c,real} of changed){
+      try{
+        await sbUpdate('sched_courses', c.id, {end_date:real});
+        c.end_date=real;   // 更新本地，避免再次触发
+        const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
+        for(const b of bs){ await sbUpdate('sched_bookings', b.id, {end_date:real}); b.end_date=real; }
+      }catch(e){}
+    }
+  }finally{ window.__autofixing=false; }
 }
 let MTEMPLATES=[];
 let HOLIDAYS=[];
@@ -1821,7 +1843,7 @@ function renderCoursesTable(){
     '<button class="ghost sm" id="cf_batch">批量修改所选</button>'+
     '<button class="danger sm" id="cf_delsel">删除所选</button>'+
     (isAdmin?('<button class="ghost sm" id="cf_trash">已删除'+(DELETED_COURSES.length?('（'+DELETED_COURSES.length+'）'):'')+'</button>'+
-             '<button class="ghost sm" id="cf_fixend">按回数修正结课日</button>'+
+             '<button class="ghost sm" id="cf_fixend">按回数重算结课日</button>'+
              '<button class="ghost sm" id="cf_backup">下载全部课程备份</button>'):'')+
     '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>'+
     '<div id="cf_trashBox"></div>'+
@@ -2202,11 +2224,11 @@ async function fixEndByCount(list){
   (list||COURSES).forEach(c=>{
     if(!c.sessions||!c.start_date||!c.weekdays) return;
     const real=computeEndByCount(c);
-    if(real && c.end_date && real>c.end_date) targets.push({c, real});
+    if(real && real!==c.end_date) targets.push({c, real, dir:(!c.end_date||real>c.end_date)?'延后':'提前'});
   });
-  if(!targets.length){ toast('所有课回数都够，无需修正'); return; }
-  const lines=targets.slice(0,30).map(t=>`${esc(t.c.name)}：${esc(t.c.end_date||'')} → ${esc(t.real)}`).join('\n');
-  if(!confirm('有 '+targets.length+' 门课因假期/休讲导致回数不足，结课日将顺延：\n\n'+lines+(targets.length>30?'\n…':'')+'\n\n确认修正结课日？（会同时更新已排教室占用）')) return;
+  if(!targets.length){ toast('所有课结课日都已符合回数，无需修正'); return; }
+  const lines=targets.slice(0,40).map(t=>`${esc(t.c.name)}（回数${t.c.sessions}）：${esc(t.c.end_date||'（空）')} → ${esc(t.real)}  [${t.dir}]`).join('\n');
+  if(!confirm('将按「当前回数 + 假期/休讲」重新计算 '+targets.length+' 门课的结课日：\n\n'+lines+(targets.length>40?'\n…':'')+'\n\n确认按回数覆盖结课日？（会同时更新已排教室占用）')) return;
   let done=0;
   for(const t of targets){
     try{
@@ -2216,7 +2238,7 @@ async function fixEndByCount(list){
       done++;
     }catch(e){}
   }
-  await reloadAll(); tabCourses(); toast('已修正 '+done+' 门课的结课日');
+  await reloadAll(); tabCourses(); toast('已按回数重算 '+done+' 门课的结课日');
 }
 /* 按回数算真实结束日：从开课日按周几排，跳过全局假期和个别休讲（豁免的照常计），数满 sessions 次 */
 function computeEndByCount(c){
