@@ -50,7 +50,8 @@
     <div class="field" style="margin-top:8px"><label>对外看板(today)显示</label><select id="m_showtitle"><option value="0">只标「占用」（不露用途）</option><option value="1">显示用途标题</option></select></div>
     <div class="field" style="margin-top:8px"><label>使用人/单位</label><input id="m_user"></div>
     <div class="field" style="margin-top:8px"><label>是否占用会议账号</label><select id="m_um">
-      <option value="false">否</option><option value="true">是（占该教室固定账号）</option></select></div>
+      <option value="false">否</option><option value="true">是（占该教室固定账号）</option></select>
+      <div id="m_umtip" class="hidden" style="margin-top:5px;font-size:11px;color:#b5651d;background:#fdf6ed;border:1px solid #f0d9b3;border-radius:6px;padding:5px 8px">⏱ 提醒：会议账号在别的时段可能另有安排，请按你上面填的「日期+时段」确认这个账号那时是空的再占用（账号的整体绑定时间不等于你这次要用的时间）。</div></div>
     <div class="field" style="margin-top:8px"><label>备注</label><input id="m_note"></div>
     <div id="m_warn" class="hidden" style="margin-top:8px"></div>
     <div style="margin-top:14px;display:flex;gap:8px">
@@ -94,6 +95,7 @@ async function boot(){
   el('date').onchange = renderGrid;
   el('campus').onchange = renderGrid;
   el('use').onchange = ()=>{ renderGrid(); if(el('resBox').dataset.done) find(); };
+  el('m_um').onchange = ()=>{ el('m_umtip').classList.toggle('hidden', el('m_um').value!=='true'); };
   el('m_cancel').onclick = ()=>el('modal').classList.add('hidden');
   el('m_submit').onclick = submit;
   renderGrid();
