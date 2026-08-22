@@ -201,7 +201,7 @@ function mondayOf(iso){ const d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()
 async function boot(){
   fillSelect(el('cat'), CATEGORIES.filter(c=>c!=='语言'));
   fillSelect(el('campus'), ['高马','市谷','线上'], v=>v, v=>v, '全部校区');
-  COURSES = await sbGet('sched_courses','select=*');
+  COURSES = (await sbGet('sched_courses','select=*')).filter(c=>!c.deleted_at);
   try{ HOLIDAYS = await sbGet('sched_holidays','select=*&order=start_date'); }catch(e){ HOLIDAYS=[]; }
   ALL_TERMS=[...new Set(COURSES.map(c=>c.term).filter(Boolean))].sort((a,b)=>termSortKey(a)-termSortKey(b));
   renderTermTags();
