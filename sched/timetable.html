@@ -108,6 +108,9 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
       <div class="field ttRange hidden"><label>&nbsp;</label><span class="muted" style="font-size:12px">只生成这段时间内在上的课，跨度大时更清爽</span></div>
     </div>
     <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:1;min-width:280px"><label>课表标题（手动，留空则按模板自动生成）</label><input id="ttTitle" placeholder="如：唯新教育 2026年10月期 大学院文科 课程表" style="width:100%"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
       <div class="field" style="flex:1;min-width:280px"><label>封面说明（每行一条，可自由换行）</label><textarea id="pdfCover" rows="4" placeholder="上课顺序和具体时间有调整的可能性，若有变动，将会在班级群内通知，一切以群内通知为准。&#10;校内考系列课程届时会根据同学实际出愿情况详细安排。&#10;定期面谈、升学规划、出愿材料指导、研究计划书修改等，均为班主任预约制1对1辅导，不显示在课表内。" style="width:100%;font-size:12px;line-height:1.7"></textarea></div>
       <div class="field" style="flex:1;min-width:220px"><label>页眉说明（每页顶部，选填）</label><textarea id="pdfHeader" rows="4" placeholder="如：唯新教育 · 社会人文课程表 · 2026年10月期" style="width:100%;font-size:12px;line-height:1.7"></textarea></div>
     </div>
@@ -552,7 +555,8 @@ async function doPrint(){
   const firstTerm = SEL_TERMS.size ? [...SEL_TERMS][0] : '';
   const campus = el('campus').value || '';
   const tplName = (el('tplLabel').value||'').trim();
-  const coverTitle = [firstTerm, campus, tplName, '课程表'].filter(Boolean).join(' ');
+  const customTitle = (el('ttTitle')?el('ttTitle').value:'').trim();
+  const coverTitle = customTitle || [firstTerm, campus, tplName, '课程表'].filter(Boolean).join(' ');
   const subMeta = SEL_TERMS.size>1 ? ('含 '+[...SEL_TERMS].join('、')) : '唯新教育';
   const coverText = (el('pdfCover')?el('pdfCover').value:'').trim();
   // 封面课程颜色图例（合并课用合并名去重）
@@ -637,7 +641,7 @@ async function doPrint(){
         '</div>'+
       '</div>'+
     '</div>';
-  const headTitle = [campus, firstTerm, tplName, '课程日历'].filter(Boolean).join(' ');
+  const headTitle = customTitle || [campus, firstTerm, tplName, '课程日历'].filter(Boolean).join(' ');
   function pageHead(){
     return '<div class="phead"><div class="ph-title">'+esc(headTitle)+'</div>'+
       (headerText?'<div class="ph-note">'+esc(headerText)+'</div>':'')+'</div>';
