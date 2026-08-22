@@ -83,13 +83,12 @@ const HUB_CARDS = [
   ['rooms',    '🏠','教室管理','增删改教室、新增租借教室','tab','rooms'],
   ['accounts', '🎙️','会议账号管理','管理腾讯账号（固定/临时、登录名密码）','tab','accounts'],
   ['courses',  '✍️','课程管理','课程列表：新增/编辑/删除/查重','tab','courses'],
-  ['codes',    '⚙️','角色权限','管理各角色权限、生成专属链接','tab','codes'],
 ];
 /* 每张卡片需要的权限；manage(管理员)看到全部 */
 const CARD_PERM = {
   board:'board', timetable:'timetable', meeting:'meeting_view', bookingf:'entry_room',
   pending:'approve', assign:'assign', mtgsetup:'meeting_arrange', conflict:'conflict', occupy:'entry_room',
-  rooms:'manage', accounts:'meeting_arrange', courses:'course', codes:'manage'
+  rooms:'manage', accounts:'meeting_arrange', courses:'course'
 };
 function canSee(key){
   if(!ROLE) return false;
@@ -168,7 +167,7 @@ el('backHub').onclick = ()=>{ el('frame').src='about:blank'; renderHub(); };
 
 function show(t){
   ({pending:tabPending,assign:tabAssign,conflict:tabConflict,occupy:tabOccupy,rooms:tabRooms,
-    accounts:tabAccounts,courses:tabCourses,codes:tabCodes,mtgsetup:tabMtgSetup}[t])();
+    accounts:tabAccounts,courses:tabCourses,mtgsetup:tabMtgSetup}[t])();
 }
 
 /* ---------- 待确认预约 ---------- */
