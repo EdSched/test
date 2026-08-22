@@ -682,15 +682,23 @@ function assignRoomOnly(courseId){
       '<div class="field"><label>结课日</label><input type="date" id="aro_ed" value="'+(c.end_date||'')+'"></div></div>';
   }
   h+='<div class="field" style="margin:8px 0"><label>选教室（容量足够）</label><select id="aro_room">'+roomOpts+'</select></div>'+
+    (isOnlineCourse?'':'<div style="display:flex;gap:8px;align-items:center;margin:8px 0"><span id="aro_um" data-on="1" style="cursor:pointer;user-select:none;border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:14px;padding:3px 12px;font-size:12px">占用该教室腾讯账号</span><span class="muted" id="aro_accName" style="font-size:12px"></span></div>')+
     '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button id="aro_save">'+(isOnlineCourse?'占用此教室':'确认排入')+'</button>'+
     (isOnlineCourse?'<button class="ghost" id="aro_noroom">不安排教室（仅腾讯会议）</button>':'')+
     (ex?'<button class="danger" id="aro_clear">清空教室（改回未排）</button>':'')+
     '<button class="ghost" id="aro_cancel">取消</button></div>'+
-    '<p class="muted" style="font-size:12px;margin-top:8px">'+(isOnlineCourse?'线上课：如学生要来自习就占一间教室；纯线上就点「不安排教室」，同样算排完，之后去绑腾讯会议即可。':'只排教室，不绑会议号。排完可继续排下一门，最后统一去「会议链接设定」绑定会议号。')+'</p>'+
+    '<p class="muted" style="font-size:12px;margin-top:8px">'+(isOnlineCourse?'线上课：如学生要来自习就占一间教室；纯线上就点「不安排教室」，同样算排完，之后去绑腾讯会议即可。':'排入教室会默认占用该教室绑定的腾讯账号（用于账号冲突检测和看板显示）。具体会议链接/会议号之后统一到「会议链接设定」补。')+'</p>'+
     '</div></div>';
   const wrap=document.createElement('div'); wrap.innerHTML=h; document.body.appendChild(wrap.firstChild);
   el('aro_cancel').onclick=()=>document.getElementById('aroMask').remove();
   document.getElementById('aroMask').onclick=(ev)=>{ if(ev.target.id==='aroMask') ev.target.remove(); };
+  // 占用账号开关 + 随教室显示绑定账号
+  const refreshAcc=()=>{ const r=ROOMS.find(x=>String(x.id)===String(el('aro_room').value)); const an=r&&r.meeting_account_id?aname(r.meeting_account_id):null;
+    const nm=el('aro_accName'); if(nm) nm.textContent = an?('账号：'+an):'（该教室未绑定账号，先去「会议账号管理」绑）';
+    const um=el('aro_um'); if(um && !an){ um.dataset.on='0'; um.style.background=''; um.style.color='#999'; um.style.borderColor='var(--line)'; } };
+  if(el('aro_room')) el('aro_room').onchange=refreshAcc; refreshAcc();
+  if(el('aro_um')) el('aro_um').onclick=()=>{ const um=el('aro_um'); const r=ROOMS.find(x=>String(x.id)===String(el('aro_room').value)); if(!(r&&r.meeting_account_id)){ toast('该教室未绑定账号', false); return; }
+    const on=um.dataset.on==='1'?'0':'1'; um.dataset.on=on; um.style.background=on==='1'?'var(--blue)':''; um.style.color=on==='1'?'#fff':'#999'; um.style.borderColor=on==='1'?'var(--blue)':'var(--line)'; };
   if(el('aro_noroom')) el('aro_noroom').onclick=async()=>{
     let sd=c.start_date, ed=c.end_date;
     if(noDate){ sd=el('aro_sd').value; ed=el('aro_ed').value; if(!sd||!ed){ toast('请补开课/结课日', false); return; } }
@@ -715,6 +723,9 @@ function assignRoomOnly(courseId){
   };
   el('aro_save').onclick=async()=>{
     const roomId=el('aro_room').value; if(!roomId){ toast('请选教室', false); return; }
+    const selRoom=ROOMS.find(r=>String(r.id)===String(roomId));
+    const roomAcc=selRoom?selRoom.meeting_account_id:null;      // 教室绑定的腾讯账号
+    const useAcc=(el('aro_um')? el('aro_um').dataset.on!=='0' : true) && !!roomAcc;
     let sd=c.start_date, ed=c.end_date;
     if(noDate){ sd=el('aro_sd').value; ed=el('aro_ed').value; if(!sd||!ed){ toast('请补开课/结课日', false); return; } }
     const btn=el('aro_save'); btn.disabled=true; btn.textContent='生成中…';
@@ -727,7 +738,7 @@ function assignRoomOnly(courseId){
         wdays.forEach(wd=>recs.push({ room_id:roomId, kind:'course', course_id:gc.id,
           title:dispName, user_name:gc.teacher||null, recurrence:'weekly', weekday:wd,
           start_date:sd||gc.start_date||null, end_date:ed||gc.end_date||null, start_time:gc.start_time, end_time:gc.end_time,
-          uses_meeting:false, meeting_account_id:null, status:'confirmed', created_by:'admin', note:'排课自动生成' }));
+          uses_meeting:useAcc, meeting_account_id:useAcc?roomAcc:null, status:'confirmed', created_by:'admin', note:'排课自动生成' }));
       });
       if(recs.length) await sbInsert('sched_bookings', recs);
       await reloadAll();
@@ -1374,6 +1385,13 @@ function renderMtgRoom(){
   const boundAcc=room.meeting_account_id?aname(room.meeting_account_id):null;
   if(!courses.length){ el('ms_body').innerHTML='<div class="muted">这间教室还没有排课。请先到「排教室」把课排进来。</div>'; return; }
   let h=`<div style="font-size:13px;margin-bottom:8px"><b>${esc(room.name)}</b> <span class="muted">${esc(room.campus)}${boundAcc?(' · 绑定账号：'+esc(boundAcc)):' · 未绑定账号'}</span></div>`;
+  // 本教室有绑定账号，但存在「已排却没占账号」的占用 → 提供一键补绑
+  if(room.meeting_account_id){
+    const unbound=BOOKINGS.filter(b=>b.kind==='course'&&String(b.room_id)===String(room.id)&&!(b.uses_meeting&&b.meeting_account_id));
+    if(unbound.length){
+      h+='<div style="background:#fff8f0;border:1px solid #f0d9b3;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px">有 '+unbound.length+' 条本教室占用还没绑定腾讯账号（看板/冲突检测会漏）。<button class="sm" id="ms_bindall" style="margin-left:6px">一键补绑本教室账号</button></div>';
+    }
+  }
   h+='<table><thead><tr><th>课程</th><th>专业</th><th>周几·时段</th><th>会议链接</th><th>操作</th></tr></thead><tbody>';
   courses.sort((a,b)=>(a.weekdays||'').localeCompare(b.weekdays||'')).forEach(c=>{
     const hasLink=!!(c.meeting_link||c.meeting_id);
@@ -1386,6 +1404,15 @@ function renderMtgRoom(){
   el('ms_body').innerHTML=h;
   bind('[data-msset]', id=>mtgSetForm(id, room));
   bind('[data-mscopy]', id=>mtgCopyForm(id, room));
+  if(el('ms_bindall')) el('ms_bindall').onclick=async()=>{
+    const unbound=BOOKINGS.filter(b=>b.kind==='course'&&String(b.room_id)===String(room.id)&&!(b.uses_meeting&&b.meeting_account_id));
+    if(!unbound.length) return;
+    if(!confirm('把本教室 '+unbound.length+' 条未绑账号的占用，全部绑定到「'+esc(boundAcc||'')+'」？')) return;
+    const btn=el('ms_bindall'); btn.disabled=true; btn.textContent='处理中…';
+    try{ for(const b of unbound) await sbUpdate('sched_bookings', b.id, {uses_meeting:true, meeting_account_id:room.meeting_account_id});
+      await reloadAll(); renderMtgRoom(); toast('已补绑 '+unbound.length+' 条'); }
+    catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='一键补绑本教室账号'; }
+  };
 }
 /* 给单门课设链接：标题(可选已有通用会议) → 会议设定详细信息 → 粘贴解析/直接用通用链接 → 保存 */
 function mtgSetForm(courseId, room){
