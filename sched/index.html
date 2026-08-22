@@ -1521,23 +1521,34 @@ function renderCoursesTable(){
     else if(f==='category'){ box.innerHTML='<select id="cf_bv">'+CATEGORIES.map(x=>`<option>${x}</option>`).join('')+'</select>'; hint.textContent='所选课程类别统一改为此值。'; }
     else if(f==='skip_add'){
       box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center">'+
-        '<select id="cf_htype" style="min-width:200px">'+
-          '<option value="red">🔴 节日（全局·所有课放假）</option>'+
-          '<option value="green">🟢 假日（全局·所有课放假）</option>'+
-          '<option value="skip">🟡 休讲（仅所选课·保留课名+划线）</option>'+
-          '<option value="except">⚪ 豁免（所选课在全局假期照常上课）</option>'+
+        '<select id="cf_htype" style="min-width:220px">'+
+          '<option value="red" style="color:#c0392b">节日（全局·所有课放假）</option>'+
+          '<option value="green" style="color:#2c8a4f">假日（全局·所有课放假）</option>'+
+          '<option value="skip" style="color:#b8860b">休讲（仅所选课·保留课名+划线）</option>'+
+          '<option value="except" style="color:#555">豁免（所选课在某假期照常上课）</option>'+
         '</select>'+
-        '<input type="date" id="cf_bv" title="起始日"> ~ <input type="date" id="cf_bv2" title="结束日（单天可留空）">'+
-        '<input id="cf_blabel" placeholder="名称/原因" style="width:150px">'+
+        '<span id="cf_dwrap" style="display:inline-flex;gap:6px;align-items:center">'+
+          '<input type="date" id="cf_bv" title="起始日"> ~ <input type="date" id="cf_bv2" title="结束日（单天可留空）">'+
+          '<input id="cf_blabel" placeholder="名称/原因" style="width:150px">'+
+        '</span>'+
+        '<span id="cf_exwrap" style="display:none;gap:6px;align-items:center">'+
+          '<select id="cf_exhol" style="min-width:200px">'+(HOLIDAYS.length?HOLIDAYS.map(h=>`<option value="${h.id}">${esc(h.label||'假期')}（${esc(h.start_date||'')}${h.end_date&&h.end_date!==h.start_date?('~'+esc(h.end_date)):''}）</option>`).join(''):'<option value="">（还没有全局假期，先设一个红/绿假期）</option>')+'</select>'+
+        '</span>'+
       '</span>';
       const upd=()=>{ const t=el('cf_htype').value;
-        const lb=el('cf_blabel');
-        if(t==='red'||t==='green'){ lb.placeholder='假期名称，如 春节假期'; lb.style.display='';
-          hint.textContent='全局假期：这段时间内所有课都放假，课表用红/绿标出假期名。与勾选哪些课无关。'; }
-        else if(t==='skip'){ lb.placeholder='休讲原因，如 老师请假'; lb.style.display='';
-          hint.textContent='个别休讲：只给「勾选的课」在这段日期停课。课表上会保留原课名并划下划线，标注原因。需先勾选课程。'; }
-        else { lb.style.display='none';
-          hint.textContent='假期豁免：让「勾选的课」在这段日期照常上课（即使撞上全局假期）。用于全局放假但某些课要上的情况。需先勾选课程。'; }
+        const lb=el('cf_blabel'); const dwrap=el('cf_dwrap'); const exwrap=el('cf_exwrap');
+        if(t==='except'){
+          if(dwrap) dwrap.style.display='none';
+          if(exwrap) exwrap.style.display='';
+          hint.textContent='假期豁免：让「勾选的课」在所选的那个假期期间照常上课（只豁免这一个假期，别的假期照常放假）。需先勾选课程。';
+        } else {
+          if(dwrap) dwrap.style.display='';
+          if(exwrap) exwrap.style.display='none';
+          if(t==='red'||t==='green'){ lb.placeholder='假期名称，如 春节假期'; lb.style.display='';
+            hint.textContent='全局假期：这段时间内所有课都放假，课表用红/绿标出假期名。与勾选哪些课无关。'; }
+          else if(t==='skip'){ lb.placeholder='休讲原因，如 老师请假'; lb.style.display='';
+            hint.textContent='个别休讲：只给「勾选的课」在这段日期停课。课表保留原课名并划下划线、标注原因。需先勾选课程。'; }
+        }
       };
       el('cf_htype').onchange=upd; upd();
     }
@@ -1555,13 +1566,27 @@ function renderCoursesTable(){
   function renderHolidayList(){
     const box=el('cf_holidayList'); if(!box) return;
     if(!HOLIDAYS.length){ box.innerHTML=''; return; }
-    box.innerHTML='<div style="margin-top:8px;font-size:12px;color:#666">已设假期（点删除可移除）：</div>'+
+    box.innerHTML='<div style="margin-top:8px;font-size:12px;color:#666">已设全局假期（✕删除；「豁免所选课」= 让当前勾选的课在该假期照常上课）：</div>'+
       HOLIDAYS.map(h=>{ const col=h.color==='green'?'#2c8a4f':'#c0392b';
-        return `<span style="display:inline-flex;align-items:center;gap:6px;margin:4px 6px 0 0;padding:2px 8px;border-radius:12px;background:${h.color==='green'?'#e7f6ec':'#fdecea'};color:${col};font-size:12px">${esc(h.label||'假期')} ${esc(h.start_date||'')}${h.end_date&&h.end_date!==h.start_date?('~'+esc(h.end_date)):''} <b data-delhol="${h.id}" style="cursor:pointer">✕</b></span>`;
+        return `<div style="display:inline-flex;align-items:center;gap:8px;margin:5px 8px 0 0;padding:3px 10px;border-radius:12px;background:${h.color==='green'?'#e7f6ec':'#fdecea'};color:${col};font-size:12px">${esc(h.label||'假期')} ${esc(h.start_date||'')}${h.end_date&&h.end_date!==h.start_date?('~'+esc(h.end_date)):''} <b data-exhol="${h.id}" style="cursor:pointer;border:1px solid ${col};border-radius:8px;padding:0 6px;font-weight:400">豁免所选课</b> <b data-delhol="${h.id}" style="cursor:pointer">✕</b></div>`;
       }).join('');
     box.querySelectorAll('[data-delhol]').forEach(x=>x.onclick=async()=>{
       if(!confirm('删除该假期？')) return;
       await sbDelete('sched_holidays', x.dataset.delhol); await reloadAll(); tabCourses();
+    });
+    box.querySelectorAll('[data-exhol]').forEach(x=>x.onclick=async()=>{
+      const ids=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
+      if(!ids.length){ toast('请先在下方勾选要豁免的课', false); return; }
+      const hol=HOLIDAYS.find(h=>String(h.id)===String(x.dataset.exhol)); if(!hol) return;
+      if(!confirm('让勾选的 '+ids.length+' 门课在「'+(hol.label||'假期')+'」期间照常上课？')) return;
+      const exDates=[]; let d=hol.start_date, g=0; const e=hol.end_date||hol.start_date;
+      while(d && d<=e && g++<400){ exDates.push(d); d=addDays(d,1); }
+      for(const id of ids){ const c=COURSES.find(y=>String(y.id)===String(id)); if(!c) continue;
+        const cur=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
+        exDates.forEach(dd=>cur.add(dd));
+        await sbUpdate('sched_courses', id, {holiday_except:[...cur].sort().join(',')});
+      }
+      await reloadAll(); tabCourses(); toast('已豁免 '+ids.length+' 门课（'+(hol.label||'假期')+'照常上课）');
     });
   }
   setTimeout(renderHolidayList,0);
@@ -1589,6 +1614,15 @@ function renderCoursesTable(){
       // 黄/豁免：只作用于选中课
       const ids0=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
       if(!ids0.length){ toast('请先勾选课程', false); return; }
+      // 豁免：用所选那个假期的日期范围
+      let exDates=dates;
+      if(t==='except'){
+        const hid=el('cf_exhol')?el('cf_exhol').value:'';
+        const hol=HOLIDAYS.find(h=>String(h.id)===String(hid));
+        if(!hol){ toast('请先选一个要豁免的假期（没有的话先设红/绿全局假期）', false); return; }
+        exDates=[]; let d2=hol.start_date, g2=0; const e2=hol.end_date||hol.start_date;
+        while(d2 && d2<=e2 && g2++<400){ exDates.push(d2); d2=addDays(d2,1); }
+      }
       const btn=el('cf_bapply'); btn.disabled=true; btn.textContent='处理中…';
       try{
         for(const id of ids0){
@@ -1596,19 +1630,18 @@ function renderCoursesTable(){
           if(t==='skip'){
             const cur=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
             dates.forEach(d=>cur.add(d));
-            // 原因映射
-            const rmap={}; (c.skip_reasons||'').split(';').forEach(p=>{ const [k,val]=p.split('='); if(k) rmap[k.trim()]=val||''; });
+            const rmap={}; (c.skip_reasons||'').split(';').forEach(p=>{ const i=p.indexOf('='); if(i>0) rmap[p.slice(0,i).trim()]=p.slice(i+1); });
             if(label) dates.forEach(d=>rmap[d]=label);
             const rstr=Object.keys(rmap).filter(k=>rmap[k]).map(k=>k+'='+rmap[k]).join(';');
             await sbUpdate('sched_courses', id, {skip_dates:[...cur].sort().join(','), skip_reasons:rstr});
-          } else { // except 豁免
+          } else { // except 豁免：加入该假期的日期
             const cur=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
-            dates.forEach(d=>cur.add(d));
+            exDates.forEach(d=>cur.add(d));
             await sbUpdate('sched_courses', id, {holiday_except:[...cur].sort().join(',')});
           }
         }
         await reloadAll(); el('cf_batchBox').classList.add('hidden'); tabCourses();
-        toast(t==='skip'?('已给 '+ids0.length+' 门课加休讲'):('已豁免 '+ids0.length+' 门课（照常上课）'));
+        toast(t==='skip'?('已给 '+ids0.length+' 门课加休讲'):('已豁免 '+ids0.length+' 门课（该假期照常上课）'));
       }catch(e){ toast('失败：'+e.message, false); btn.disabled=false; btn.textContent='应用到所选'; }
       return;
     }
