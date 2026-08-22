@@ -54,6 +54,7 @@ function tabCodes(){
     const ps = new Set((c.perms?c.perms.split(','):[]).map(s=>s.trim()).filter(Boolean));
     const chips = PERM_DEFS
       .filter(([perm])=>perm!=='entry_room_full')     // 合并为单一“教室占用录入”
+      .filter(([perm])=>perm!=='manage')              // 角色管理不对外发放，只 admin 独立入口
       .map(([perm,label])=>{
         const on = ps.has(perm);
         const nm = perm==='entry_room'?'教室占用录入':label;
