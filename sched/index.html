@@ -58,6 +58,8 @@ async function reloadAll(){
     sbGet('sched_bookings','select=*&order=created_at.desc'),
     sbGet('sched_access_codes','select=*&order=id')
   ]);
+  DELETED_COURSES = COURSES.filter(c=>c.deleted_at);
+  COURSES = COURSES.filter(c=>!c.deleted_at);
   try{ MTEMPLATES = await sbGet('sched_meeting_templates','select=*&order=created_at.desc'); }catch(e){ MTEMPLATES=[]; }
   try{ HOLIDAYS = await sbGet('sched_holidays','select=*&order=start_date'); }catch(e){ HOLIDAYS=[]; }
   try{ CHANGELOG = await sbGet('sched_change_log','select=*&order=created_at.desc&limit=50'); }catch(e){ CHANGELOG=[]; }
@@ -67,6 +69,7 @@ async function reloadAll(){
 let MTEMPLATES=[];
 let HOLIDAYS=[];
 let CHANGELOG=[];
+let DELETED_COURSES=[];
 const rname=id=>{ const r=ROOMS.find(x=>String(x.id)===String(id)); return r?r.name:'—'; };
 const aname=id=>{ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?a.name:'—'; };
 
@@ -129,6 +132,7 @@ function renderHub(){
     }
   }catch(e){ const rb=el('schedRemind'); if(rb) rb.innerHTML=''; }
   renderChangeAlerts();
+  renderTrashExpiry();
   const pend = BOOKINGS.filter(b=>b.status==='pending').length;
   el('hubCards').innerHTML = visibleCards().map(([k,ic,nm,desc])=>{
     const badge = (k==='pending'&&pend)?` <span class="badge b-warn">${pend}</span>`:'';
@@ -158,6 +162,23 @@ function renderChangeAlerts(){
     try{ await sbUpdate('sched_change_log', l.id, {acked_by:acked.join(',')}); l.acked_by=acked.join(','); }catch(e){}
     renderChangeAlerts();
   });
+}
+function renderTrashExpiry(){
+  let box=el('trashExpiry');
+  if(!box){ const hi=el('hello'); if(!hi) return; box=document.createElement('div'); box.id='trashExpiry'; hi.parentNode.insertBefore(box, hi.nextSibling); }
+  const isAdmin = ROLE && (ROLE.role==='admin' || (ROLE.perms&&ROLE.perms.split(',').map(s=>s.trim()).includes('manage')));
+  if(!isAdmin){ box.innerHTML=''; return; }
+  const over=(DELETED_COURSES||[]).filter(c=>daysSince(c.deleted_at)>=30);
+  if(!over.length){ box.innerHTML=''; return; }
+  box.innerHTML='<div style="background:#fdecea;border:1px solid #f2c9ba;border-radius:8px;padding:10px 14px;margin-bottom:8px">'+
+    '<div style="font-size:13px;color:#c0392b"><b>有 '+over.length+' 门已删除课程超过 30 天</b>，请下载备份后清除。</div>'+
+    '<div style="margin-top:8px;display:flex;gap:8px"><button class="sm ghost" id="te_backup">下载全部课程备份</button><button class="sm danger" id="te_purge">确认清除超30天（'+over.length+'）</button></div></div>';
+  if(el('te_backup')) el('te_backup').onclick=()=>downloadCourseBackup();
+  if(el('te_purge')) el('te_purge').onclick=async()=>{
+    if(!confirm('确认清除全部超30天的已删除课程？不可恢复！建议先下载备份。')) return;
+    for(const c of over) await sbDelete('sched_courses',c.id);
+    await reloadAll(); renderTrashExpiry(); toast('已清除 '+over.length+' 门');
+  };
 }
 function reminderHtml(){
   try{
@@ -1644,6 +1665,46 @@ function previewImport(rows){
     renderCoursesTable();
   };
 }
+function daysSince(iso){ if(!iso) return 0; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
+function renderTrash(){
+  const box=el('cf_trashBox'); if(!box) return;
+  if(!DELETED_COURSES.length){ box.innerHTML='<div class="muted" style="margin:8px 0;padding:10px;border:1px dashed var(--line);border-radius:8px">没有已删除的课程。</div>'; return; }
+  let h='<div style="border:1px solid #e6d9bd;background:#fdfaf3;border-radius:8px;padding:10px 12px;margin:8px 0">'+
+    '<div style="font-size:13px;margin-bottom:6px"><b>已删除课程</b> <span class="muted" style="font-size:12px">保留30天，可恢复；到期请下载备份后清除</span></div>'+
+    '<table style="font-size:12px"><thead><tr><th>课程</th><th>期·类别</th><th>删除者</th><th>已过天数</th><th>操作</th></tr></thead><tbody>';
+  DELETED_COURSES.slice().sort((a,b)=>(b.deleted_at||'').localeCompare(a.deleted_at||'')).forEach(c=>{
+    const d=daysSince(c.deleted_at); const over=d>=30;
+    h+='<tr><td><b>'+esc(c.name)+'</b></td><td>'+esc(c.term||'')+' '+esc(c.category||'')+'</td><td>'+esc(c.deleted_by||'')+'</td>'+
+      '<td>'+d+' 天'+(over?' <span class="badge b-err" style="font-size:10px">已超30天</span>':'')+'</td>'+
+      '<td><button class="sm ghost" data-restore="'+c.id+'">恢复</button> <button class="sm danger" data-purge="'+c.id+'">彻底删除</button></td></tr>';
+  });
+  h+='</tbody></table>';
+  const over=DELETED_COURSES.filter(c=>daysSince(c.deleted_at)>=30);
+  if(over.length) h+='<div style="margin-top:8px"><button class="sm danger" id="cf_purgeover">清除全部超30天（'+over.length+'）</button> <span class="muted" style="font-size:11px">请先「下载全部课程备份」再清</span></div>';
+  h+='</div>';
+  box.innerHTML=h;
+  box.querySelectorAll('[data-restore]').forEach(x=>x.onclick=async()=>{
+    await sbUpdate('sched_courses',x.dataset.restore,{deleted_at:null,deleted_by:null});
+    await reloadAll(); tabCourses(); toast('已恢复（教室需重新排）');
+  });
+  box.querySelectorAll('[data-purge]').forEach(x=>x.onclick=async()=>{
+    if(!confirm('彻底删除？此操作不可恢复！')) return;
+    await sbDelete('sched_courses',x.dataset.purge); await reloadAll(); tabCourses(); el('cf_trashBox').dataset.open='1'; renderTrash(); toast('已彻底删除');
+  });
+  const po=el('cf_purgeover'); if(po) po.onclick=async()=>{
+    if(!confirm('清除全部超30天的已删除课程？不可恢复！建议先下载备份。')) return;
+    for(const c of over) await sbDelete('sched_courses',c.id);
+    await reloadAll(); tabCourses(); el('cf_trashBox').dataset.open='1'; renderTrash(); toast('已清除 '+over.length+' 门');
+  };
+}
+function downloadCourseBackup(){
+  try{
+    const all=[...COURSES, ...DELETED_COURSES];
+    const rows=all.map(c=>({期:c.term||'',课程名:c.name||'',类别:c.category||'',专业:c.major||'',属性:c.course_type||'',校区:c.campus||'',讲师:c.teacher||'',周几:c.weekdays||'',开始:c.start_time||'',结束:c.end_time||'',开课日:c.start_date||'',结课日:c.end_date||'',回数:c.sessions||'',人数:c.est_students||'',方式:c.mode||'',会议链接:c.meeting_link||'',会议号:c.meeting_id||'',休讲日:c.skip_dates||'',状态:c.deleted_at?('已删除 '+(c.deleted_at||'').slice(0,10)):'在用'}));
+    const ws=XLSX.utils.json_to_sheet(rows); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'课程备份');
+    XLSX.writeFile(wb,'课程备份_'+todayStr()+'.xlsx');
+  }catch(e){ toast('导出失败：'+e.message, false); }
+}
 function renderCoursesTable(){
   const q=(el('cf_q').value||'').trim().toLowerCase();
   const term=el('cf_term').value, cat=el('cf_cat').value, major=el('cf_major').value, ctype=el('cf_type').value, campus=el('cf_campus').value;
@@ -1660,11 +1721,15 @@ function renderCoursesTable(){
     return true;
   });
   el('cf_count').textContent='共 '+list.length+' 门';
+  const isAdmin = ROLE && (ROLE.role==='admin' || (ROLE.perms&&ROLE.perms.split(',').map(s=>s.trim()).includes('manage')));
   let h='<div class="row" style="margin-bottom:8px">'+
     '<button class="ghost sm" id="cf_dupscan">查找重复</button>'+
     '<button class="ghost sm" id="cf_batch">批量修改所选</button>'+
     '<button class="danger sm" id="cf_delsel">删除所选</button>'+
+    (isAdmin?('<button class="ghost sm" id="cf_trash">已删除'+(DELETED_COURSES.length?('（'+DELETED_COURSES.length+'）'):'')+'</button>'+
+             '<button class="ghost sm" id="cf_backup">下载全部课程备份</button>'):'')+
     '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>'+
+    '<div id="cf_trashBox"></div>'+
     '<div id="cf_batchBox" class="hidden" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fafbfc">'+
       '<div class="row">'+
         '<div class="field"><label>修改项</label><select id="cf_bfield">'+
@@ -1701,12 +1766,19 @@ function renderCoursesTable(){
   el('cf_delsel').onclick=async()=>{
     const ids=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
     if(!ids.length){ toast('未选择', false); return; }
-    if(!confirm('删除所选 '+ids.length+' 门课程及其教室占用？')) return;
-    for(const id of ids){ const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
-      for(const b of bs) await sbDelete('sched_bookings',b.id); await sbDelete('sched_courses',id); }
-    await reloadAll(); tabCourses(); toast('已删除 '+ids.length+' 门');
+    if(!confirm('删除所选 '+ids.length+' 门课程？（可在「已删除」区恢复，30天内保留）')) return;
+    const who=(ROLE&&(ROLE.label||ROLE.role))||'某账号';
+    for(const id of ids){ const c=COURSES.find(x=>String(x.id)===String(id));
+      const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
+      for(const b of bs) await sbDelete('sched_bookings',b.id);
+      await sbUpdate('sched_courses',id,{deleted_at:new Date().toISOString(), deleted_by:who});
+      if(c){ try{ await sbInsert('sched_change_log',{ course_id:id, course_name:c.name, actor_role:(ROLE&&ROLE.role)||'', actor_label:who, action:'delete', changes:[{field:'_deleted',label:'整门课',from:c.name,to:'已删除'}], acked_by:'' }); }catch(e){} }
+    }
+    await reloadAll(); tabCourses(); toast('已删除 '+ids.length+' 门（可在「已删除」区恢复）');
   };
   el('cf_dupscan').onclick=()=>dupScan(list);
+  if(el('cf_trash')) el('cf_trash').onclick=()=>{ const b=el('cf_trashBox'); if(b.dataset.open==='1'){ b.innerHTML=''; b.dataset.open=''; } else { b.dataset.open='1'; renderTrash(); } };
+  if(el('cf_backup')) el('cf_backup').onclick=()=>downloadCourseBackup();
   // ---- 批量修改 ----
   el('cf_batch').onclick=()=>{ el('cf_batchBox').classList.toggle('hidden'); renderBatchVal(); };
   el('cf_bclose').onclick=()=>el('cf_batchBox').classList.add('hidden');
@@ -1891,15 +1963,15 @@ function renderCoursesTable(){
     }catch(e){ toast('部分失败：'+e.message, false); btn.disabled=false; btn.textContent='应用到所选'; }
   };
   bind('[data-edc]', id=>courseEdit(id));
-  bind('[data-delc]', async id=>{ if(!confirm('删除课程及其教室占用？')) return;
+  bind('[data-delc]', async id=>{ if(!confirm('删除课程？（可在「已删除」区恢复，30天内保留）')) return;
     const c=COURSES.find(x=>String(x.id)===String(id));
     const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
     for(const b of bs) await sbDelete('sched_bookings',b.id);
-    await sbDelete('sched_courses',id);
+    await sbUpdate('sched_courses',id,{deleted_at:new Date().toISOString(), deleted_by:(ROLE&&(ROLE.label||ROLE.role))||'某账号'});
     if(c){ try{ await sbInsert('sched_change_log',{ course_id:id, course_name:c.name,
       actor_role:(ROLE&&ROLE.role)||'', actor_label:(ROLE&&(ROLE.label||ROLE.role))||'某账号', action:'delete',
       changes:[{field:'_deleted',label:'整门课',from:c.name+'（'+(c.term||'')+' '+(c.category||'')+'）',to:'已删除'}], acked_by:'' }); }catch(e){} }
-    await reloadAll(); tabCourses(); toast('已删除'); });
+    await reloadAll(); tabCourses(); toast('已删除（可在「已删除」区恢复）'); });
 }
 /* 查找重复：同校区+同周几+同时段+同起止日 归为一组，组内>1 即疑似重复 */
 function dupScan(list){
