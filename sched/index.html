@@ -1267,40 +1267,61 @@ function renderMtgRoom(){
   bind('[data-msset]', id=>mtgSetForm(id, room));
   bind('[data-mscopy]', id=>mtgCopyForm(id, room));
 }
-/* 给单门课设链接：复制标题 → 账号信息 → 粘贴解析 → 保存到课程 */
+/* 给单门课设链接：标题(可选已有通用会议) → 会议设定详细信息 → 粘贴解析/直接用通用链接 → 保存 */
 function mtgSetForm(courseId, room){
   const c=COURSES.find(x=>String(x.id)===String(courseId)); if(!c) return;
-  const acc=room.meeting_account_id?ACCOUNTS.find(a=>String(a.id)===String(room.meeting_account_id)):null;
   const title=[c.term,c.category,c.name].filter(Boolean).join('-');
-  let parsed=null;
+  const tpls=MTEMPLATES.filter(t=>!c.term||t.term===c.term);
+  let parsed=null, chosenTpl=null;
   function render(){
+    const dateRange=(c.start_date&&c.end_date)?(c.start_date+' ~ '+c.end_date):(c.start_date||c.end_date||'—');
     let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px"><div class="card" style="width:600px;max-width:94vw;margin:auto">'+
       '<h3 style="margin-top:2px">设会议链接 · 「'+esc(c.name)+'」</h3>'+
-      '<div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px"><b>① 会议标题</b><div style="display:flex;gap:8px;margin-top:6px"><input id="ms_title" value="'+esc(title)+'" style="flex:1"><button type="button" class="ghost sm" id="ms_ctitle">复制</button></div></div>'+
-      '<div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px"><b>② 使用账号</b>';
-    if(acc){ h+='<table style="margin-top:6px"><tbody>'+
-      `<tr><td class="muted" style="width:90px">账号名</td><td><b>${esc(acc.name||'')}</b></td></tr>`+
-      `<tr><td class="muted">登录账号</td><td>${esc(acc.account_no||'—')} ${acc.account_no?('<button type="button" class="ghost sm" data-cp="'+esc(acc.account_no)+'">复制</button>'):''}</td></tr>`+
-      `<tr><td class="muted">密码</td><td>${esc(acc.password||'—')} ${acc.password?('<button type="button" class="ghost sm" data-cp="'+esc(acc.password)+'">复制</button>'):''}</td></tr>`+
-      '</tbody></table>'; }
-    else h+='<div class="badge b-warn" style="margin-top:6px">本教室未绑定固定账号，可在「会议账号管理」补上。</div>';
-    h+='</div>'+
-      '<div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px"><b>③ 粘贴会议邀请解析</b><div class="field" style="margin-top:6px"><textarea id="ms_txt" rows="5" placeholder="把腾讯会议邀请整段粘贴进来"></textarea></div><button type="button" class="ghost sm" id="ms_parse">解析</button><div id="ms_prev" style="margin-top:8px"></div></div>'+
-      '<div style="margin-top:12px;display:flex;gap:8px"><button id="ms_save" '+(parsed?'':'disabled')+'>保存链接</button><button class="ghost" id="ms_cancel">取消</button></div>'+
+      // ① 会议标题（可选已有通用会议）
+      '<div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px"><b>① 会议标题</b>'+
+        (tpls.length?('<div style="margin-top:6px"><select id="ms_tpl" style="width:100%"><option value="">— 自定义标题（不用通用会议）—</option>'+
+          tpls.map(t=>`<option value="${t.id}"${chosenTpl&&String(chosenTpl.id)===String(t.id)?' selected':''}>${esc(t.title||('通用会议#'+t.id))}${(t.meeting_link||t.meeting_id)?'（含通用链接）':''}</option>`).join('')+
+          '</select></div>'):'')+
+        '<div style="display:flex;gap:8px;margin-top:6px"><input id="ms_title" value="'+esc(chosenTpl?(chosenTpl.title||title):title)+'" style="flex:1"><button type="button" class="ghost sm" id="ms_ctitle">复制</button></div>'+
+      '</div>'+
+      // ② 会议设定详细信息（对照着设）
+      '<div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px"><b>② 会议设定信息（对照设定周期会议）</b>'+
+        '<table style="margin-top:6px"><tbody>'+
+          `<tr><td class="muted" style="width:90px">周几·时段</td><td><b>${weekdaysLabel(c.weekdays)} ${esc(c.start_time||'')}-${esc(c.end_time||'')}</b></td></tr>`+
+          `<tr><td class="muted">起止日期</td><td><b>${esc(dateRange)}</b></td></tr>`+
+          `<tr><td class="muted">回数</td><td>${c.sessions?esc(String(c.sessions))+' 次':'—'}</td></tr>`+
+          `<tr><td class="muted">教室</td><td>${esc(room.name)}（${esc(room.campus)}）</td></tr>`+
+        '</tbody></table>'+
+        '<div class="muted" style="font-size:11px;margin-top:4px">按上面的周几、时段、起止日期在腾讯会议里建「周期会议」。</div>'+
+      '</div>';
+    if(chosenTpl && (chosenTpl.meeting_link||chosenTpl.meeting_id)){
+      h+='<div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px"><b>③ 使用该通用会议的链接</b>'+
+        '<table style="margin-top:6px"><tbody>'+
+        `<tr><td class="muted" style="width:90px">链接</td><td>${chosenTpl.meeting_link?esc(chosenTpl.meeting_link):'—'}</td></tr>`+
+        `<tr><td class="muted">会议号</td><td>${chosenTpl.meeting_id?esc(chosenTpl.meeting_id):'—'}</td></tr>`+
+        '</tbody></table><div class="muted" style="font-size:11px;margin-top:4px">直接用这个通用链接，无需再粘贴解析。</div></div>';
+    } else {
+      h+='<div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px"><b>③ 粘贴会议邀请解析</b><div class="field" style="margin-top:6px"><textarea id="ms_txt" rows="5" placeholder="把腾讯会议邀请整段粘贴进来"></textarea></div><button type="button" class="ghost sm" id="ms_parse">解析</button><div id="ms_prev" style="margin-top:8px"></div></div>';
+    }
+    const canSave = chosenTpl ? !!(chosenTpl.meeting_link||chosenTpl.meeting_id) : !!parsed;
+    h+='<div style="margin-top:12px;display:flex;gap:8px"><button id="ms_save" '+(canSave?'':'disabled')+'>保存链接</button><button class="ghost" id="ms_cancel">取消</button></div>'+
       '</div></div>';
     el('ms_form').innerHTML=h;
+    if(el('ms_tpl')) el('ms_tpl').onchange=()=>{ const id=el('ms_tpl').value; chosenTpl=id?MTEMPLATES.find(t=>String(t.id)===String(id)):null; parsed=null; render(); };
     el('ms_ctitle').onclick=()=>navigator.clipboard.writeText(el('ms_title').value).then(()=>toast('标题已复制'));
-    document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>navigator.clipboard.writeText(b.dataset.cp).then(()=>toast('已复制')));
-    el('ms_parse').onclick=()=>{ parsed=parseTencent(el('ms_txt').value);
+    if(el('ms_parse')) el('ms_parse').onclick=()=>{ parsed=parseTencent(el('ms_txt').value);
       if(!parsed.link&&!parsed.id){ el('ms_prev').innerHTML='<span class="badge b-err">没识别到链接或会议号</span>'; el('ms_save').disabled=true; return; }
       el('ms_prev').innerHTML='<table><tbody>'+`<tr><td class="muted">链接</td><td>${parsed.link?esc(parsed.link):'—'}</td></tr><tr><td class="muted">会议号</td><td>${parsed.id?esc(parsed.id):'—'}</td></tr></tbody></table>`;
       el('ms_save').disabled=false; };
     el('ms_cancel').onclick=()=>{ el('ms_form').innerHTML=''; };
     el('ms_save').onclick=async()=>{
-      if(!parsed) return; const btn=el('ms_save'); btn.disabled=true; btn.textContent='保存中…';
-      try{ await sbUpdate('sched_courses', c.id, {meeting_link:parsed.link||null, meeting_id:parsed.id||null});
+      let link,mid;
+      if(chosenTpl){ link=chosenTpl.meeting_link||null; mid=chosenTpl.meeting_id||null; }
+      else { if(!parsed) return; link=parsed.link||null; mid=parsed.id||null; }
+      const btn=el('ms_save'); btn.disabled=true; btn.textContent='保存中…';
+      try{ await sbUpdate('sched_courses', c.id, {meeting_link:link, meeting_id:mid});
         await reloadAll(); el('ms_form').innerHTML=''; renderMtgRoom(); toast('已保存会议链接'); }
-      catch(e){ el('ms_prev').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; btn.disabled=false; btn.textContent='保存链接'; }
+      catch(e){ toast(esc(e.message), false); btn.disabled=false; btn.textContent='保存链接'; }
     };
   }
   render();
