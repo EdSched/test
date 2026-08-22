@@ -60,11 +60,13 @@ async function reloadAll(){
   ]);
   try{ MTEMPLATES = await sbGet('sched_meeting_templates','select=*&order=created_at.desc'); }catch(e){ MTEMPLATES=[]; }
   try{ HOLIDAYS = await sbGet('sched_holidays','select=*&order=start_date'); }catch(e){ HOLIDAYS=[]; }
+  try{ CHANGELOG = await sbGet('sched_change_log','select=*&order=created_at.desc&limit=50'); }catch(e){ CHANGELOG=[]; }
   const pend=BOOKINGS.filter(b=>b.status==='pending').length;
   const pn=el('pendN'); if(pn){ pn.textContent = pend||''; pn.style.display=pend?'':'none'; }
 }
 let MTEMPLATES=[];
 let HOLIDAYS=[];
+let CHANGELOG=[];
 const rname=id=>{ const r=ROOMS.find(x=>String(x.id)===String(id)); return r?r.name:'—'; };
 const aname=id=>{ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?a.name:'—'; };
 
@@ -126,6 +128,7 @@ function renderHub(){
       } else rb.innerHTML='';
     }
   }catch(e){ const rb=el('schedRemind'); if(rb) rb.innerHTML=''; }
+  renderChangeAlerts();
   const pend = BOOKINGS.filter(b=>b.status==='pending').length;
   el('hubCards').innerHTML = visibleCards().map(([k,ic,nm,desc])=>{
     const badge = (k==='pending'&&pend)?` <span class="badge b-warn">${pend}</span>`:'';
@@ -133,7 +136,29 @@ function renderHub(){
   }).join('') || '<span class="muted">当前账号暂无可用功能，请联系管理员。</span>';
   el('hubCards').querySelectorAll('[data-hub]').forEach(a=>a.onclick=(e)=>{ e.preventDefault(); openCard(a.dataset.hub); });
 }
-function reminderHtml(){
+function renderChangeAlerts(){
+  let box=el('changeAlerts');
+  if(!box){ const hi=el('hello'); if(!hi) return; box=document.createElement('div'); box.id='changeAlerts'; hi.parentNode.insertBefore(box, hi.nextSibling); }
+  const myRole=(ROLE&&ROLE.role)||'';
+  const pending=(CHANGELOG||[]).filter(l=>{ const acked=(l.acked_by||'').split(',').map(s=>s.trim()).filter(Boolean); return !acked.includes(myRole); });
+  if(!pending.length){ box.innerHTML=''; return; }
+  box.innerHTML = pending.map(l=>{
+    const chg=(Array.isArray(l.changes)?l.changes:[]).map(x=>`<div style="font-size:12px;margin-top:2px">· <b>${esc(x.label)}</b>：${esc(String(x.from))} → ${esc(String(x.to))}</div>`).join('');
+    const when=(l.created_at||'').slice(0,16).replace('T',' ');
+    return `<div style="background:#fbf6ee;border:1px solid #ecdcbe;border-radius:8px;padding:10px 14px;margin-bottom:8px">`+
+      `<div style="font-size:13px"><b>${esc(l.actor_label||'某账号')}</b>（${esc(l.actor_role||'')}）修改了课程「<b>${esc(l.course_name||'')}</b>」 <span class="muted" style="font-size:11px">${esc(when)}</span></div>`+
+      chg+
+      `<div style="margin-top:8px"><button class="sm ghost" data-ackchg="${l.id}">知道了</button></div>`+
+      `</div>`;
+  }).join('');
+  box.querySelectorAll('[data-ackchg]').forEach(b=>b.onclick=async()=>{
+    const l=CHANGELOG.find(x=>String(x.id)===String(b.dataset.ackchg)); if(!l) return;
+    const acked=(l.acked_by||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(!acked.includes(myRole)) acked.push(myRole);
+    try{ await sbUpdate('sched_change_log', l.id, {acked_by:acked.join(',')}); l.acked_by=acked.join(','); }catch(e){}
+    renderChangeAlerts();
+  });
+}
   try{
     if(typeof schedulingReminders!=='function' || !ROLE) return '';
     const ps=permSet(ROLE);
@@ -1658,12 +1683,13 @@ function renderCoursesTable(){
       '<p class="muted" style="font-size:12px;margin-top:4px" id="cf_bhint"></p>'+
       '<div id="cf_holidayList"></div>'+
     '</div>';
-  h+='<table><thead><tr><th><input type="checkbox" id="cf_all"></th><th>期</th><th>课程</th><th>类别</th><th>专业</th><th>属性</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>方式</th><th>操作</th></tr></thead><tbody>';
-  if(!list.length) h+='<tr><td colspan="13" class="muted">无匹配课程</td></tr>';
+  h+='<table><thead><tr><th><input type="checkbox" id="cf_all"></th><th>期</th><th>课程</th><th>类别</th><th>专业</th><th>属性</th><th>校区</th><th>讲师</th><th>周几</th><th>时段</th><th>日期区间</th><th>方式</th><th>会议</th><th>操作</th></tr></thead><tbody>';
+  if(!list.length) h+='<tr><td colspan="14" class="muted">无匹配课程</td></tr>';
   list.forEach(c=>{ h+=`<tr data-cid="${c.id}"><td><input type="checkbox" class="cf_ck" value="${c.id}"></td><td>${esc(c.term||'')}</td><td>${esc(c.name)}</td><td>${esc(c.category)}</td><td>${esc(c.major||'')}</td><td>${esc(c.course_type||'')}</td><td>${esc(c.campus)}</td><td>${esc(c.teacher||'')}</td>`+
     `<td>${weekdaysLabel(c.weekdays)}</td><td>${c.start_time||''}-${c.end_time||''}</td>`+
     `<td>${(c.start_date&&c.end_date)?(c.start_date+' ~ '+c.end_date):'<span class="badge b-warn">缺日期</span>'}</td>`+
     `<td>${esc(c.mode)}</td>`+
+    `<td style="font-size:11px">${(c.meeting_link||c.meeting_id)?('<span class="badge b-ok" style="font-size:10px">已设</span>'+(c.meeting_id?(' '+esc(c.meeting_id)):'')+(c.meeting_link?(' <a href="'+esc(c.meeting_link)+'" target="_blank" rel="noopener">进入</a>'):'')):'<span class="muted">—</span>'}</td>`+
     `<td><button class="sm ghost" data-edc="${c.id}">编辑</button> <button class="sm danger" data-delc="${c.id}">删</button></td></tr>`; });
   h+='</tbody></table>';
   el('coursesTable').innerHTML=h;
@@ -1865,9 +1891,14 @@ function renderCoursesTable(){
   };
   bind('[data-edc]', id=>courseEdit(id));
   bind('[data-delc]', async id=>{ if(!confirm('删除课程及其教室占用？')) return;
+    const c=COURSES.find(x=>String(x.id)===String(id));
     const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(id));
     for(const b of bs) await sbDelete('sched_bookings',b.id);
-    await sbDelete('sched_courses',id); await reloadAll(); tabCourses(); toast('已删除'); });
+    await sbDelete('sched_courses',id);
+    if(c){ try{ await sbInsert('sched_change_log',{ course_id:id, course_name:c.name,
+      actor_role:(ROLE&&ROLE.role)||'', actor_label:(ROLE&&(ROLE.label||ROLE.role))||'某账号', action:'delete',
+      changes:[{field:'_deleted',label:'整门课',from:c.name+'（'+(c.term||'')+' '+(c.category||'')+'）',to:'已删除'}], acked_by:'' }); }catch(e){} }
+    await reloadAll(); tabCourses(); toast('已删除'); });
 }
 /* 查找重复：同校区+同周几+同时段+同起止日 归为一组，组内>1 即疑似重复 */
 function dupScan(list){
@@ -1972,7 +2003,14 @@ function courseEdit(id){
         await reloadAll(); tabCourses(); toast('课程已新增');
         return;
       }
+      // 记录变更日志（供首页提醒）
+      const FLBL={name:'课程名',teacher:'讲师',category:'类别',campus:'校区',term:'期',major:'专业',course_type:'属性',mode:'方式',start_time:'开始',end_time:'结束',start_date:'开课日',end_date:'结课日',weekdays:'周几',sessions:'回数',est_students:'人数',meeting_link:'会议链接',skip_dates:'休讲日'};
+      const changes=[];
+      Object.keys(FLBL).forEach(f=>{ const ov=(c[f]==null?'':String(c[f])), nv=(patch[f]==null?'':String(patch[f]));
+        if(ov!==nv) changes.push({field:f,label:FLBL[f],from:ov||'（空）',to:nv||'（空）'}); });
       await sbUpdate('sched_courses', c.id, patch);
+      if(changes.length){ try{ await sbInsert('sched_change_log',{ course_id:c.id, course_name:patch.name||c.name,
+        actor_role:(ROLE&&ROLE.role)||'', actor_label:(ROLE&&(ROLE.label||ROLE.role))||'某账号', action:'edit', changes, acked_by:'' }); }catch(e){} }
       // 若已排教室，同步把休讲日/结课日写进对应占用，看板才准
       const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
       for(const b of bs) await sbUpdate('sched_bookings', b.id, {end_date:patch.end_date, note: SKIP.length?('排课自动生成；休讲:'+SKIP.join(',')):'排课自动生成'});
