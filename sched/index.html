@@ -1794,6 +1794,7 @@ function renderCoursesTable(){
     '<button class="ghost sm" id="cf_batch">批量修改所选</button>'+
     '<button class="danger sm" id="cf_delsel">删除所选</button>'+
     (isAdmin?('<button class="ghost sm" id="cf_trash">已删除'+(DELETED_COURSES.length?('（'+DELETED_COURSES.length+'）'):'')+'</button>'+
+             '<button class="ghost sm" id="cf_fixend">按回数修正结课日</button>'+
              '<button class="ghost sm" id="cf_backup">下载全部课程备份</button>'):'')+
     '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>'+
     '<div id="cf_trashBox"></div>'+
@@ -1850,6 +1851,7 @@ function renderCoursesTable(){
   if(el('cf_showless')) el('cf_showless').onclick=()=>{ window.CF_SHOWALL=false; renderCoursesTable(); };
   if(el('cf_trash')) el('cf_trash').onclick=()=>{ const b=el('cf_trashBox'); if(b.dataset.open==='1'){ b.innerHTML=''; b.dataset.open=''; } else { b.dataset.open='1'; renderTrash(); } };
   if(el('cf_backup')) el('cf_backup').onclick=()=>downloadCourseBackup();
+  if(el('cf_fixend')) el('cf_fixend').onclick=()=>fixEndByCount(list);
   // ---- 批量修改 ----
   el('cf_batch').onclick=()=>{ el('cf_batchBox').classList.toggle('hidden'); renderBatchVal(); };
   el('cf_bclose').onclick=()=>el('cf_batchBox').classList.add('hidden');
@@ -2141,6 +2143,11 @@ function courseEdit(id){
       skip_dates: SKIP.length? SKIP.join(',') : null };
     if(el('e_morder')) patch.merge_order = el('e_morder').value?Number(el('e_morder').value):null;
     if(!patch.name){ el('e_warn').className=''; el('e_warn').innerHTML='<span class="badge b-err">请填课程名</span>'; return; }
+    // 按回数保证结课日：跳过假期/休讲后不足回数则顺延结课日（回数够则不变）
+    if(patch.sessions && patch.start_date && patch.weekdays){
+      const realEnd=computeEndByCount({start_date:patch.start_date, end_date:patch.end_date, weekdays:patch.weekdays, sessions:patch.sessions, skip_dates:patch.skip_dates, holiday_except:c.holiday_except});
+      if(realEnd && (!patch.end_date || realEnd>patch.end_date)) patch.end_date=realEnd;
+    }
     try{
       if(isNew){
         await sbInsert('sched_courses', patch);
@@ -2163,6 +2170,48 @@ function courseEdit(id){
   };
 }
 
+async function fixEndByCount(list){
+  const targets=[];
+  (list||COURSES).forEach(c=>{
+    if(!c.sessions||!c.start_date||!c.weekdays) return;
+    const real=computeEndByCount(c);
+    if(real && c.end_date && real>c.end_date) targets.push({c, real});
+  });
+  if(!targets.length){ toast('所有课回数都够，无需修正'); return; }
+  const lines=targets.slice(0,30).map(t=>`${esc(t.c.name)}：${esc(t.c.end_date||'')} → ${esc(t.real)}`).join('\n');
+  if(!confirm('有 '+targets.length+' 门课因假期/休讲导致回数不足，结课日将顺延：\n\n'+lines+(targets.length>30?'\n…':'')+'\n\n确认修正结课日？（会同时更新已排教室占用）')) return;
+  let done=0;
+  for(const t of targets){
+    try{
+      await sbUpdate('sched_courses', t.c.id, {end_date:t.real});
+      const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(t.c.id));
+      for(const b of bs) await sbUpdate('sched_bookings', b.id, {end_date:t.real});
+      done++;
+    }catch(e){}
+  }
+  await reloadAll(); tabCourses(); toast('已修正 '+done+' 门课的结课日');
+}
+/* 按回数算真实结束日：从开课日按周几排，跳过全局假期和个别休讲（豁免的照常计），数满 sessions 次 */
+function computeEndByCount(c){
+  if(!c.start_date || !c.weekdays || !c.sessions) return c.end_date||null;
+  const wds=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x));
+  if(!wds.length) return c.end_date||null;
+  const N=Number(c.sessions); if(!N||N<1) return c.end_date||null;
+  const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
+  const except=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
+  const inHoliday=d=>{ for(const h of HOLIDAYS){ const s=h.start_date, e=h.end_date||h.start_date; if(s&&d>=s&&d<=e) return true; } return false; };
+  let d=c.start_date, cnt=0, guard=0, last=c.start_date;
+  while(cnt<N && guard++<2000){
+    const wd=weekdayOf(d); const wdN=(wd===0?7:wd);
+    if(wds.includes(wdN) || wds.includes(wd)){
+      const blocked = (inHoliday(d) && !except.has(d)) || skip.has(d);  // 全局假期(未豁免)或个别休讲→不计
+      if(!blocked){ cnt++; last=d; }
+    }
+    if(cnt>=N) break;
+    d=addDays(d,1);
+  }
+  return last;
+}
 /* 角色链接统一指向 index 分发板（进去后按权限看到自己的功能） */
 function landingFor(role){
   const ps=(role.perms||'').split(',').map(s=>s.trim());
