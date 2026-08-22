@@ -944,67 +944,116 @@ function meetingLinkStep(c, accId){
 
 /* ---------- 冲突检查 ---------- */
 function tabConflict(){
+  const t0=todayStr();
   let h='<div class="card"><h3 style="margin-top:2px">冲突检查</h3>'+
     '<div class="row">'+
       '<div class="field"><label>检查方式</label><select id="cf_mode">'+
-        '<option value="date">按具体日期</option>'+
-        '<option value="wd">按每周几（查该周几所有占用）</option>'+
+        '<option value="range">按日期区间（推荐·看到具体哪几号冲突）</option>'+
+        '<option value="date">按具体某天</option>'+
       '</select></div>'+
-      '<div class="field" id="cf_dateWrap"><label>检查日期</label><input type="date" id="cf_date" value="'+todayStr()+'"></div>'+
-      '<div class="field hidden" id="cf_wdWrap"><label>星期几</label><select id="cf_wd">'+
-        '<option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option>'+
-      '</select></div>'+
+      '<div class="field" id="cf_fromWrap"><label>起</label><input type="date" id="cf_from" value="'+t0+'"></div>'+
+      '<div class="field" id="cf_toWrap"><label>止</label><input type="date" id="cf_to" value="'+addDays(t0,90)+'"></div>'+
+      '<div class="field hidden" id="cf_dateWrap"><label>检查日期</label><input type="date" id="cf_date" value="'+t0+'"></div>'+
+      '<div class="field"><label>校区</label><select id="cf_campus"></select></div>'+
       '<div class="field"><label>&nbsp;</label><button id="cf_go">检查</button></div>'+
     '</div><div id="cf_res" style="margin-top:10px"></div></div>';
   render(h);
+  fillSelect(el('cf_campus'), ['高马','市谷'], v=>v, v=>v, '全部校区');
   el('cf_mode').onchange=()=>{
-    const wd=el('cf_mode').value==='wd';
-    el('cf_dateWrap').classList.toggle('hidden',wd);
-    el('cf_wdWrap').classList.toggle('hidden',!wd);
+    const byDate=el('cf_mode').value==='date';
+    el('cf_dateWrap').classList.toggle('hidden',!byDate);
+    el('cf_fromWrap').classList.toggle('hidden',byDate);
+    el('cf_toWrap').classList.toggle('hidden',byDate);
     runConflict();
   };
   el('cf_go').onclick=runConflict;
-  el('cf_date').onchange=runConflict; el('cf_wd').onchange=runConflict;
+  ['cf_from','cf_to','cf_date','cf_campus'].forEach(id=>el(id).onchange=runConflict);
   runConflict();
 }
-// 求某占用适用的星期几集合（weekly 用 weekday；once 用 booking_date 推算）
+// 占用的星期集合（weekly 用 weekday；once 用 booking_date）
 function bookingWeekdays(b){
   const set=new Set();
-  if(b.recurrence==='weekly'){ if(b.weekday!=null&&b.weekday!=='') set.add(Number(b.weekday)===0?7:Number(b.weekday)); }
-  else if(b.booking_date){ const w=weekdayOf(b.booking_date); set.add(w===0?7:w); }
   if(b.weekday!=null&&b.weekday!==''){ const w=Number(b.weekday); set.add(w===0?7:w); }
+  if(b.recurrence!=='weekly' && b.booking_date){ const w=weekdayOf(b.booking_date); set.add(w===0?7:w); }
   return set;
 }
+// 占用的日期跨度
+function bSpan(b){
+  if(b.recurrence==='weekly') return [b.start_date||b.booking_date||'', b.end_date||b.start_date||b.booking_date||''];
+  return [b.booking_date||'', b.booking_date||''];
+}
+// 占用细节（课程取课名/老师/校区，非课程取用途/使用人）
+function bDetail(b){
+  const c=b.course_id?COURSES.find(x=>String(x.id)===String(b.course_id)):null;
+  const r=ROOMS.find(x=>String(x.id)===String(b.room_id));
+  return {
+    name: c?(c.merge_name||c.name):(b.title||KIND_LABEL[b.kind]||'占用'),
+    who: c?(c.teacher||''):(b.user_name||''),
+    campus: c?c.campus:(r?r.campus:''),
+    kind: c?'课程':(KIND_LABEL[b.kind]||b.kind),
+    time: (b.start_time||'')+'-'+(b.end_time||''),
+    span: bSpan(b)
+  };
+}
+const WD_NAME={1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'};
 function runConflict(){
   const mode=el('cf_mode').value;
-  let active, headLabel;
-  if(mode==='wd'){
-    const wd=Number(el('cf_wd').value);
-    const wdName={1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'}[wd];
-    active=BOOKINGS.filter(b=>b.status!=='pending' && bookingWeekdays(b).has(wd));
-    headLabel='每周 '+wdName+'（该周几全部占用）';
-  } else {
+  const campus=el('cf_campus').value;
+  let pool, headLabel, rangeLo, rangeHi;
+  if(mode==='date'){
     const date=el('cf_date').value;
-    active=BOOKINGS.filter(b=>b.status!=='pending' && bookingOnDate(b,date));
+    pool=BOOKINGS.filter(b=>b.status!=='pending' && bookingOnDate(b,date));
     headLabel=WEEKDAYS[weekdayOf(date)]+' '+date;
+    rangeLo=date; rangeHi=date;
+  } else {
+    const from=el('cf_from').value, to=el('cf_to').value;
+    if(!from||!to){ el('cf_res').innerHTML='<div class="muted">请选起止日期</div>'; return; }
+    rangeLo=from; rangeHi=to;
+    // 该区间内活跃的占用（weekly 跨度与区间有交集；once 落在区间内）
+    pool=BOOKINGS.filter(b=>{
+      if(b.status==='pending') return false;
+      const [s,e]=bSpan(b); if(!s) return false;
+      return !(e<from || s>to);
+    });
+    headLabel='日期区间 '+from+' ~ '+to;
   }
+  if(campus){ pool=pool.filter(b=>{ const r=ROOMS.find(x=>String(x.id)===String(b.room_id)); return r&&r.campus===campus; }); }
   const roomIssues=[], accIssues=[];
-  for(let i=0;i<active.length;i++) for(let j=i+1;j<active.length;j++){
-    const a=active[i],b=active[j];
+  for(let i=0;i<pool.length;i++) for(let j=i+1;j<pool.length;j++){
+    const a=pool[i],b=pool[j];
     if(!overlap(a.start_time,a.end_time,b.start_time,b.end_time)) continue;
-    if(a.room_id&&b.room_id&&String(a.room_id)===String(b.room_id))
-      roomIssues.push([a,b,rname(a.room_id)]);
-    if(a.uses_meeting&&b.uses_meeting&&String(a.meeting_account_id)===String(b.meeting_account_id)&&a.meeting_account_id)
-      accIssues.push([a,b,aname(a.meeting_account_id)]);
+    // 共同周几
+    const wa=bookingWeekdays(a), wb=bookingWeekdays(b);
+    const shared=[...wa].filter(w=>wb.has(w));
+    if(!shared.length) continue;
+    // 重叠日期区间
+    const [as,ae]=bSpan(a), [bs,be]=bSpan(b);
+    const ovLo=[as,bs,rangeLo].filter(Boolean).sort().pop();
+    const ovHi=[ae,be,rangeHi].filter(Boolean).sort()[0];
+    if(ovLo>ovHi) continue;
+    const rec={a,b,shared,ovLo,ovHi};
+    if(a.room_id&&b.room_id&&String(a.room_id)===String(b.room_id)) roomIssues.push({...rec,label:rname(a.room_id)});
+    if(a.uses_meeting&&b.uses_meeting&&a.meeting_account_id&&String(a.meeting_account_id)===String(b.meeting_account_id)) accIssues.push({...rec,label:aname(a.meeting_account_id)});
   }
-  const line=(a,b,label)=>`<tr><td>${esc(label)}</td><td>${esc(a.title||KIND_LABEL[a.kind])} ${a.start_time}-${a.end_time}</td><td>${esc(b.title||KIND_LABEL[b.kind])} ${b.start_time}-${b.end_time}</td></tr>`;
-  let h=`<div class="muted">${esc(headLabel)}</div>`;
-  h+='<h4 style="margin:10px 0 4px">教室冲突</h4>';
-  h+= roomIssues.length? '<table><thead><tr><th>教室</th><th>占用A</th><th>占用B</th></tr></thead><tbody>'+roomIssues.map(x=>line(...x)).join('')+'</tbody></table>'
-    : '<div class="badge b-ok">无教室冲突</div>';
-  h+='<h4 style="margin:14px 0 4px">会议账号冲突</h4>';
-  h+= accIssues.length? '<table><thead><tr><th>账号</th><th>占用A</th><th>占用B</th></tr></thead><tbody>'+accIssues.map(x=>line(...x)).join('')+'</tbody></table>'
-    : '<div class="badge b-ok">无账号冲突</div>';
+  const card=(x)=>{
+    const da=bDetail(x.a), db=bDetail(x.b);
+    const wds=x.shared.map(w=>WD_NAME[w]).join('、');
+    const ovTxt = x.ovLo===x.ovHi ? x.ovLo : (x.ovLo+' ~ '+x.ovHi);
+    const side=(d,bk)=>`<div style="flex:1;min-width:200px;border:1px solid var(--line);border-radius:8px;padding:8px 10px">`+
+      `<div style="font-weight:600">${esc(d.name)} <span class="badge b-mute" style="font-size:10px">${esc(d.kind)}</span></div>`+
+      `<div class="muted" style="font-size:12px;margin-top:3px">${d.who?('👤 '+esc(d.who)+' · '):''}${esc(d.campus||'')}</div>`+
+      `<div class="muted" style="font-size:12px">🕐 ${esc(d.time)} · 📅 ${esc(d.span[0]||'')}${d.span[1]&&d.span[1]!==d.span[0]?('~'+esc(d.span[1])):''}</div>`+
+      `</div>`;
+    return `<div style="border:1px solid #f2c9ba;background:#fdf6f3;border-radius:10px;padding:10px 12px;margin-bottom:10px">`+
+      `<div style="font-size:13px;margin-bottom:6px">📍 <b>${esc(x.label)}</b> · ${esc(wds)} · <span style="color:#c0392b">冲突日期：${esc(ovTxt)}</span></div>`+
+      `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch">${side(da)}<div style="align-self:center;color:#c0392b;font-weight:700">✕</div>${side(db)}</div>`+
+      `</div>`;
+  };
+  let h=`<div class="muted" style="margin-bottom:8px">${esc(headLabel)}${campus?('· '+esc(campus)):''}</div>`;
+  h+='<h4 style="margin:10px 0 6px">教室冲突 '+(roomIssues.length?('<span class="badge b-err">'+roomIssues.length+'</span>'):'')+'</h4>';
+  h+= roomIssues.length? roomIssues.map(card).join('') : '<div class="badge b-ok">无教室冲突</div>';
+  h+='<h4 style="margin:16px 0 6px">会议账号冲突 '+(accIssues.length?('<span class="badge b-err">'+accIssues.length+'</span>'):'')+'</h4>';
+  h+= accIssues.length? accIssues.map(card).join('') : '<div class="badge b-ok">无账号冲突</div>';
   el('cf_res').innerHTML=h;
 }
 
