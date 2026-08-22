@@ -1958,10 +1958,19 @@ function renderCoursesTable(){
   function renderHolidayList(){
     const box=el('cf_holidayList'); if(!box) return;
     if(!HOLIDAYS.length){ box.innerHTML=''; return; }
-    box.innerHTML='<div style="margin-top:8px;font-size:12px;color:#666">已设全局假期（✕删除；「豁免所选课」= 让当前勾选的课在该假期照常上课）：</div>'+
-      HOLIDAYS.map(h=>{ const col=h.color==='green'?'#2c8a4f':'#c0392b';
-        return `<div style="display:inline-flex;align-items:center;gap:8px;margin:5px 8px 0 0;padding:3px 10px;border-radius:12px;background:${h.color==='green'?'#e7f6ec':'#fdecea'};color:${col};font-size:12px">${esc(h.label||'假期')} ${esc(h.start_date||'')}${h.end_date&&h.end_date!==h.start_date?('~'+esc(h.end_date)):''} <b data-exhol="${h.id}" style="cursor:pointer;border:1px solid ${col};border-radius:8px;padding:0 6px;font-weight:400">豁免所选课</b> <b data-delhol="${h.id}" style="cursor:pointer">✕</b></div>`;
+    // 找重复：同起止日期，保留第一条，其余标为重复
+    const seen={}, dupIds=new Set();
+    HOLIDAYS.forEach(h=>{ const k=(h.start_date||'')+'|'+(h.end_date||h.start_date||''); if(seen[k]) dupIds.add(String(h.id)); else seen[k]=h.id; });
+    box.innerHTML='<div style="margin-top:8px;font-size:12px;color:#666">已设全局假期（✕删除；「豁免所选课」= 让当前勾选的课在该假期照常上课）'+
+      (dupIds.size?('　<b style="color:#c0392b">发现 '+dupIds.size+' 条重复</b> <button class="sm danger" id="cf_dedupHol" style="padding:0 8px">清理重复</button>'):'')+'：</div>'+
+      HOLIDAYS.map(h=>{ const col=h.color==='green'?'#2c8a4f':'#c0392b'; const isDup=dupIds.has(String(h.id));
+        return `<div style="display:inline-flex;align-items:center;gap:8px;margin:5px 8px 0 0;padding:3px 10px;border-radius:12px;background:${h.color==='green'?'#e7f6ec':'#fdecea'};color:${col};font-size:12px${isDup?';outline:2px solid #c0392b':''}">${esc(h.label||'假期')} ${esc(h.start_date||'')}${h.end_date&&h.end_date!==h.start_date?('~'+esc(h.end_date)):''}${isDup?' <span class="badge b-err" style="font-size:10px">重复</span>':''} <b data-exhol="${h.id}" style="cursor:pointer;border:1px solid ${col};border-radius:8px;padding:0 6px;font-weight:400">豁免所选课</b> <b data-delhol="${h.id}" style="cursor:pointer">✕</b></div>`;
       }).join('');
+    const dd=el('cf_dedupHol'); if(dd) dd.onclick=async()=>{
+      if(!confirm('删除 '+dupIds.size+' 条重复假期（每组同日期只保留一条）？')) return;
+      for(const id of dupIds) await sbDelete('sched_holidays', id);
+      await reloadAll(); tabCourses(); toast('已清理 '+dupIds.size+' 条重复');
+    };
     box.querySelectorAll('[data-delhol]').forEach(x=>x.onclick=async()=>{
       if(!confirm('删除该假期？')) return;
       await sbDelete('sched_holidays', x.dataset.delhol); await reloadAll(); tabCourses();
@@ -2016,6 +2025,9 @@ function renderCoursesTable(){
       // 红/绿：全局假期，与选课无关
       if(t==='red'||t==='green'){
         if(!label){ toast('请填假期名称', false); return; }
+        // 查重：同起止日期已存在就不再加
+        const dup=HOLIDAYS.find(h=>h.start_date===dstart && (h.end_date||h.start_date)===dend);
+        if(dup){ toast('已存在相同日期的假期「'+(dup.label||'')+'」，未重复添加', false); return; }
         const btn=el('cf_bapply'); btn.disabled=true; btn.textContent='处理中…';
         try{
           await sbInsert('sched_holidays', {start_date:dstart, end_date:dend, label, color:t});
