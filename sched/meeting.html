@@ -3,229 +3,246 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>腾讯会议账号占用 · 唯新</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  .chip{display:inline-block;cursor:pointer;user-select:none;border:1px solid var(--line);border-radius:14px;padding:3px 12px;font-size:12px;margin:2px;color:#666}
+  .chip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .pickrow{cursor:pointer;padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:12px}
+  .pickrow.on{border-color:var(--blue);background:#eef4ff}
+  .acc-free{cursor:pointer;border:1px solid #b7e0c4;background:#eafaf0;color:#1f7a4d;border-radius:8px;padding:6px 12px;font-size:13px;margin:3px;display:inline-block}
+  .acc-free.on{background:#1f7a4d;color:#fff;border-color:#1f7a4d}
+</style>
 </head><body>
 <div id="nav"></div>
 <div class="wrap">
-  <div class="tip">查某个时段/日期区间，<b>哪些腾讯账号空闲</b>；对没排教室、没排账号的<b>线上课</b>可直接预留账号，最后到「会议链接设定 → 线上课设定」绑定链接完成。</div>
+  <div class="tip">给<b>没排账号的线上课</b>或<b>临时用途</b>找一个空闲的腾讯账号并预留/占用。选好对象→自动筛出能用的账号→选一个→预留（先占住）或正式占用。</div>
 
-  <!-- 账号查找 -->
+  <!-- 一条龙：选对象 → 筛空闲账号 → 预留/占用 -->
   <div class="card">
-    <div class="row">
-      <div class="field"><label>查找方式</label><select id="mode">
-        <option value="range">日期区间（多天）</option>
-        <option value="date">具体某天</option>
-      </select></div>
-      <div class="field" id="fromWrap"><label>起</label><input type="date" id="from"></div>
-      <div class="field" id="toWrap"><label>止</label><input type="date" id="to"></div>
-      <div class="field hidden" id="dateWrap"><label>日期</label><input type="date" id="date"></div>
-      <div class="field"><label>周几</label><select id="wd"><option value="">不限</option>
-        <option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option></select></div>
-      <div class="field"><label>开始</label><select id="st"></select></div>
-      <div class="field"><label>结束</label><select id="et"></select></div>
-      <div class="field"><label>&nbsp;</label><button id="go">查空闲账号</button></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <!-- 左：对象与条件 -->
+      <div style="flex:1;min-width:320px">
+        <div class="row">
+          <div class="field"><label>绑定对象</label><select id="r_bind"><option value="course">线上课</option><option value="temp">临时使用</option></select></div>
+          <div class="field" id="r_courseWrap"><label>选未排线上课</label><select id="r_course"></select></div>
+          <div class="field hidden" id="r_titleWrap"><label>用途/名称</label><input id="r_title" placeholder="如 XX说明会"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>周期</label><select id="r_rec"><option value="weekly">每周重复</option><option value="once">单次</option></select></div>
+          <div class="field hidden" id="r_dateWrap"><label>日期</label><input type="date" id="r_date"></div>
+          <div class="field" id="r_sdWrap"><label>起始日</label><input type="date" id="r_sd"></div>
+          <div class="field" id="r_edWrap"><label>结束日</label><input type="date" id="r_ed"></div>
+          <div class="field"><label>开始</label><select id="r_st"></select></div>
+          <div class="field"><label>结束</label><select id="r_et"></select></div>
+        </div>
+        <div id="r_wdWrap"><label style="font-size:12px;color:#555">周几（可多选）</label><div id="r_wd" style="margin-top:4px">
+          <span class="chip" data-d="1">周一</span><span class="chip" data-d="2">周二</span><span class="chip" data-d="3">周三</span><span class="chip" data-d="4">周四</span><span class="chip" data-d="5">周五</span><span class="chip" data-d="6">周六</span><span class="chip" data-d="7">周日</span>
+        </div></div>
+      </div>
+      <!-- 右：未排线上课点选 -->
+      <div style="width:300px" id="r_pickPane">
+        <label style="font-size:12px;color:#555">未排线上课（点选带入）</label>
+        <div id="r_pickList" style="margin-top:4px;max-height:220px;overflow:auto"></div>
+      </div>
     </div>
-  </div>
-  <div class="card" id="box"><div class="muted">选好条件点「查空闲账号」</div></div>
-
-  <!-- 未处理线上课 -->
-  <div class="card">
-    <h3 style="margin-top:2px">未处理线上课（无教室、无账号）</h3>
-    <div class="muted" style="font-size:12px;margin-bottom:8px">这些线上课既没排教室、也没排会议账号，需要给它们预留账号。</div>
-    <div id="pendingOnline"></div>
-  </div>
-
-  <!-- 预留/占用录入 -->
-  <div class="card">
-    <h3 style="margin-top:2px">预留 / 占用账号</h3>
-    <div class="row">
-      <div class="field"><label>账号</label><select id="r_acc"></select></div>
-      <div class="field"><label>绑定对象</label><select id="r_bind">
-        <option value="course">线上课</option><option value="temp">临时使用</option></select></div>
-      <div class="field" id="r_courseWrap"><label>选线上课</label><select id="r_course"></select></div>
-      <div class="field hidden" id="r_titleWrap"><label>用途/名称</label><input id="r_title" placeholder="如 XX说明会"></div>
-      <div class="field"><label>周期</label><select id="r_rec"><option value="weekly">每周重复</option><option value="once">单次</option></select></div>
-      <div class="field" id="r_wdWrap"><label>周几</label><select id="r_wd">
-        <option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option></select></div>
-      <div class="field hidden" id="r_dateWrap"><label>日期</label><input type="date" id="r_date"></div>
-      <div class="field" id="r_sdWrap"><label>起始日</label><input type="date" id="r_sd"></div>
-      <div class="field" id="r_edWrap"><label>结束日</label><input type="date" id="r_ed"></div>
-      <div class="field"><label>开始</label><select id="r_st"></select></div>
-      <div class="field"><label>结束</label><select id="r_et"></select></div>
-      <div class="field"><label>状态</label><select id="r_status"><option value="reserved">预留</option><option value="confirmed">正式占用</option></select></div>
-      <div class="field"><label>&nbsp;</label><button id="r_save">占住时间</button></div>
-    </div>
+    <div style="margin-top:10px"><button id="r_find">筛出能用的账号</button></div>
+    <div id="r_accBox" style="margin-top:10px"></div>
+    <div id="r_actBox" style="margin-top:10px"></div>
     <div id="r_warn" style="margin-top:6px"></div>
-    <div class="muted" style="font-size:12px;margin-top:4px">「预留」= 先占住时间（查找里显示黄色预留）；到「会议链接设定 → 线上课设定」绑好链接后会自动转正式。临时使用同理，链接也在那里补。</div>
+  </div>
+
+  <!-- 占用一览（默认收起详情） -->
+  <div class="card">
+    <h3 style="margin-top:2px">账号占用一览</h3>
+    <div class="row">
+      <div class="field"><label>账号</label><select id="v_acc"><option value="">全部账号</option></select></div>
+      <div class="field"><label>状态</label><select id="v_status"><option value="">全部</option><option value="reserved">预留</option><option value="confirmed">正式</option></select></div>
+      <div class="field"><label>&nbsp;</label><span class="muted" id="v_count"></span></div>
+    </div>
+    <div id="v_box"></div>
   </div>
 </div>
 <script src="common.js"></script>
 <script>
 el('nav').innerHTML = renderNav('meeting.html');
 getRoleByCode(currentCode()).then(r=>{ if(r){ window.ROLE=r; el('nav').innerHTML = renderNav('meeting.html', r); } }).catch(()=>{});
-let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], COURSES=[];
+let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], COURSES=[], WDSEL=new Set(), PICKED=null;
 async function boot(){
-  fillSelect(el('st'), SLOTS); fillSelect(el('et'), SLOTS);
   fillSelect(el('r_st'), SLOTS); fillSelect(el('r_et'), SLOTS);
-  const t0=todayStr();
-  el('from').value=t0; el('to').value=addDays(t0,90); el('date').value=t0;
-  el('r_sd').value=t0; el('r_ed').value=addDays(t0,90); el('r_date').value=t0;
-  if(SLOTS.includes('18:00')){ el('st').value='18:00'; el('et').value='21:00'; el('r_st').value='18:00'; el('r_et').value='21:00'; }
-  ROOMS    = await sbGet('sched_rooms','select=*');
-  ACCOUNTS = await sbGet('sched_meeting_accounts','select=*&active=eq.true');
-  BOOKINGS = await sbGet('sched_bookings','select=*');
-  COURSES  = (await sbGet('sched_courses','select=*')).filter(c=>!c.deleted_at);
+  const t0=todayStr(); el('r_sd').value=t0; el('r_ed').value=addDays(t0,90); el('r_date').value=t0;
+  if(SLOTS.includes('18:00')){ el('r_st').value='18:00'; el('r_et').value='21:00'; }
+  ROOMS=await sbGet('sched_rooms','select=*');
+  ACCOUNTS=await sbGet('sched_meeting_accounts','select=*&active=eq.true');
+  BOOKINGS=await sbGet('sched_bookings','select=*');
+  COURSES=(await sbGet('sched_courses','select=*')).filter(c=>!c.deleted_at);
   window.SKIPMAP={}; COURSES.forEach(c=>{ if(c.skip_dates) window.SKIPMAP[c.id]=new Set(c.skip_dates.split(',').map(x=>x.trim())); });
-  // 账号下拉
-  const accSorted=ACCOUNTS.slice().sort((a,b)=>(a.kind==='固定'?0:1)-(b.kind==='固定'?0:1)||(a.name||'').localeCompare(b.name||''));
-  fillSelect(el('r_acc'), accSorted, a=>a.id, a=>acctName(a));
-  // 未处理线上课下拉
-  const onlinePending = pendingOnlineCourses();
-  fillSelect(el('r_course'), onlinePending, c=>c.id, c=>courseLabel(c), onlinePending.length?null:'（暂无未处理线上课）');
-  el('mode').onchange=()=>{ const byDate=el('mode').value==='date';
-    el('dateWrap').classList.toggle('hidden',!byDate);
-    el('fromWrap').classList.toggle('hidden',byDate); el('toWrap').classList.toggle('hidden',byDate); render(); };
-  el('r_bind').onchange=syncBind;
-  el('r_rec').onchange=syncRec;
-  el('r_course').onchange=prefillFromCourse;
-  el('go').onclick=render;
-  ['from','to','date','wd','st','et'].forEach(id=>el(id).onchange=render);
-  el('r_save').onclick=saveReserve;
-  syncBind(); syncRec(); render(); renderPendingOnline();
+  refreshCourseDropdown();
+  fillSelect(el('v_acc'), accSorted(), a=>a.id, a=>acctName(a), '全部账号');
+  el('r_wd').querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{ const d=ch.dataset.d; WDSEL.has(d)?WDSEL.delete(d):WDSEL.add(d); ch.classList.toggle('on'); });
+  el('r_bind').onchange=syncBind; el('r_rec').onchange=syncRec;
+  el('r_course').onchange=()=>{ prefillFromCourse(el('r_course').value); };
+  el('r_find').onclick=findAccounts;
+  ['v_acc','v_status'].forEach(id=>el(id).onchange=renderOverview);
+  syncBind(); syncRec(); renderPickList(); renderOverview();
 }
+function accSorted(){ return ACCOUNTS.slice().sort((a,b)=>(a.kind==='固定'?0:1)-(b.kind==='固定'?0:1)||(a.name||'').localeCompare(b.name||'')); }
 function acctName(a){ return a.name + (a.note?('（'+a.note+'）'):''); }
 function courseLabel(c){ return (c.term?c.term+' ':'')+(c.name||'')+'（'+weekdaysLabel(c.weekdays)+' '+(c.start_time||'')+'-'+(c.end_time||'')+'）'; }
-// 未处理线上课：线上 + 无教室占用 + 无账号占用
 function pendingOnlineCourses(){
   return COURSES.filter(c=>{
-    const online = c.mode==='线上' || c.campus==='线上';
-    if(!online) return false;
+    const online=c.mode==='线上'||c.campus==='线上'; if(!online) return false;
     const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
-    const hasRoom=bs.some(b=>b.room_id);
-    const hasAcc=bs.some(b=>b.uses_meeting&&b.meeting_account_id);
-    return !hasRoom && !hasAcc;
+    return !bs.some(b=>b.room_id) && !bs.some(b=>b.uses_meeting&&b.meeting_account_id);
   });
 }
-function renderPendingOnline(){
+function refreshCourseDropdown(){ const op=pendingOnlineCourses(); fillSelect(el('r_course'), op, c=>c.id, c=>courseLabel(c), op.length?'选一门未排线上课':'（暂无未排线上课）'); }
+function renderPickList(){
   const list=pendingOnlineCourses();
-  if(!list.length){ el('pendingOnline').innerHTML='<div class="badge b-ok">线上课都已安排账号</div>'; return; }
-  let h='<table><thead><tr><th>课程</th><th>期</th><th>周几·时段</th><th>日期区间</th><th>回数</th><th></th></tr></thead><tbody>';
-  list.forEach(c=>{ h+=`<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.term||'')}</td><td>${weekdaysLabel(c.weekdays)} ${esc(c.start_time||'')}-${esc(c.end_time||'')}</td>`+
-    `<td>${esc(c.start_date||'')}~${esc(c.end_date||'')}</td><td>${esc(String(c.sessions||''))}</td>`+
-    `<td><button class="sm ghost" data-pick="${c.id}">去预留</button></td></tr>`; });
-  h+='</tbody></table>';
-  el('pendingOnline').innerHTML=h;
-  el('pendingOnline').querySelectorAll('[data-pick]').forEach(x=>x.onclick=()=>{
-    el('r_bind').value='course'; syncBind(); el('r_course').value=x.dataset.pick; prefillFromCourse();
-    el('r_acc').scrollIntoView({behavior:'smooth',block:'center'});
+  if(!list.length){ el('r_pickList').innerHTML='<div class="muted" style="font-size:12px">没有未排线上课</div>'; return; }
+  el('r_pickList').innerHTML=list.map(c=>`<div class="pickrow${PICKED===String(c.id)?' on':''}" data-pc="${c.id}"><b>${esc(c.name)}</b><br><span class="muted">${esc(c.term||'')} ${weekdaysLabel(c.weekdays)} ${esc(c.start_time||'')}-${esc(c.end_time||'')}</span></div>`).join('');
+  el('r_pickList').querySelectorAll('[data-pc]').forEach(x=>x.onclick=()=>{ el('r_bind').value='course'; syncBind(); el('r_course').value=x.dataset.pc; prefillFromCourse(x.dataset.pc); });
+}
+function syncBind(){ const isC=el('r_bind').value==='course';
+  el('r_courseWrap').classList.toggle('hidden',!isC); el('r_titleWrap').classList.toggle('hidden',isC);
+  el('r_pickPane').style.display=isC?'':'none';
+}
+function syncRec(){ const w=el('r_rec').value==='weekly';
+  el('r_wdWrap').style.display=w?'':'none'; el('r_sdWrap').classList.toggle('hidden',!w); el('r_edWrap').classList.toggle('hidden',!w); el('r_dateWrap').classList.toggle('hidden',w);
+}
+function prefillFromCourse(id){
+  PICKED=String(id); renderPickList();
+  const c=COURSES.find(x=>String(x.id)===String(id)); if(!c) return;
+  el('r_rec').value='weekly'; syncRec();
+  WDSEL=new Set((c.weekdays||'').split(',').map(s=>s.trim()).filter(Boolean));
+  el('r_wd').querySelectorAll('.chip').forEach(ch=>ch.classList.toggle('on', WDSEL.has(ch.dataset.d)));
+  if(c.start_time) el('r_st').value=c.start_time; if(c.end_time) el('r_et').value=c.end_time;
+  if(c.start_date) el('r_sd').value=c.start_date; if(c.end_date) el('r_ed').value=c.end_date;
+}
+// 收集查找的日期
+function targetDates(){
+  const s=el('r_st').value, e=el('r_et').value; if(e<=s) return null;
+  if(el('r_rec').value==='once'){ const d=el('r_date').value; return d?[d]:[]; }
+  const sd=el('r_sd').value, ed=el('r_ed').value; if(!sd||!ed) return [];
+  if(!WDSEL.size) return [];
+  const out=[]; let d=sd, g=0; while(d<=ed&&g++<400){ const w=weekdayOf(d); const wN=w===0?7:w; if(WDSEL.has(String(wN))) out.push(d); d=addDays(d,1); } return out;
+}
+// 筛出这些日期该时段全程空闲的账号
+function findAccounts(){
+  const s=el('r_st').value, e=el('r_et').value;
+  const dates=targetDates();
+  if(dates===null){ warn('结束需晚于开始'); return; }
+  if(!dates.length){ warn('请补齐周几/日期'); return; }
+  warn('');
+  const rows=accSorted().map(a=>{
+    let busy=0, resv=0;
+    dates.forEach(dt=>{ const conf=accountConflicts(BOOKINGS,a.id,dt,s,e,null); conf.forEach(b=>{ if(b.status==='reserved') resv++; else busy++; }); });
+    return {a, free:(busy+resv)===0, busy, resv};
+  });
+  const free=rows.filter(r=>r.free);
+  let h='<div class="muted" style="font-size:12px;margin-bottom:6px">目标：'+dates.length+' 天 · '+s+'-'+e+'。全程空闲账号（点选一个）：</div>';
+  h+= free.length? '<div>'+free.map(r=>`<span class="acc-free" data-selacc="${r.a.id}">${esc(acctName(r.a))}</span>`).join('')+'</div>'
+     : '<div class="badge b-warn">这些日期该时段没有全程空闲的账号（可看下方一览调整）</div>';
+  const partial=rows.filter(r=>!r.free);
+  if(partial.length){ h+='<details style="margin-top:8px"><summary class="muted" style="font-size:12px;cursor:pointer">被占用的账号（'+partial.length+'）</summary><div style="margin-top:4px">'+
+    partial.map(r=>`<span class="chip">${esc(acctName(r.a))} ${r.busy?('占'+r.busy):''}${r.resv?(' 预留'+r.resv):''}</span>`).join('')+'</div></details>'; }
+  el('r_accBox').innerHTML=h;
+  el('r_actBox').innerHTML='';
+  el('r_accBox').querySelectorAll('[data-selacc]').forEach(x=>x.onclick=()=>{
+    el('r_accBox').querySelectorAll('.acc-free').forEach(n=>n.classList.remove('on')); x.classList.add('on');
+    showActions(x.dataset.selacc);
   });
 }
-function syncBind(){
-  const isCourse=el('r_bind').value==='course';
-  el('r_courseWrap').classList.toggle('hidden',!isCourse);
-  el('r_titleWrap').classList.toggle('hidden',isCourse);
-  if(isCourse) prefillFromCourse();
+function showActions(accId){
+  const a=ACCOUNTS.find(x=>String(x.id)===String(accId));
+  el('r_actBox').innerHTML='<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px">'+
+    '选中账号：<b>'+esc(acctName(a))+'</b>'+
+    '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button data-do="reserved">预留（先占住）</button>'+
+      '<button class="ghost" data-do="confirmed">正式占用（手头有账号/在教室）</button>'+
+    '</div>'+
+    '<div class="muted" style="font-size:11px;margin-top:6px">正式占用后，会议链接到「会议链接设定 → 线上课/临时」里补；没有账号信息就先预留。</div></div>';
+  el('r_actBox').querySelectorAll('[data-do]').forEach(b=>b.onclick=()=>saveOccupy(accId, b.dataset.do));
 }
-function syncRec(){
-  const weekly=el('r_rec').value==='weekly';
-  el('r_wdWrap').classList.toggle('hidden',!weekly);
-  el('r_sdWrap').classList.toggle('hidden',!weekly);
-  el('r_edWrap').classList.toggle('hidden',!weekly);
-  el('r_dateWrap').classList.toggle('hidden',weekly);
-}
-function prefillFromCourse(){
-  const c=COURSES.find(x=>String(x.id)===String(el('r_course').value)); if(!c) return;
-  // 带入线上课信息：周几、时段、起止日期
-  const wds=(c.weekdays||'').split(',').map(s=>s.trim()).filter(Boolean);
-  if(wds.length){ el('r_rec').value='weekly'; syncRec(); el('r_wd').value=wds[0]; }
-  if(c.start_time) el('r_st').value=c.start_time;
-  if(c.end_time) el('r_et').value=c.end_time;
-  if(c.start_date) el('r_sd').value=c.start_date;
-  if(c.end_date) el('r_ed').value=c.end_date;
-}
-// ===== 账号查找 =====
-function occInfo(b){
-  const tag = b.status==='reserved'?'[预留] ':'';
-  return tag+(b.title||KIND_LABEL[b.kind]||'')+' '+(b.user_name||'')+' '+b.start_time+'-'+b.end_time;
-}
-function render(){
-  const mode=el('mode').value, s=el('st').value, e=el('et').value, wd=el('wd').value;
-  if(e<=s){ el('box').innerHTML='<span class="muted">结束需晚于开始</span>'; return; }
-  const accts=ACCOUNTS.slice().sort((a,b)=>(a.kind==='固定'?0:1)-(b.kind==='固定'?0:1)||(a.name||'').localeCompare(b.name||''));
-  // 收集要检查的日期
-  let dates=[];
-  if(mode==='date'){ dates=[el('date').value]; }
-  else { let d=el('from').value, e2=el('to').value, g=0; while(d&&d<=e2&&g++<400){ const w=weekdayOf(d); const wN=w===0?7:w; if(!wd||wN===Number(wd)) dates.push(d); d=addDays(d,1); } }
-  if(!dates.length){ el('box').innerHTML='<span class="muted">没有符合条件的日期</span>'; return; }
-  // 每个账号：在这些日期里，有没有被占（confirmed/reserved）
-  const rows=accts.map(a=>{
-    const hits=[];   // {date, b}
-    dates.forEach(dt=>{ const conf=accountConflicts(BOOKINGS, a.id, dt, s, e, null); conf.forEach(b=>hits.push({date:dt,b})); });
-    const anyReserved=hits.some(x=>x.b.status==='reserved');
-    const anyConfirmed=hits.some(x=>x.b.status!=='reserved');
-    return {a, hits, free:hits.length===0, anyReserved, anyConfirmed};
-  });
-  const free=rows.filter(r=>r.free), busy=rows.filter(r=>!r.free);
-  const rangeTxt = mode==='date' ? (WEEKDAYS[weekdayOf(el('date').value)]+' '+el('date').value) : (el('from').value+' ~ '+el('to').value+(wd?('（每'+({1:'周一',2:'周二',3:'周三',4:'周四',5:'周五',6:'周六',7:'周日'}[wd])+'）'):''));
-  let h=`<div class="muted" style="margin-bottom:8px">${esc(rangeTxt)} ${s}-${e}</div>`;
-  h+='<h4 style="margin:4px 0 8px">全程空闲账号（'+free.length+'）</h4>';
-  h+= free.length? '<div style="display:flex;flex-wrap:wrap;gap:8px">'+free.map(r=>`<span class="badge b-ok" style="padding:6px 12px;font-size:13px;cursor:pointer" data-usea="${r.a.id}">${esc(acctName(r.a))}</span>`).join('')+'</div>' : '<span class="muted">这些日期该时段没有全程空闲的账号</span>';
-  h+='<h4 style="margin:16px 0 8px">有占用的账号（'+busy.length+'）</h4>';
-  if(busy.length){
-    h+='<table><thead><tr><th>账号</th><th>状态</th><th>被占（日期·情况）</th></tr></thead><tbody>';
-    busy.forEach(r=>{
-      const badge = r.anyConfirmed? '<span class="badge b-err" style="font-size:10px">已占</span>' : '';
-      const rez = r.anyReserved? ' <span class="badge b-warn" style="font-size:10px">预留</span>' : '';
-      const detail = r.hits.slice(0,12).map(x=>esc(x.date)+'：'+esc(occInfo(x.b))).join('<br>')+(r.hits.length>12?'<br>…':'');
-      h+=`<tr><td>${esc(acctName(r.a))}</td><td>${badge}${rez}</td><td class="muted" style="font-size:12px">${detail}</td></tr>`;
-    });
-    h+='</tbody></table>';
-  } else h+='<span class="muted">无</span>';
-  el('box').innerHTML=h;
-  el('box').querySelectorAll('[data-usea]').forEach(x=>x.onclick=()=>{ el('r_acc').value=x.dataset.usea; el('r_acc').scrollIntoView({behavior:'smooth',block:'center'}); });
-}
-// ===== 预留/占用 =====
-async function saveReserve(){
-  const accId=el('r_acc').value; if(!accId){ warn('请选账号'); return; }
-  const bind=el('r_bind').value, rec=el('r_rec').value, s=el('r_st').value, e=el('r_et').value, status=el('r_status').value;
-  if(e<=s){ warn('结束需晚于开始'); return; }
+async function saveOccupy(accId, status){
+  const bind=el('r_bind').value, s=el('r_st').value, e=el('r_et').value;
   let courseId=null, title=null;
   if(bind==='course'){ courseId=el('r_course').value||null; if(!courseId){ warn('请选线上课'); return; } const c=COURSES.find(x=>String(x.id)===String(courseId)); title=c?c.name:null; }
   else { title=el('r_title').value.trim()||'临时使用'; }
-  // 构造占用记录 + 冲突检测
-  let rec_rows=[], checkDates=[];
-  if(rec==='weekly'){
-    const wd=Number(el('r_wd').value), sd=el('r_sd').value, ed=el('r_ed').value;
-    if(!sd||!ed){ warn('请填起止日期'); return; }
-    rec_rows.push({ kind:(bind==='course'?'course':'temp'), course_id:(bind==='course'?courseId:null), title, user_name:null,
-      recurrence:'weekly', weekday:wd, start_date:sd, end_date:ed, start_time:s, end_time:e,
-      uses_meeting:true, meeting_account_id:accId, status, room_id:null, created_by:(window.ROLE&&(window.ROLE.label||window.ROLE.role))||'admin', note:(status==='reserved'?'账号预留':'账号占用') });
-    // 冲突检测：起止区间内所有该周几
-    let d=sd, g=0; while(d<=ed&&g++<400){ const w=weekdayOf(d); const wN=w===0?7:w; if(wN===wd) checkDates.push(d); d=addDays(d,1); }
+  const who=(window.ROLE&&(window.ROLE.label||window.ROLE.role))||'admin';
+  let rows=[], checkPairs=[];   // checkPairs: [date]
+  if(el('r_rec').value==='weekly'){
+    const sd=el('r_sd').value, ed=el('r_ed').value; if(!sd||!ed){ warn('请填起止日期'); return; }
+    if(!WDSEL.size){ warn('请选周几'); return; }
+    [...WDSEL].forEach(wd=>{ rows.push({ kind:(bind==='course'?'course':'temp'), course_id:(bind==='course'?courseId:null), title, recurrence:'weekly', weekday:Number(wd), start_date:sd, end_date:ed, start_time:s, end_time:e, uses_meeting:true, meeting_account_id:accId, status, room_id:null, created_by:who, note:(status==='reserved'?'账号预留':'账号占用') }); });
+    let d=sd,g=0; while(d<=ed&&g++<400){ const w=weekdayOf(d); const wN=w===0?7:w; if(WDSEL.has(String(wN))) checkPairs.push(d); d=addDays(d,1); }
   } else {
     const dt=el('r_date').value; if(!dt){ warn('请选日期'); return; }
-    rec_rows.push({ kind:(bind==='course'?'course':'temp'), course_id:(bind==='course'?courseId:null), title, user_name:null,
-      recurrence:'once', booking_date:dt, weekday:null, start_time:s, end_time:e,
-      uses_meeting:true, meeting_account_id:accId, status, room_id:null, created_by:(window.ROLE&&(window.ROLE.label||window.ROLE.role))||'admin', note:(status==='reserved'?'账号预留':'账号占用') });
-    checkDates.push(dt);
+    rows.push({ kind:(bind==='course'?'course':'temp'), course_id:(bind==='course'?courseId:null), title, recurrence:'once', booking_date:dt, weekday:null, start_time:s, end_time:e, uses_meeting:true, meeting_account_id:accId, status, room_id:null, created_by:who, note:(status==='reserved'?'账号预留':'账号占用') });
+    checkPairs.push(dt);
   }
-  // 冲突检测
-  const clash=[];
-  checkDates.forEach(dt=>{ const conf=accountConflicts(BOOKINGS, accId, dt, s, e, null); if(conf.length) clash.push(dt); });
-  if(clash.length){
-    if(!confirm('该账号在以下日期该时段已被占用：\n'+clash.slice(0,10).join('、')+(clash.length>10?'…':'')+'\n\n仍要占用/预留吗？')) return;
-  }
-  const btn=el('r_save'); btn.disabled=true; btn.textContent='保存中…';
+  const clash=[]; checkPairs.forEach(dt=>{ if(accountConflicts(BOOKINGS,accId,dt,s,e,null).length) clash.push(dt); });
+  if(clash.length && !confirm('该账号在以下日期该时段已被占：\n'+clash.slice(0,10).join('、')+(clash.length>10?'…':'')+'\n\n仍要占用吗？')) return;
   try{
-    await sbInsert('sched_bookings', rec_rows);
-    BOOKINGS = await sbGet('sched_bookings','select=*');
-    warn(''); toast(status==='reserved'?'已预留':'已占用');
-    render(); renderPendingOnline();
-    // 刷新未处理线上课下拉
-    const op=pendingOnlineCourses(); fillSelect(el('r_course'), op, c=>c.id, c=>courseLabel(c), op.length?null:'（暂无未处理线上课）');
+    await sbInsert('sched_bookings', rows);
+    BOOKINGS=await sbGet('sched_bookings','select=*');
+    warn(''); toast(status==='reserved'?'已预留':'已正式占用');
+    refreshCourseDropdown(); renderPickList(); el('r_accBox').innerHTML=''; el('r_actBox').innerHTML=''; renderOverview();
   }catch(err){ warn(esc(err.message)); }
-  btn.disabled=false; btn.textContent='占住时间';
 }
-function warn(m){ el('r_warn').innerHTML = m?('<span class="badge b-err">'+m+'</span>'):''; }
+function warn(m){ el('r_warn').innerHTML=m?('<span class="badge b-err">'+m+'</span>'):''; }
+// ===== 占用一览（默认收起详情，可编辑/删除）=====
+function occTitle(b){ const c=b.course_id?COURSES.find(x=>String(x.id)===String(b.course_id)):null; return c?c.name:(b.title||KIND_LABEL[b.kind]||'占用'); }
+function renderOverview(){
+  const accF=el('v_acc').value, stF=el('v_status').value;
+  let list=BOOKINGS.filter(b=>b.uses_meeting&&b.meeting_account_id);
+  if(accF) list=list.filter(b=>String(b.meeting_account_id)===String(accF));
+  if(stF) list=list.filter(b=>(b.status||'confirmed')===stF);
+  list=list.slice().sort((a,b)=>{ const da=a.booking_date||a.start_date||'', db=b.booking_date||b.start_date||''; return da.localeCompare(db); });
+  el('v_count').textContent='共 '+list.length+' 条';
+  let h='<table><thead><tr><th>账号</th><th>对象</th><th>时段</th><th>状态</th><th>详情</th><th>操作</th></tr></thead><tbody>';
+  if(!list.length) h+='<tr><td colspan="6" class="muted">无占用</td></tr>';
+  list.forEach(b=>{ const st=b.status||'confirmed';
+    h+=`<tr><td>${esc(aname(b.meeting_account_id))}</td><td><b>${esc(occTitle(b))}</b></td><td>${esc(b.start_time||'')}-${esc(b.end_time||'')}</td>`+
+      `<td>${st==='reserved'?'<span class="badge b-warn">预留</span>':'<span class="badge b-ok">正式</span>'}</td>`+
+      `<td><button class="sm ghost" data-detail="${b.id}">查看</button></td>`+
+      `<td><button class="sm ghost" data-edito="${b.id}">编辑</button> <button class="sm danger" data-delo="${b.id}">删</button></td></tr>`+
+      `<tr id="det_${b.id}" class="hidden"><td colspan="6" class="muted" style="font-size:12px">${esc(detailText(b))}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  el('v_box').innerHTML=h;
+  el('v_box').querySelectorAll('[data-detail]').forEach(x=>x.onclick=()=>{ const r=el('det_'+x.dataset.detail); if(r) r.classList.toggle('hidden'); });
+  el('v_box').querySelectorAll('[data-delo]').forEach(x=>x.onclick=async()=>{ if(!confirm('删除该账号占用？')) return; await sbDelete('sched_bookings',x.dataset.delo); BOOKINGS=await sbGet('sched_bookings','select=*'); refreshCourseDropdown(); renderPickList(); renderOverview(); toast('已删除'); });
+  el('v_box').querySelectorAll('[data-edito]').forEach(x=>x.onclick=()=>editOccupy(x.dataset.edito));
+}
+function aname(id){ const a=ACCOUNTS.find(x=>String(x.id)===String(id)); return a?acctName(a):('#'+id); }
+function detailText(b){
+  const when=b.recurrence==='weekly'?(weekdaysLabel(String(b.weekday))+' '+(b.start_date||'')+'~'+(b.end_date||'')):(b.booking_date||'');
+  const link=(b.meeting_link||b.meeting_id)?('　链接:'+(b.meeting_id||'')+(b.meeting_link?(' '+b.meeting_link):'')):'　（未设链接）';
+  return when+' '+(b.start_time||'')+'-'+(b.end_time||'')+'　'+(b.note||'')+link+'　录入:'+(b.created_by||'');
+}
+function editOccupy(id){
+  const b=BOOKINGS.find(x=>String(x.id)===String(id)); if(!b) return;
+  const isWeekly=b.recurrence==='weekly';
+  let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px"><div class="card" style="width:520px;max-width:94vw;margin:auto">'+
+    '<h3 style="margin-top:2px">编辑账号占用 · '+esc(occTitle(b))+'</h3><div class="row">'+
+    '<div class="field"><label>账号</label><select id="oe_acc">'+accSorted().map(a=>`<option value="${a.id}"${String(a.id)===String(b.meeting_account_id)?' selected':''}>${esc(acctName(a))}</option>`).join('')+'</select></div>'+
+    (isWeekly?('<div class="field"><label>起始日</label><input type="date" id="oe_sd" value="'+esc(b.start_date||'')+'"></div><div class="field"><label>结束日</label><input type="date" id="oe_ed" value="'+esc(b.end_date||'')+'"></div>')
+             :('<div class="field"><label>日期</label><input type="date" id="oe_date" value="'+esc(b.booking_date||'')+'"></div>'))+
+    '<div class="field"><label>开始</label><input type="time" id="oe_st" value="'+esc(b.start_time||'')+'"></div>'+
+    '<div class="field"><label>结束</label><input type="time" id="oe_et" value="'+esc(b.end_time||'')+'"></div>'+
+    '<div class="field"><label>状态</label><select id="oe_status"><option value="confirmed"'+(b.status!=='reserved'?' selected':'')+'>正式</option><option value="reserved"'+(b.status==='reserved'?' selected':'')+'>预留</option></select></div>'+
+    '</div><div class="field" style="margin-top:8px"><label>备注</label><input id="oe_note" value="'+esc(b.note||'')+'" style="width:100%"></div>'+
+    '<div style="margin-top:12px;display:flex;gap:8px"><button id="oe_save">保存</button><button class="ghost" id="oe_cancel">取消</button></div></div></div>';
+  const wrap=document.createElement('div'); wrap.innerHTML=h; document.body.appendChild(wrap.firstChild);
+  const mask=document.body.lastChild;
+  mask.querySelector('#oe_cancel').onclick=()=>mask.remove();
+  mask.querySelector('#oe_save').onclick=async()=>{
+    const patch={ meeting_account_id:mask.querySelector('#oe_acc').value, start_time:mask.querySelector('#oe_st').value||null, end_time:mask.querySelector('#oe_et').value||null, status:mask.querySelector('#oe_status').value, note:mask.querySelector('#oe_note').value.trim()||null };
+    if(isWeekly){ patch.start_date=mask.querySelector('#oe_sd').value||null; patch.end_date=mask.querySelector('#oe_ed').value||null; }
+    else { patch.booking_date=mask.querySelector('#oe_date').value||null; }
+    try{ await sbUpdate('sched_bookings', b.id, patch); BOOKINGS=await sbGet('sched_bookings','select=*'); mask.remove(); renderOverview(); toast('已保存'); }
+    catch(e){ toast(e.message,false); }
+  };
+}
 boot();
 </script>
 </body></html>
