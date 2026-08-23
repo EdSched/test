@@ -48,7 +48,7 @@ function landingFor(role){ return 'index.html'; }
 function tabCodes(){
   const base = location.origin + location.pathname.replace(/[^/]*$/,'');  // 取目录，避免拼出 index.htmlindex.html
   let h='<div class="card"><h3 style="margin-top:2px">角色权限</h3>'+
-    '<div class="tip">每个角色一条：勾选它能用的功能（点击标签切换），保存后生效。把「专属链接」发给对应的人，他们打开就只看到自己有权限的功能。</div>'+
+    '<div class="tip">每个角色一条：<b>点击功能标签即时保存</b>（点亮=有权限，再点=取消），无需再点保存。把「专属链接」发给对应的人，他们打开就只看到自己有权限的功能。</div>'+
     '<table><thead><tr><th>角色</th><th>功能权限（点击切换）</th><th>专属链接</th><th>状态</th><th></th></tr></thead><tbody>';
   CODES.slice().sort((a,b)=>(a.sort||100)-(b.sort||100)).forEach(c=>{
     const ps = new Set((c.perms?c.perms.split(','):[]).map(s=>s.trim()).filter(Boolean));
@@ -84,21 +84,24 @@ function tabCodes(){
 
   const draft={}; CODES.forEach(c=>draft[c.id]=new Set((c.perms?c.perms.split(','):[]).map(s=>s.trim()).filter(Boolean)));
   const catDraft={}; CODES.forEach(c=>catDraft[c.id]=new Set((c.lead_cats?c.lead_cats.split(','):[]).map(s=>s.trim()).filter(Boolean)));
+  async function saveCode(cid){ try{ await sbUpdate('sched_access_codes',cid,{perms:[...draft[cid]].join(','), lead_cats:[...catDraft[cid]].join(',')}); toast('已保存'); }catch(e){ toast('保存失败：'+e.message,false); } }
   document.querySelectorAll('.permchip[data-perm]').forEach(chip=>{
-    chip.onclick=()=>{
+    chip.onclick=async()=>{
       const cid=chip.getAttribute('data-cid'), perm=chip.getAttribute('data-perm');
       if(draft[cid].has(perm)){ draft[cid].delete(perm); chip.classList.remove('on'); chip.textContent=chip.textContent.replace('✓ ',''); }
       else { draft[cid].add(perm); chip.classList.add('on'); if(!chip.textContent.startsWith('✓')) chip.textContent='✓ '+chip.textContent; }
+      await saveCode(cid);
     };
   });
   document.querySelectorAll('.permchip[data-catscope]').forEach(chip=>{
-    chip.onclick=()=>{
+    chip.onclick=async()=>{
       const cid=chip.getAttribute('data-ccid'), sc=chip.getAttribute('data-catscope');
       if(catDraft[cid].has(sc)){ catDraft[cid].delete(sc); chip.classList.remove('on'); chip.textContent=chip.textContent.replace('✓ ',''); }
       else { catDraft[cid].add(sc); chip.classList.add('on'); if(!chip.textContent.startsWith('✓')) chip.textContent='✓ '+chip.textContent; }
+      await saveCode(cid);
     };
   });
-  bind('[data-savep]', async id=>{ const perms=[...draft[id]].join(','); const lead_cats=[...catDraft[id]].join(','); await sbUpdate('sched_access_codes',id,{perms,lead_cats}); await reloadCodes(); toast('已保存'); });
+  bind('[data-savep]', async id=>{ await saveCode(id); await reloadCodes(); });
   bind('[data-togc]', async id=>{ const c=CODES.find(x=>String(x.id)===String(id)); await sbUpdate('sched_access_codes',id,{active:!c.active}); await reloadCodes(); tabCodes(); });
   bind('[data-delc2]', async id=>{ if(confirm('删除该角色？其链接将失效。')){ await sbDelete('sched_access_codes',id); await reloadCodes(); tabCodes(); } });
   bind('[data-copy]', id=>{ const inp=document.querySelector(`[data-link="${id}"]`); navigator.clipboard.writeText(inp.value).then(()=>toast('链接已复制')); });
