@@ -1979,15 +1979,22 @@ function renderCoursesTable(){
       const ids=[...document.querySelectorAll('.cf_ck:checked')].map(c=>c.value);
       if(!ids.length){ toast('请先在下方勾选要豁免的课', false); return; }
       const hol=HOLIDAYS.find(h=>String(h.id)===String(x.dataset.exhol)); if(!hol) return;
-      if(!confirm('让勾选的 '+ids.length+' 门课在「'+(hol.label||'假期')+'」期间照常上课？')) return;
-      const exDates=[]; let d=hol.start_date, g=0; const e=hol.end_date||hol.start_date;
-      while(d && d<=e && g++<400){ exDates.push(d); d=addDays(d,1); }
+      // 假期的所有日期
+      const allDates=[]; { let d=hol.start_date, g=0; const e=hol.end_date||hol.start_date; while(d && d<=e && g++<400){ allDates.push(d); d=addDays(d,1); } }
+      let pickDates=allDates;
+      if(allDates.length>1){
+        // 多天假期：让用户选具体哪几天照常上课
+        pickDates = await pickExemptDays(hol, allDates);
+        if(!pickDates) return;               // 取消
+        if(!pickDates.length){ toast('未选择日期', false); return; }
+      }
+      if(!confirm('让勾选的 '+ids.length+' 门课，在「'+(hol.label||'假期')+'」的以下日期照常上课：\n'+pickDates.join('、')+'\n\n确认？')) return;
       for(const id of ids){ const c=COURSES.find(y=>String(y.id)===String(id)); if(!c) continue;
         const cur=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
-        exDates.forEach(dd=>cur.add(dd));
+        pickDates.forEach(dd=>cur.add(dd));
         await sbUpdate('sched_courses', id, {holiday_except:[...cur].sort().join(',')});
       }
-      await reloadAll(); tabCourses(); toast('已豁免 '+ids.length+' 门课（'+(hol.label||'假期')+'照常上课）');
+      await reloadAll(); tabCourses(); toast('已豁免 '+ids.length+' 门课（'+pickDates.length+' 天照常上课）');
     });
   }
   setTimeout(renderHolidayList,0);
@@ -2258,10 +2265,77 @@ function courseEdit(id){
   };
 }
 
+function pickExemptDays(hol, allDates){
+  return new Promise(resolve=>{
+    const WD=['周日','周一','周二','周三','周四','周五','周六'];
+    const sel=new Set(allDates);   // 默认全选
+    const mask=document.createElement('div');
+    mask.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:70;overflow:auto;padding:40px 16px';
+    const chips=allDates.map(d=>`<span class="exday" data-d="${d}" style="cursor:pointer;user-select:none;border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:14px;padding:4px 12px;font-size:12px;margin:3px">${d}（${WD[weekdayOf(d)]}）</span>`).join('');
+    mask.innerHTML='<div class="card" style="width:520px;max-width:94vw;margin:auto"><h3 style="margin-top:2px">选择「'+esc(hol.label||'假期')+'」里照常上课的日期</h3>'+
+      '<div class="muted" style="font-size:12px;margin-bottom:8px">默认全选。点击可取消/选中某一天——只有选中的日期，勾选的课才照常上课，其余日期仍放假。</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:6px">'+chips+'</div>'+
+      '<div style="margin-bottom:10px"><button class="sm ghost" id="exd_all">全选</button> <button class="sm ghost" id="exd_none">全不选</button></div>'+
+      '<div style="display:flex;gap:8px"><button id="exd_ok">确定</button><button class="ghost" id="exd_cancel">取消</button></div></div>';
+    document.body.appendChild(mask);
+    const paint=()=>mask.querySelectorAll('.exday').forEach(c=>{ const on=sel.has(c.dataset.d);
+      c.style.background=on?'var(--blue)':''; c.style.color=on?'#fff':'#888'; c.style.borderColor=on?'var(--blue)':'var(--line)'; });
+    mask.querySelectorAll('.exday').forEach(c=>c.onclick=()=>{ const d=c.dataset.d; sel.has(d)?sel.delete(d):sel.add(d); paint(); });
+    mask.querySelector('#exd_all').onclick=()=>{ allDates.forEach(d=>sel.add(d)); paint(); };
+    mask.querySelector('#exd_none').onclick=()=>{ sel.clear(); paint(); };
+    mask.querySelector('#exd_cancel').onclick=()=>{ mask.remove(); resolve(null); };
+    mask.querySelector('#exd_ok').onclick=()=>{ mask.remove(); resolve(allDates.filter(d=>sel.has(d))); };
+    paint();
+  });
+}
 function renderReview(list){
   const box=el('cf_trashBox'); if(!box) return;
-  const cs=(list||COURSES).filter(c=>c.sessions&&c.start_date&&c.weekdays);
-  if(!cs.length){ box.innerHTML='<div class="muted" style="margin:8px 0;padding:10px;border:1px dashed var(--line);border-radius:8px">没有可审查的课（需填回数、开课日、周几）。</div>'; return; }
+  const all=(list||COURSES).filter(c=>c.sessions&&c.start_date&&c.weekdays);
+  // 只关心「受假期/休讲影响」的课：命中过假期或休讲的才需要审查
+  const affected=[];
+  all.forEach(c=>{ const det=computeEndDetail(c); if(det.blocked.length) affected.push({c,det}); });
+  if(!affected.length){ box.innerHTML='<div class="muted" style="margin:8px 0;padding:10px;border:1px dashed var(--line);border-radius:8px">没有任何课受假期/休讲影响，回数都不受影响，无需审查。</div>'; return; }
+  const need=affected.filter(r=>r.det.end!==r.c.end_date);   // 需调整
+  const ok=affected.filter(r=>r.det.end===r.c.end_date);      // 已一致
+  const rowHtml=(r,isOk)=>{
+    const c=r.c, det=r.det;
+    const blockedTxt=det.blocked.map(b=>b.date+'('+b.why+')').join('、');
+    return `<tr${isOk?'':' style="background:#fff8f0"'}><td><b>${esc(c.name)}</b></td><td>${esc(String(c.sessions))}</td><td>${esc(c.start_date||'')}</td>`+
+      `<td>${esc(c.end_date||'（空）')}${isOk?' <span class="badge b-ok" style="font-size:10px">一致</span>':''}</td>`+
+      `<td class="muted" style="max-width:240px">${esc(blockedTxt)}</td>`+
+      `<td><b>${esc(det.end||'')}</b>${isOk?'':' <span class="badge b-warn" style="font-size:10px">需调整</span>'}</td>`+
+      `<td>${isOk?'—':('<button class="sm ghost" data-rvend="'+c.id+'" data-end="'+esc(det.end||'')+'">用此结课日</button>')} <button class="sm ghost" data-rvedit="${c.id}">编辑休假</button></td></tr>`;
+  };
+  const thead='<thead><tr><th>课程</th><th>回数</th><th>开课日</th><th>当前结课日</th><th>命中假期/休讲</th><th>应有结课日</th><th>操作</th></tr></thead>';
+  let h='<div style="border:1px solid #cdd8e6;background:#f8fafd;border-radius:8px;padding:10px 12px;margin:8px 0">'+
+    '<div style="font-size:13px;margin-bottom:6px"><b>回数审查</b> <span class="muted" style="font-size:12px">只列出受假期/休讲影响的课。没受影响的课回数不会错，不显示。</span></div>';
+  // 需调整（置顶）
+  h+='<div style="font-size:13px;margin:6px 0 4px;color:#c0392b"><b>需调整（'+need.length+'）</b></div>';
+  if(need.length){
+    h+='<div style="margin-bottom:6px"><button class="sm" id="rv_applyall">把这些「应有结课日」一次性应用</button></div>';
+    h+='<table style="font-size:12px">'+thead+'<tbody>'+need.map(r=>rowHtml(r,false)).join('')+'</tbody></table>';
+  } else h+='<div class="badge b-ok" style="margin-bottom:6px">受影响的课结课日都已对上，无需调整</div>';
+  // 一致（折叠）
+  if(ok.length){
+    h+='<details style="margin-top:10px"><summary class="muted" style="font-size:12px;cursor:pointer">已一致（'+ok.length+'）— 点开查看</summary>'+
+       '<table style="font-size:12px;margin-top:6px">'+thead+'<tbody>'+ok.map(r=>rowHtml(r,true)).join('')+'</tbody></table></details>';
+  }
+  h+='</div>';
+  box.innerHTML=h;
+  box.querySelectorAll('[data-rvend]').forEach(x=>x.onclick=async()=>{
+    const id=x.dataset.rvend, nd=x.dataset.end; if(!nd) return;
+    if(!confirm('把该课结课日改为 '+nd+'？（同步更新教室占用）')) return;
+    await applyEnd(id, nd); await reloadAll(); tabCourses(); el('cf_trashBox').dataset.open='review'; renderReview(); toast('已更新结课日');
+  });
+  box.querySelectorAll('[data-rvedit]').forEach(x=>x.onclick=()=>{ courseEdit(x.dataset.rvedit); });
+  const aa=el('rv_applyall'); if(aa) aa.onclick=async()=>{
+    if(!need.length) return;
+    if(!confirm('把 '+need.length+' 门课的结课日改为「应有结课日」？（同步更新教室占用）')) return;
+    let done=0; for(const r of need){ try{ await applyEnd(r.c.id, r.det.end); done++; }catch(e){} }
+    await reloadAll(); tabCourses(); el('cf_trashBox').dataset.open='review'; renderReview(); toast('已应用 '+done+' 门');
+  };
+}
+function renderReview_OLD(list){
   let h='<div style="border:1px solid #cdd8e6;background:#f8fafd;border-radius:8px;padding:10px 12px;margin:8px 0">'+
     '<div style="font-size:13px;margin-bottom:4px"><b>回数审查</b> <span class="muted" style="font-size:12px">保证回数的前提下，命中的假期/休讲、应有结课日。你自己判断是否应用。</span></div>'+
     '<div style="margin-bottom:8px"><button class="sm" id="rv_applyall">把所有「应有结课日」一次性应用</button> <span class="muted" style="font-size:11px">（也可每行单独应用；不点则不改）</span></div>'+
