@@ -352,12 +352,16 @@ const PERM_DEFS = [
   ['timetable',       '课程表',          'timetable.html'],
   ['meeting_view',    '腾讯账号查看',    'meeting.html'],
   ['entry_room',      '教室占用录入',    'booking.html'],      // 仅临时/租用（页面内再限制用途）
-  ['entry_room_full', '教室占用录入',    'booking.html'],      // 全部用途
-  ['assign',          '排教室',          'admin.html?tab=assign'],
+  ['entry_room_full', '教室占用录入',    'booking.html'],      // 全部用途（分配UI里隐藏，与上合并）
   ['approve',         '预约批准',        'admin.html?tab=pending'],
-  ['meeting_arrange', '腾讯会议安排',    'admin.html?tab=assign'],
-  ['course',          '课程录入/修改',   'entry.html'],
-  ['manage',          '账号与权限管理',  'admin.html'],
+  ['assign',          '排教室',          'admin.html?tab=assign'],
+  ['meeting_arrange', '会议链接设定',    'admin.html?tab=mtgsetup'],
+  ['conflict',        '冲突检查',        'admin.html?tab=conflict'],
+  ['occupy',          '教室占用管理',    'admin.html?tab=occupy'],
+  ['room_manage',     '教室管理',        'admin.html?tab=rooms'],
+  ['account_manage',  '会议账号管理',    'admin.html?tab=accounts'],
+  ['course',          '课程管理',        'entry.html'],
+  ['manage',          '账号与权限管理',  'admin.html'],           // 超级权限（分配UI里隐藏，仅admin）
 ];
 const PERM_LABEL = Object.fromEntries(PERM_DEFS.map(p=>[p[0],p[1]]));
 const ALL_PERMS  = PERM_DEFS.map(p=>p[0]);
