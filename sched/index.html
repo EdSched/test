@@ -1652,12 +1652,21 @@ function tabAccounts(){
     '<div class="tip">账号 = 腾讯会议登录账号+密码。一个账号可开多个会议，但<b>同一时段只能开一个</b>，这是系统检测账号冲突的依据。会议链接跟着课程走（课程里填）。</div>'+
     '<h4 style="margin:10px 0 6px">① 绑定教室的固定账号（大课教室）</h4>'+
     '<table><thead><tr><th>绑定教室</th><th>名称</th><th>账号</th><th>密码</th><th></th></tr></thead><tbody>';
-  fixed.forEach(a=>{ h+=`<tr><td>${esc(rname(a.room_id))}</td>`+
+  const roomOpts=(selId)=>'<option value="">（不绑教室）</option>'+ROOMS.filter(r=>r.active!==false).map(r=>`<option value="${r.id}"${String(r.id)===String(selId)?' selected':''}>${esc(r.name)}（${esc(r.campus)}）</option>`).join('');
+  fixed.forEach(a=>{ h+=`<tr><td><select data-froom="${a.id}" style="width:150px">${roomOpts(a.room_id)}</select></td>`+
     `<td><input value="${esc(a.name||'')}" style="width:150px" data-fname="${a.id}"></td>`+
     `<td><input value="${esc(a.account_no||'')}" style="width:170px" placeholder="登录账号/手机号" data-no="${a.id}"></td>`+
     `<td><input value="${esc(a.password||'')}" style="width:120px" placeholder="密码" data-pw="${a.id}"></td>`+
-    `<td><button class="sm ghost" data-savef="${a.id}">存</button></td></tr>`; });
-  h+='</tbody></table>';
+    `<td><button class="sm ghost" data-savef="${a.id}">存</button> <button class="sm danger" data-delf="${a.id}">删</button></td></tr>`; });
+  h+='</tbody></table>'+
+    '<div class="row" style="margin-top:8px">'+
+      '<div class="field"><label>新增固定账号·绑定教室</label><select id="nf_room" style="width:170px">'+roomOpts('')+'</select></div>'+
+      '<div class="field"><label>名称</label><input id="nf_name" placeholder="如 高马301 账号"></div>'+
+      '<div class="field"><label>账号</label><input id="nf_no" placeholder="登录账号/手机号"></div>'+
+      '<div class="field"><label>密码</label><input id="nf_pw"></div>'+
+      '<div class="field"><label>&nbsp;</label><button id="nf_add">新增固定账号</button></div>'+
+    '</div>'+
+    '<p class="muted" style="font-size:12px;margin-top:4px">固定账号绑定教室后，排这间教室的课会自动占用该账号。一个教室只保留一个固定账号（改绑会替换）。</p>';
 
   h+='<h4 style="margin:16px 0 6px">② 临时/专用账号（自定义名字识别 + 用途说明）</h4>'+
     '<table><thead><tr><th>名称</th><th>说明（营业用/谭老师外借…）</th><th>账号</th><th>密码</th><th></th></tr></thead><tbody>';
@@ -1675,12 +1684,41 @@ function tabAccounts(){
       '<div class="field"><label>&nbsp;</label><button id="na_add">新增临时账号</button></div>'+
     '</div></div>';
   render(h);
+  // 固定账号：改绑教室时双向同步（account.room_id + room.meeting_account_id）
+  async function bindRoomAccount(accId, newRoomId, oldRoomId){
+    if(String(newRoomId||'')===String(oldRoomId||'')) return;
+    // 旧教室解绑
+    if(oldRoomId){ try{ await sbUpdate('sched_rooms', oldRoomId, {meeting_account_id:null}); }catch(e){} }
+    // 新教室：如果它已绑别的账号，先把那个账号的 room_id 清掉（一个教室只留一个固定账号）
+    if(newRoomId){ const r=ROOMS.find(x=>String(x.id)===String(newRoomId));
+      if(r&&r.meeting_account_id&&String(r.meeting_account_id)!==String(accId)){ try{ await sbUpdate('sched_meeting_accounts', r.meeting_account_id, {room_id:null}); }catch(e){} }
+      await sbUpdate('sched_rooms', newRoomId, {meeting_account_id:accId});
+    }
+  }
   bind('[data-savef]', async id=>{
+    const a=ACCOUNTS.find(x=>String(x.id)===String(id));
+    const newRoom=document.querySelector(`[data-froom="${id}"]`).value||null;
     await sbUpdate('sched_meeting_accounts',id,{
       name:document.querySelector(`[data-fname="${id}"]`).value.trim()||null,
       account_no:document.querySelector(`[data-no="${id}"]`).value.trim()||null,
-      password:document.querySelector(`[data-pw="${id}"]`).value.trim()||null});
-    await reloadAll(); toast('已更新'); });
+      password:document.querySelector(`[data-pw="${id}"]`).value.trim()||null,
+      room_id:newRoom});
+    await bindRoomAccount(id, newRoom, a?a.room_id:null);
+    await reloadAll(); show('accounts'); toast('已更新'); });
+  bind('[data-delf]', async id=>{ if(!confirm('删除该固定账号？（会解除与教室的绑定）')) return;
+    const a=ACCOUNTS.find(x=>String(x.id)===String(id));
+    if(a&&a.room_id){ try{ await sbUpdate('sched_rooms', a.room_id, {meeting_account_id:null}); }catch(e){} }
+    await sbDelete('sched_meeting_accounts',id); await reloadAll(); show('accounts'); toast('已删除'); });
+  el('nf_add').onclick=async()=>{
+    const name=el('nf_name').value.trim(); if(!name){ toast('请填名称', false); return; }
+    const roomId=el('nf_room').value||null;
+    try{
+      const ins=await sbInsert('sched_meeting_accounts',{ name, kind:'固定', room_id:roomId,
+        account_no:el('nf_no').value.trim()||null, password:el('nf_pw').value.trim()||null, active:true });
+      if(roomId){ await bindRoomAccount(ins[0].id, roomId, null); }
+      await reloadAll(); show('accounts'); toast('已新增固定账号');
+    }catch(e){ toast(e.message, false); }
+  };
   bind('[data-savet]', async id=>{
     await sbUpdate('sched_meeting_accounts',id,{
       name:document.querySelector(`[data-tname="${id}"]`).value.trim()||null,
