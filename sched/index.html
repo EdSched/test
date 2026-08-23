@@ -114,8 +114,8 @@ const HUB_CARDS = [
 /* 每张卡片需要的权限；manage(管理员)看到全部 */
 const CARD_PERM = {
   board:'board', timetable:'timetable', meeting:'meeting_view', bookingf:'entry_room',
-  pending:'approve', assign:'assign', mtgsetup:'meeting_arrange', conflict:'conflict', occupy:'entry_room',
-  rooms:'manage', accounts:'meeting_arrange', courses:'course'
+  pending:'approve', assign:'assign', mtgsetup:'meeting_arrange', conflict:'conflict', occupy:'occupy',
+  rooms:'room_manage', accounts:'account_manage', courses:'course'
 };
 function canSee(key){
   if(!ROLE) return false;
@@ -2510,14 +2510,16 @@ function tabCodes(){
 
   // 本地暂存每行勾选状态
   const draft={}; CODES.forEach(c=>draft[c.id]=new Set((c.perms?c.perms.split(','):[]).map(s=>s.trim()).filter(Boolean)));
+  async function saveCodePerms(cid){ try{ await sbUpdate('sched_access_codes',cid,{perms:[...draft[cid]].join(',')}); toast('已保存'); }catch(e){ toast('保存失败：'+e.message,false); } }
   document.querySelectorAll('.permchip').forEach(chip=>{
-    chip.onclick=()=>{
+    chip.onclick=async()=>{
       const cid=chip.getAttribute('data-cid'), perm=chip.getAttribute('data-perm');
       if(draft[cid].has(perm)){ draft[cid].delete(perm); chip.classList.remove('on'); chip.textContent=chip.textContent.replace('✓ ',''); }
       else { draft[cid].add(perm); chip.classList.add('on'); if(!chip.textContent.startsWith('✓')) chip.textContent='✓ '+chip.textContent; }
+      await saveCodePerms(cid);
     };
   });
-  bind('[data-savep]', async id=>{ const perms=[...draft[id]].join(','); await sbUpdate('sched_access_codes',id,{perms}); await reloadAll(); toast('权限已保存'); });
+  bind('[data-savep]', async id=>{ await saveCodePerms(id); await reloadAll(); toast('权限已保存'); });
   bind('[data-togc]', async id=>{ const c=CODES.find(x=>String(x.id)===String(id)); await sbUpdate('sched_access_codes',id,{active:!c.active}); await reloadAll(); show('codes'); });
   bind('[data-delc2]', async id=>{ if(confirm('删除该角色？其链接将失效。')){ await sbDelete('sched_access_codes',id); await reloadAll(); show('codes'); } });
   bind('[data-copy]', id=>{ const inp=document.querySelector(`[data-link="${id}"]`); navigator.clipboard.writeText(inp.value).then(()=>toast('链接已复制')); });
