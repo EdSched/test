@@ -1377,12 +1377,18 @@ function tabRooms(){
 /* ===== 第二步：会议链接设定（进教室，给该教室每周课程设链接，可统一覆盖） ===== */
 function tabMtgSetup(){
   let h='<div class="card"><h3 style="margin-top:2px">会议链接设定</h3>'+
+    '<div style="margin-bottom:10px"><span class="vt2"><button class="ghost sm on" id="ms_tabRoom">教室课程</button><button class="ghost sm" id="ms_tabOnline">线上课 / 临时</button></span></div>'+
+    '<div id="ms_roomPane">'+
     '<div class="tip">排完教室后，进某间教室，给它每周的课程设定腾讯会议链接。可单独设，也可先设一门、再统一覆盖到本教室专业一致的其他课。上课时段仍按各课排课时间，账号冲突按时间检查。</div>'+
     '<div class="row">'+
       '<div class="field"><label>校区</label><select id="ms_campus"></select></div>'+
       '<div class="field"><label>教室</label><select id="ms_room" style="min-width:180px"></select></div>'+
-    '</div><div id="ms_body" style="margin-top:10px"></div></div><div id="ms_form"></div>';
+    '</div><div id="ms_body" style="margin-top:10px"></div></div>'+
+    '<div id="ms_onlinePane" class="hidden"><div class="tip">这里给「已预留/占用账号」的线上课和临时占用设定腾讯会议链接。设好链接：线上课会绑定到课程、预留自动转正式，排课完成、提醒消失；临时占用把链接存好，账号占用查找里能看到。</div><div id="ms_onlineBody"></div></div>'+
+    '</div><div id="ms_form"></div>';
   render(h);
+  el('ms_tabRoom').onclick=()=>{ el('ms_tabRoom').classList.add('on'); el('ms_tabOnline').classList.remove('on'); el('ms_roomPane').classList.remove('hidden'); el('ms_onlinePane').classList.add('hidden'); };
+  el('ms_tabOnline').onclick=()=>{ el('ms_tabOnline').classList.add('on'); el('ms_tabRoom').classList.remove('on'); el('ms_onlinePane').classList.remove('hidden'); el('ms_roomPane').classList.add('hidden'); renderOnlineMtg(); };
   fillSelect(el('ms_campus'), ['高马','市谷'], v=>v, v=>v, '选校区');
   const st=window.MS_STATE||{};
   if(st.campus) el('ms_campus').value=st.campus;
@@ -1396,6 +1402,94 @@ function tabMtgSetup(){
   el('ms_campus').onchange=()=>{ window.MS_STATE={campus:el('ms_campus').value,room:''}; syncRooms(); el('ms_body').innerHTML=''; };
   el('ms_room').onchange=()=>{ window.MS_STATE={campus:el('ms_campus').value,room:el('ms_room').value}; renderMtgRoom(); };
   if(st.room) renderMtgRoom();
+}
+// 线上课/临时占用的链接设定：列出占了账号的线上课与临时占用
+function renderOnlineMtg(){
+  const box=el('ms_onlineBody'); if(!box) return;
+  // 线上课占用（course，无教室，占了账号）
+  const onlineBk=BOOKINGS.filter(b=>b.kind==='course'&&!b.room_id&&b.uses_meeting&&b.meeting_account_id);
+  const seenC=new Set(); const onlineCourses=[];
+  onlineBk.forEach(b=>{ if(seenC.has(String(b.course_id))) return; seenC.add(String(b.course_id)); const c=COURSES.find(x=>String(x.id)===String(b.course_id)); if(c) onlineCourses.push({c, b}); });
+  // 临时占用（temp，占了账号）
+  const tempBk=BOOKINGS.filter(b=>b.kind==='temp'&&b.uses_meeting&&b.meeting_account_id);
+  let h='<h4 style="margin:6px 0">线上课（'+onlineCourses.length+'）</h4>';
+  if(onlineCourses.length){
+    h+='<table><thead><tr><th>课程</th><th>账号</th><th>周期</th><th>状态</th><th>会议链接</th><th>操作</th></tr></thead><tbody>';
+    onlineCourses.forEach(({c,b})=>{ const hasLink=!!(c.meeting_link||c.meeting_id);
+      h+=`<tr><td><b>${esc(c.name)}</b></td><td>${esc(aname(b.meeting_account_id))}</td><td>${weekdaysLabel(String(b.weekday||c.weekdays||''))} ${esc(b.start_time||'')}-${esc(b.end_time||'')}</td>`+
+        `<td>${b.status==='reserved'?'<span class="badge b-warn">预留</span>':'<span class="badge b-ok">正式</span>'}</td>`+
+        `<td>${hasLink?('<span class="badge b-ok" style="font-size:10px">已设</span>'+(c.meeting_id?(' '+esc(c.meeting_id)):'')):'<span class="muted">—</span>'}</td>`+
+        `<td><button class="sm ghost" data-msonline="${c.id}">${hasLink?'重设链接':'设链接'}</button></td></tr>`;
+    });
+    h+='</tbody></table>';
+  } else h+='<div class="muted">没有已占用账号的线上课。先去「腾讯会议账号占用」给线上课预留账号。</div>';
+  h+='<h4 style="margin:14px 0 6px">临时占用（'+tempBk.length+'）</h4>';
+  if(tempBk.length){
+    h+='<table><thead><tr><th>用途</th><th>账号</th><th>日期/周期</th><th>状态</th><th>链接</th><th>操作</th></tr></thead><tbody>';
+    tempBk.forEach(b=>{ const hasLink=!!(b.meeting_link||b.meeting_id);
+      const when=b.recurrence==='weekly'?(weekdaysLabel(String(b.weekday))+' '+(b.start_date||'')+'~'+(b.end_date||'')):(b.booking_date||'');
+      h+=`<tr><td><b>${esc(b.title||'临时使用')}</b></td><td>${esc(aname(b.meeting_account_id))}</td><td>${esc(when)} ${esc(b.start_time||'')}-${esc(b.end_time||'')}</td>`+
+        `<td>${b.status==='reserved'?'<span class="badge b-warn">预留</span>':'<span class="badge b-ok">正式</span>'}</td>`+
+        `<td>${hasLink?'<span class="badge b-ok" style="font-size:10px">已设</span>':'<span class="muted">—</span>'}</td>`+
+        `<td><button class="sm ghost" data-mstemp="${b.id}">${hasLink?'重设链接':'设链接'}</button></td></tr>`;
+    });
+    h+='</tbody></table>';
+  } else h+='<div class="muted">没有占用账号的临时占用。</div>';
+  box.innerHTML=h;
+  box.querySelectorAll('[data-msonline]').forEach(x=>x.onclick=()=>onlineMtgForm(x.dataset.msonline));
+  box.querySelectorAll('[data-mstemp]').forEach(x=>x.onclick=()=>tempMtgForm(x.dataset.mstemp));
+}
+// 线上课设链接：绑课程 + 预留转正式
+function onlineMtgForm(courseId){
+  const c=COURSES.find(x=>String(x.id)===String(courseId)); if(!c) return;
+  let parsed=null;
+  const html='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px"><div class="card" style="width:560px;max-width:94vw;margin:auto">'+
+    '<h3 style="margin-top:2px">线上课设会议链接 · 「'+esc(c.name)+'」</h3>'+
+    '<div class="field"><label>会议标题</label><input id="mo_title" value="'+esc([c.term,c.category,c.name].filter(Boolean).join('-'))+'" style="width:100%"></div>'+
+    '<div class="field" style="margin-top:8px"><label>粘贴会议邀请解析</label><textarea id="mo_txt" rows="5" placeholder="把腾讯会议邀请整段粘贴进来" style="width:100%"></textarea></div>'+
+    '<button type="button" class="ghost sm" id="mo_parse">解析</button><div id="mo_prev" style="margin-top:8px"></div>'+
+    '<div style="margin-top:12px;display:flex;gap:8px"><button id="mo_save" disabled>保存链接（预留转正式）</button><button class="ghost" id="mo_cancel">取消</button></div>'+
+    '</div></div>';
+  el('ms_form').innerHTML=html;
+  el('mo_cancel').onclick=()=>{ el('ms_form').innerHTML=''; };
+  el('mo_parse').onclick=()=>{ parsed=parseTencent(el('mo_txt').value);
+    if(!parsed.link&&!parsed.id){ el('mo_prev').innerHTML='<span class="badge b-err">没识别到链接或会议号</span>'; el('mo_save').disabled=true; return; }
+    el('mo_prev').innerHTML='<table><tbody><tr><td class="muted">链接</td><td>'+(parsed.link?esc(parsed.link):'—')+'</td></tr><tr><td class="muted">会议号</td><td>'+(parsed.id?esc(parsed.id):'—')+'</td></tr></tbody></table>';
+    el('mo_save').disabled=false; };
+  el('mo_save').onclick=async()=>{
+    if(!parsed) return; const btn=el('mo_save'); btn.disabled=true; btn.textContent='保存中…';
+    try{
+      await sbUpdate('sched_courses', c.id, {meeting_link:parsed.link||null, meeting_id:parsed.id||null});
+      // 预留转正式
+      const bs=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id)&&b.uses_meeting&&b.meeting_account_id);
+      for(const b of bs) await sbUpdate('sched_bookings', b.id, {status:'confirmed'});
+      await reloadAll(); el('ms_form').innerHTML=''; renderOnlineMtg(); toast('已绑定链接，线上课排课完成');
+    }catch(e){ el('mo_prev').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; btn.disabled=false; btn.textContent='保存链接（预留转正式）'; }
+  };
+}
+// 临时占用设链接：存到该占用 + 预留转正式
+function tempMtgForm(bookingId){
+  const b=BOOKINGS.find(x=>String(x.id)===String(bookingId)); if(!b) return;
+  let parsed=null;
+  const html='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px"><div class="card" style="width:560px;max-width:94vw;margin:auto">'+
+    '<h3 style="margin-top:2px">临时占用设链接 · 「'+esc(b.title||'临时使用')+'」</h3>'+
+    '<div class="field"><label>粘贴会议邀请解析</label><textarea id="mt_txt" rows="5" placeholder="把腾讯会议邀请整段粘贴进来" style="width:100%"></textarea></div>'+
+    '<button type="button" class="ghost sm" id="mt_parse">解析</button><div id="mt_prev" style="margin-top:8px"></div>'+
+    '<div style="margin-top:12px;display:flex;gap:8px"><button id="mt_save" disabled>保存链接（预留转正式）</button><button class="ghost" id="mt_cancel">取消</button></div>'+
+    '</div></div>';
+  el('ms_form').innerHTML=html;
+  el('mt_cancel').onclick=()=>{ el('ms_form').innerHTML=''; };
+  el('mt_parse').onclick=()=>{ parsed=parseTencent(el('mt_txt').value);
+    if(!parsed.link&&!parsed.id){ el('mt_prev').innerHTML='<span class="badge b-err">没识别到链接或会议号</span>'; el('mt_save').disabled=true; return; }
+    el('mt_prev').innerHTML='<table><tbody><tr><td class="muted">链接</td><td>'+(parsed.link?esc(parsed.link):'—')+'</td></tr><tr><td class="muted">会议号</td><td>'+(parsed.id?esc(parsed.id):'—')+'</td></tr></tbody></table>';
+    el('mt_save').disabled=false; };
+  el('mt_save').onclick=async()=>{
+    if(!parsed) return; const btn=el('mt_save'); btn.disabled=true; btn.textContent='保存中…';
+    try{
+      await sbUpdate('sched_bookings', b.id, {meeting_link:parsed.link||null, meeting_id:parsed.id||null, status:'confirmed'});
+      await reloadAll(); el('ms_form').innerHTML=''; renderOnlineMtg(); toast('已保存链接');
+    }catch(e){ el('mt_prev').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; btn.disabled=false; btn.textContent='保存链接（预留转正式）'; }
+  };
 }
 function renderMtgRoom(){
   const roomId=el('ms_room').value;
