@@ -268,24 +268,76 @@ function show(t){
 }
 
 /* ---------- 待确认预约 ---------- */
+const isVIPRoom = r=>r.type==='VIP' && !/コスモ|cosmo|外借/i.test((r.name||'')+(r.campus||''));
+const isBigRoom = r=>r.type==='大课' && !/コスモ|cosmo|外借|租/i.test((r.name||'')+(r.campus||''));
 function tabPending(){
   const list=BOOKINGS.filter(b=>b.status==='pending');
   let h='<div class="card"><h3 style="margin-top:2px">待确认预约</h3>';
   if(!list.length) h+='<div class="muted">没有待确认的预约</div>';
-  else{ h+='<table><thead><tr><th>日期</th><th>教室</th><th>用途</th><th>时段</th><th>人</th><th>账号</th><th>冲突</th><th>操作</th></tr></thead><tbody>';
+  else{ h+='<table><thead><tr><th>类型</th><th>日期</th><th>教室</th><th>用途</th><th>时段</th><th>人</th><th>冲突/指派</th><th>操作</th></tr></thead><tbody>';
     list.forEach(b=>{
-      const rc=roomConflicts(BOOKINGS,b.room_id,b.booking_date,b.start_time,b.end_time,b.id);
-      const ac=b.uses_meeting?accountConflicts(BOOKINGS,b.meeting_account_id,b.booking_date,b.start_time,b.end_time,b.id):[];
-      const bad=rc.length||ac.length;
-      h+=`<tr><td>${b.booking_date||''}</td><td>${esc(rname(b.room_id))}</td><td>${esc(b.title||KIND_LABEL[b.kind])}</td>`+
-        `<td>${b.start_time}-${b.end_time}</td><td>${esc(b.user_name||'')}</td><td>${b.uses_meeting?esc(aname(b.meeting_account_id)):'—'}</td>`+
-        `<td>${bad?'<span class="badge b-err">有冲突</span>':'<span class="badge b-ok">无</span>'}</td>`+
-        `<td><button class="sm" data-ok="${b.id}">确认</button> <button class="sm ghost" data-no="${b.id}">驳回</button></td></tr>`;
+      let tags='';
+      if(b.urgent) tags+='<span class="badge b-err" style="font-size:10px">紧急预约</span> ';
+      if(b.req_other) tags+='<span class="badge b-warn" style="font-size:10px">其他教室申请</span> ';
+      if(!tags) tags='<span class="muted" style="font-size:11px">普通</span>';
+      const roomCell = b.req_other ? ('<span class="badge b-warn">待指派</span> <small class="muted">'+esc(b.req_campus||'')+'·大教室</small>') : esc(rname(b.room_id));
+      let midCell, opCell;
+      if(b.req_other){
+        const campus=b.req_campus||'';
+        const bigFree=ROOMS.filter(r=>r.active!==false && r.campus===campus && isBigRoom(r))
+          .filter(r=>roomConflicts(BOOKINGS,r.id,b.booking_date,b.start_time,b.end_time,b.id).length===0);
+        if(bigFree.length){
+          midCell='<select class="asgRoom" data-b="'+b.id+'">'+bigFree.map(r=>`<option value="${r.id}">${esc(r.name)}（${r.capacity}人）</option>`).join('')+'</select>';
+          opCell='<button class="sm" data-assign="'+b.id+'">指派并确认</button> <button class="sm ghost" data-noreason="'+b.id+'">驳回(回复)</button>';
+        }else{
+          midCell='<span class="badge b-err">无空大教室</span>';
+          opCell='<button class="sm ghost" data-noreason="'+b.id+'">驳回并回复</button>';
+        }
+      }else{
+        const rc=roomConflicts(BOOKINGS,b.room_id,b.booking_date,b.start_time,b.end_time,b.id);
+        midCell = rc.length?'<span class="badge b-err">有冲突</span>':'<span class="badge b-ok">无</span>';
+        opCell='<button class="sm" data-ok="'+b.id+'">确认</button> <button class="sm ghost" data-no="'+b.id+'">驳回</button>';
+      }
+      h+=`<tr><td>${tags}</td><td>${b.booking_date||''}</td><td>${roomCell}</td>`+
+        `<td>${esc(b.title||KIND_LABEL[b.kind])}${b.student_name?(' <small class="muted">学生:'+esc(b.student_name)+'</small>'):''}</td>`+
+        `<td>${b.start_time}-${b.end_time}</td><td>${esc(b.user_name||'')}</td>`+
+        `<td>${midCell}</td><td>${opCell}</td></tr>`;
     });
     h+='</tbody></table>'; }
-  h+='</div>'; render(h);
+  h+='<div id="pendReply"></div></div>'; render(h);
   bind('[data-ok]', async id=>{ await sbUpdate('sched_bookings',id,{status:'confirmed'}); await reloadAll(); show('pending'); toast('已确认'); });
   bind('[data-no]', async id=>{ if(confirm('驳回并删除该预约？')){ await sbDelete('sched_bookings',id); await reloadAll(); show('pending'); toast('已驳回'); } });
+  bind('[data-assign]', async id=>{
+    const sel=document.querySelector('.asgRoom[data-b="'+id+'"]'); if(!sel){ toast('无可指派教室', false); return; }
+    await sbUpdate('sched_bookings',id,{room_id:sel.value, req_other:false, status:'confirmed'});
+    await reloadAll(); show('pending'); toast('已指派大教室并确认');
+  });
+  bind('[data-noreason]', id=>pendReject(id));
+}
+function pendReject(id){
+  const b=BOOKINGS.find(x=>String(x.id)===String(id)); if(!b) return;
+  const campus=b.req_campus||''; const wd=WEEKDAYS[weekdayOf(b.booking_date)];
+  const bigRooms=ROOMS.filter(r=>r.active!==false && r.campus===campus && isBigRoom(r));
+  const daySlots=new Set(), dateSet=new Set();
+  bigRooms.forEach(r=>{ const nb=findNearby(BOOKINGS, r.id, b.booking_date, b.start_time, b.end_time, 5);
+    nb.sameDay.forEach(t=>daySlots.add(t)); nb.nearDates.forEach(o=>dateSet.add(o.date)); });
+  const daysArr=[...daySlots].sort(), dateArr=[...dateSet].sort();
+  const otherCampus=CAMPUSES.filter(c=>c!==campus);
+  let reply=`${b.user_name||''}老师您好：${b.booking_date}（${wd}）${b.start_time}-${b.end_time} 在 ${campus} 的大教室（含备用）也已排满，暂时无法安排。`;
+  if(daysArr.length) reply+=`当天可改约时段：${daysArr.join('、')}。`;
+  if(dateArr.length) reply+=`同时段就近可约日期：${dateArr.join('、')}。`;
+  if(otherCampus.length) reply+=`也可更换校区到 ${otherCampus.join('/')}。`;
+  reply+=`麻烦回复希望的调整，谢谢！`;
+  const box=el('pendReply');
+  box.innerHTML='<div class="card" style="margin-top:10px;background:#fff7f7"><b style="color:#c85a3c">驳回回复 · 复制发给老师（含就近档期/换校区建议）</b>'+
+    `<textarea rows="4" style="width:100%;margin-top:6px" readonly>${esc(reply)}</textarea>`+
+    '<div style="margin-top:6px;display:flex;gap:8px"><button class="sm" id="copyReply">复制文字</button>'+
+    '<button class="sm danger" id="doReject">确认驳回（删除申请）</button>'+
+    '<button class="ghost sm" id="cancelReject">取消</button></div></div>';
+  box.scrollIntoView({behavior:'smooth',block:'end'});
+  el('copyReply').onclick=()=>navigator.clipboard.writeText(reply).then(()=>toast('已复制'));
+  el('cancelReject').onclick=()=>{ box.innerHTML=''; };
+  el('doReject').onclick=async()=>{ await sbDelete('sched_bookings',id); await reloadAll(); show('pending'); toast('已驳回'); };
 }
 
 /* ---------- 排教室：课程 -> 生成 weekly 占用 ---------- */
