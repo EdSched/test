@@ -168,20 +168,46 @@ function renderChangeAlerts(){
   const myRole=(ROLE&&ROLE.role)||'';
   const pending=(CHANGELOG||[]).filter(l=>{ const acked=(l.acked_by||'').split(',').map(s=>s.trim()).filter(Boolean); return !acked.includes(myRole); });
   if(!pending.length){ box.innerHTML=''; return; }
-  box.innerHTML = pending.map(l=>{
-    const chg=(Array.isArray(l.changes)?l.changes:[]).map(x=>`<div style="font-size:12px;margin-top:2px">· <b>${esc(x.label)}</b>：${esc(String(x.from))} → ${esc(String(x.to))}</div>`).join('');
-    const when=(l.created_at||'').slice(0,16).replace('T',' ');
+  // 按学科（类别）分组：反查课程的 category
+  const catOf=(l)=>{
+    const c=(COURSES||[]).find(x=>String(x.id)===String(l.course_id)) || (DELETED_COURSES||[]).find(x=>String(x.id)===String(l.course_id));
+    return (c&&(c.category||c.major))||'未分类';
+  };
+  const groups={}; pending.forEach(l=>{ const k=catOf(l); (groups[k]=groups[k]||[]).push(l); });
+  const cats=Object.keys(groups).sort();
+  box.innerHTML = cats.map((cat,gi)=>{
+    const items=groups[cat];
+    const ids=items.map(l=>l.id).join(',');
+    const detail=items.map(l=>{
+      const chg=(Array.isArray(l.changes)?l.changes:[]).map(x=>`<div style="font-size:12px;margin-top:2px">· <b>${esc(x.label)}</b>：${esc(String(x.from))} → ${esc(String(x.to))}</div>`).join('');
+      const when=(l.created_at||'').slice(0,16).replace('T',' ');
+      return `<div style="border-top:1px solid #f0e6d0;padding-top:6px;margin-top:6px">`+
+        `<div style="font-size:12px"><b>${esc(l.actor_label||'某账号')}</b>（${esc(l.actor_role||'')}）修改了「<b>${esc(l.course_name||'')}</b>」 <span class="muted" style="font-size:11px">${esc(when)}</span></div>`+
+        chg+`</div>`;
+    }).join('');
     return `<div style="background:#fbf6ee;border:1px solid #ecdcbe;border-radius:8px;padding:10px 14px;margin-bottom:8px">`+
-      `<div style="font-size:13px"><b>${esc(l.actor_label||'某账号')}</b>（${esc(l.actor_role||'')}）修改了课程「<b>${esc(l.course_name||'')}</b>」 <span class="muted" style="font-size:11px">${esc(when)}</span></div>`+
-      chg+
-      `<div style="margin-top:8px"><button class="sm ghost" data-ackchg="${l.id}">知道了</button></div>`+
+      `<div style="font-size:13px;line-height:1.5">有 <b>${items.length}</b> 条关于「<b>${esc(cat)}</b>」的修改，请确认课程表、教室和腾讯会议使用是否需要修改更新。</div>`+
+      `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">`+
+        `<button class="sm ghost" data-chgtoggle="${gi}">展开</button>`+
+        `<button class="sm ghost" data-ackgrp="${ids}">知道了</button>`+
+      `</div>`+
+      `<div id="chgdetail_${gi}" style="display:none">${detail}</div>`+
       `</div>`;
   }).join('');
-  box.querySelectorAll('[data-ackchg]').forEach(b=>b.onclick=async()=>{
-    const l=CHANGELOG.find(x=>String(x.id)===String(b.dataset.ackchg)); if(!l) return;
-    const acked=(l.acked_by||'').split(',').map(s=>s.trim()).filter(Boolean);
-    if(!acked.includes(myRole)) acked.push(myRole);
-    try{ await sbUpdate('sched_change_log', l.id, {acked_by:acked.join(',')}); l.acked_by=acked.join(','); }catch(e){}
+  box.querySelectorAll('[data-chgtoggle]').forEach(b=>b.onclick=()=>{
+    const d=el('chgdetail_'+b.dataset.chgtoggle); if(!d) return;
+    const open=d.style.display!=='none';
+    d.style.display=open?'none':'block';
+    b.textContent=open?'展开':'收起';
+  });
+  box.querySelectorAll('[data-ackgrp]').forEach(b=>b.onclick=async()=>{
+    const ids=(b.dataset.ackgrp||'').split(',').filter(Boolean);
+    for(const id of ids){
+      const l=CHANGELOG.find(x=>String(x.id)===String(id)); if(!l) continue;
+      const acked=(l.acked_by||'').split(',').map(s=>s.trim()).filter(Boolean);
+      if(!acked.includes(myRole)) acked.push(myRole);
+      try{ await sbUpdate('sched_change_log', l.id, {acked_by:acked.join(',')}); l.acked_by=acked.join(','); }catch(e){}
+    }
     renderChangeAlerts();
   });
 }
