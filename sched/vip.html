@@ -146,16 +146,41 @@ function find(){
       op = urgent
         ? `<button class="sm" style="background:#e97457" data-urgent="${r.id}">紧急预约</button>`
         : `<button class="sm" data-r="${r.id}">预约</button>`;
-    }else op='<span class="muted">—</span>';
+    }else op=`<button class="sm ghost" data-near="${r.id}">就近空档</button>`;
     h+=`<tr><td>${esc(r.name)}</td><td>${r.capacity}人</td>`+
       (free?'<td><span class="badge b-ok">空闲</span></td>':`<td><span class="badge b-err">占用</span> <small class="muted">${conf.map(c=>c.title||KIND_LABEL[c.kind]).join('、')}</small></td>`)+
       `<td>${op}</td></tr>`;
   });
   h+='</tbody></table>';
   if(!rows.length) h+='<div class="muted">该校区暂无 VIP 教室</div>';
+  h+='<div id="nearBox"></div>';
+  const freeCount=rows.filter(x=>x.free).length;
+  if(rows.length && freeCount===0){
+    h+='<div style="margin-top:10px;padding:10px 12px;border:1px solid #f2d5cc;background:#fdf1ed;border-radius:8px">'+
+      '<div style="font-size:13px;margin-bottom:6px">该时段 VIP 教室已全部占用。可先看各室「就近空档」调整时间；若都不合适，'+
+      '<b>可申请调整到大教室</b>（'+(urgent?'2天内·紧急':'非紧急')+'）：</div>'+
+      '<button class="sm" style="background:#e97457" id="otherBtn">预约其他教室（大教室）</button></div>';
+  }
   el('resBox').innerHTML=h;
   el('resBox').querySelectorAll('button[data-r]').forEach(b=>b.onclick=()=>openModal(b.dataset.r,false));
   el('resBox').querySelectorAll('button[data-urgent]').forEach(b=>b.onclick=()=>openModal(b.dataset.urgent,true));
+  el('resBox').querySelectorAll('button[data-near]').forEach(b=>b.onclick=()=>showNearVip(b.dataset.near));
+  if(el('otherBtn')) el('otherBtn').onclick=()=>openOtherModal();
+}
+function showNearVip(roomId){
+  const date=el('date').value, s=el('st').value, e=el('et').value;
+  const r=ROOMS.find(x=>String(x.id)===String(roomId));
+  const nb=findNearby(BOOKINGS, roomId, date, s, e, 5);
+  let h='<div class="card" style="margin-top:10px;background:#f7f9fb"><b>'+esc(r.name)+' 的就近空档</b>';
+  h+='<div style="margin-top:6px"><span class="muted">当天其他空时段：</span>'+
+     (nb.sameDay.length? nb.sameDay.map(t=>`<button class="sm ghost" data-pick="${date}|${t}">${t}</button>`).join(' ') : '<span class="muted">无</span>')+'</div>';
+  h+='<div style="margin-top:6px"><span class="muted">同时段前后几天有空：</span>'+
+     (nb.nearDates.length? nb.nearDates.map(o=>`<button class="sm ghost" data-pick="${o.date}|${s}-${e}">${o.date}（${WEEKDAYS[weekdayOf(o.date)]}）</button>`).join(' ') : '<span class="muted">无</span>')+'</div></div>';
+  const box=el('nearBox'); box.innerHTML=h;
+  box.querySelectorAll('button[data-pick]').forEach(b=>b.onclick=()=>{
+    const [d,tt]=b.dataset.pick.split('|'); const [ns,ne]=tt.split('-');
+    el('date').value=d; el('st').value=ns; el('et').value=ne; find();
+  });
 }
 function renderGrid(){
   const campus=el('campus').value, date=el('date').value;
@@ -166,9 +191,9 @@ function renderGrid(){
     !(b.kind==='course'&&b.course_id&&window.SKIPMAP&&window.SKIPMAP[b.course_id]&&window.SKIPMAP[b.course_id].has(date)));
   box.innerHTML = renderOccupancyGrid(rooms, todays, 'room_id', {labelOnly:true});
 }
-let URGENT=false;
+let URGENT=false, OTHER=false;
 function openModal(roomId, urgent){
-  URGENT = !!urgent;
+  URGENT = !!urgent; OTHER=false;
   const r=ROOMS.find(x=>String(x.id)===String(roomId)); CUR=r;
   el('m_when').textContent=`${el('date').value}（${WEEKDAYS[weekdayOf(el('date').value)]}）${el('st').value}-${el('et').value} · ${r.campus}`;
   ['m_title','m_user','m_stu','m_major','m_note'].forEach(id=>el(id).value='');
@@ -178,51 +203,80 @@ function openModal(roomId, urgent){
     ? '紧急预约 · <span style="color:#e97457">'+esc(r.name)+'</span>'
     : '预约 · '+esc(r.name);
   el('m_hint').innerHTML = URGENT
-    ? '<div class="badge b-warn" style="margin-bottom:6px">2天内为紧急预约：填好信息后生成群消息，复制发群联系管理员安排。</div>'
+    ? '<div class="badge b-warn" style="margin-bottom:6px">2天内为紧急预约：提交后会同时生成群消息，<b>必须复制发到群里</b>，否则管理员会驳回。</div>'
     : '';
-  el('m_submit').textContent = URGENT ? '生成群消息' : '提交预约';
+  el('m_submit').textContent = URGENT ? '提交并生成群消息' : '提交预约';
+  el('modal').classList.remove('hidden');
+  window.scrollTo({top:0, behavior:'auto'});
+}
+function openOtherModal(){
+  OTHER=true; URGENT=!advanceOk(); CUR=null;
+  const campus=el('campus').value;
+  el('m_when').textContent=`${el('date').value}（${WEEKDAYS[weekdayOf(el('date').value)]}）${el('st').value}-${el('et').value} · ${campus} · 大教室（待管理员指派）`;
+  ['m_title','m_user','m_stu','m_major','m_note'].forEach(id=>el(id).value='');
+  const last=localStorage.getItem(NKEY); if(last) el('m_user').value=last;
+  el('m_warn').classList.add('hidden');
+  el('m_head').innerHTML = '预约其他教室（大教室） · <span style="color:#e97457">'+esc(campus)+'</span>';
+  el('m_hint').innerHTML = URGENT
+    ? '<div class="badge b-warn" style="margin-bottom:6px">VIP 已满 + 2天内紧急：提交后生成群消息，<b>必须复制发到群里</b>，否则管理员会驳回。</div>'
+    : '<div class="badge b-warn" style="margin-bottom:6px">VIP 已满：提交「其他教室申请」，管理员会安排大教室。请把生成的申请文字发群周知。</div>';
+  el('m_submit').textContent = '提交申请并生成文字';
   el('modal').classList.remove('hidden');
   window.scrollTo({top:0, behavior:'auto'});
 }
 async function submit(){
-  const s=el('st').value, e=el('et').value, date=el('date').value;
+  const s=el('st').value, e=el('et').value, date=el('date').value, campus=el('campus').value;
   const warn=m=>{ el('m_warn').className=''; el('m_warn').innerHTML='<span class="badge b-err">'+m+'</span>'; };
   const user=el('m_user').value.trim(), stu=el('m_stu').value.trim(), major=el('m_major').value.trim();
   if(!user){ warn('请填讲师真实姓名'); return; }
   if(!stu){ warn('请填学生姓名'); return; }
   if(!major){ warn('请填专业/事由'); return; }
   const reason=el('m_title').value.trim();
-
-  if(URGENT){
-    // 紧急预约：不写库，生成群消息文字
-    const msg=`【VIP紧急预约申请】麻烦管理员安排：${date}（${WEEKDAYS[weekdayOf(date)]}）${s}-${e} 的 VIP教室「${CUR.name}」（${CUR.campus}）。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。已确认该时段空闲，谢谢！`;
-    localStorage.setItem(NKEY, user);
-    el('modal').classList.add('hidden');
-    const box=el('resBox');
-    const div=document.createElement('div');
-    div.className='card'; div.style.marginTop='10px'; div.style.background='#fff7f7';
-    div.innerHTML='<b style="color:#e97457">紧急预约 · 复制以下文字发到群里联系管理员</b>'+
-      `<textarea rows="4" style="width:100%;margin-top:6px" readonly>${esc(msg)}</textarea>`+
-      '<button class="sm" id="copyUrgent">复制文字</button>';
-    box.appendChild(div);
-    el('copyUrgent').onclick=()=>navigator.clipboard.writeText(msg).then(()=>toast('已复制，去群里发给管理员'));
-    return;
-  }
-
-  if(!advanceOk()){ warn('2天内请用紧急预约'); return; }
-  const rec={ room_id:CUR.id, kind:'vip', title:reason||null,
-    user_name:user, student_name:stu, major:major, recurrence:'once', booking_date:date,
-    start_time:s, end_time:e, uses_meeting:false, meeting_account_id:null,
+  const wd=WEEKDAYS[weekdayOf(date)];
+  const base={ kind:'vip', title:reason||null, user_name:user, student_name:stu, major:major,
+    recurrence:'once', booking_date:date, start_time:s, end_time:e, uses_meeting:false, meeting_account_id:null,
     status:'pending', created_by:user, note:el('m_note').value.trim()||null, client_token:myToken() };
   const sb=el('m_submit'); if(sb.disabled) return; sb.disabled=true; sb.textContent='提交中…';
   try{
+    if(OTHER){
+      const rec={ ...base, room_id:null, req_other:true, req_campus:campus, urgent:URGENT };
+      const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
+      localStorage.setItem(NKEY, user); el('modal').classList.add('hidden');
+      const msg = URGENT
+        ? `【VIP其他教室紧急预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 ${campus}教室。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。VIP教室预约已满，2天内紧急，申请调整到大教室。⚠必须把本消息发到群里，否则管理员会驳回，谢谢！`
+        : `【VIP其他教室预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 ${campus}教室。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。VIP教室预约已满，申请调整到大教室，谢谢！`;
+      find(); renderGrid();
+      showReqCard('其他教室申请已提交 · 复制以下文字发到群里联系管理员', msg);
+      return;
+    }
+    if(URGENT){
+      const rec={ ...base, room_id:CUR.id, urgent:true, req_other:false };
+      const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
+      localStorage.setItem(NKEY, user); el('modal').classList.add('hidden');
+      const msg=`【VIP紧急预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 VIP教室「${CUR.name}」（${CUR.campus}）。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。已确认该时段空闲。⚠必须把本消息发到群里，否则管理员会驳回该预约，谢谢！`;
+      find(); renderGrid();
+      showReqCard('紧急预约已提交 · 复制以下文字发到群里联系管理员', msg);
+      return;
+    }
+    // 普通预约
+    if(!advanceOk()){ warn('2天内请用紧急预约'); sb.disabled=false; sb.textContent='提交预约'; return; }
+    const rec={ ...base, room_id:CUR.id, urgent:false, req_other:false };
     const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
-    localStorage.setItem(NKEY, user);
-    el('modal').classList.add('hidden');
+    localStorage.setItem(NKEY, user); el('modal').classList.add('hidden');
     toast('已提交！请到「我的预约」查看审批状态；如需改时间或取消，务必在那里点“取消”释放教室后再重新预约');
     find(); renderGrid();
   }catch(err){ warn(esc(err.message)); }
-  finally{ sb.disabled=false; sb.textContent='提交预约'; }
+  finally{ sb.disabled=false; sb.textContent = OTHER?'提交申请并生成文字':(URGENT?'提交并生成群消息':'提交预约'); }
+}
+function showReqCard(title, msg){
+  const box=el('resBox');
+  const div=document.createElement('div');
+  div.className='card'; div.style.marginTop='10px'; div.style.background='#fff7f7';
+  div.innerHTML='<b style="color:#e97457">'+esc(title)+'</b>'+
+    `<textarea rows="4" style="width:100%;margin-top:6px" readonly>${esc(msg)}</textarea>`+
+    '<button class="sm" id="copyReqBtn">复制文字</button>';
+  box.appendChild(div);
+  el('copyReqBtn').onclick=()=>navigator.clipboard.writeText(msg).then(()=>toast('已复制，去群里发给管理员'));
 }
 async function loadMine(name){
   const box=el('mineBox'); box.innerHTML='<div class="muted">加载中…</div>';
@@ -241,10 +295,14 @@ async function loadMine(name){
   let h='<table><thead><tr><th>日期</th><th>时段</th><th>教室</th><th>学生</th><th>状态</th><th>操作</th></tr></thead><tbody>';
   rows.forEach(b=>{
     const r=rmap[b.room_id]; const past=b.booking_date<todayStr();
+    let tag='';
+    if(b.urgent) tag+='<span class="badge b-err" style="font-size:10px">紧急</span> ';
+    if(b.req_other) tag+='<span class="badge b-warn" style="font-size:10px">其他教室</span> ';
     const st = b.status==='confirmed'?'<span class="badge b-ok">已批准</span>':'<span class="badge b-warn">待确认</span>';
+    const roomCell = b.req_other && !r ? ('<span class="muted">待指派大教室</span><br><small class="muted">'+esc(b.req_campus||'')+'</small>') : (esc(r?r.name:'')+'<br><small class="muted">'+esc(r?r.campus:'')+'</small>');
     h+=`<tr${past?' style="opacity:.5"':''}><td>${b.booking_date}<br><small class="muted">${WEEKDAYS[weekdayOf(b.booking_date)]}</small></td>`+
-      `<td>${b.start_time}-${b.end_time}</td><td>${esc(r?r.name:'')}<br><small class="muted">${esc(r?r.campus:'')}</small></td>`+
-      `<td>${esc(b.student_name||'')}</td><td>${st}</td>`+
+      `<td>${b.start_time}-${b.end_time}</td><td>${roomCell}</td>`+
+      `<td>${esc(b.student_name||'')}</td><td>${tag}${st}</td>`+
       `<td>${past?'<span class="muted">已过期</span>':`<button class="sm danger" data-cancel="${b.id}">取消</button>`}</td></tr>`;
   });
   h+='</tbody></table>';
