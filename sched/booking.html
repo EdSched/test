@@ -214,10 +214,15 @@ function occupyEditForm(id){
     '</div>'+
     '<div class="field" style="margin-top:8px"><label>备注</label><input id="oe_note" value="'+esc(b.note||'')+'" style="width:100%"></div>'+
     '<div id="oe_warn" style="margin-top:8px"></div>'+
-    '<div style="margin-top:12px;display:flex;gap:8px"><button id="oe_save">保存</button><button class="ghost" id="oe_cancel">取消</button></div>'+
+    '<div style="margin-top:12px;display:flex;gap:8px"><button id="oe_save">保存</button><button class="danger" id="oe_del">删除该占用</button><button class="ghost" id="oe_cancel">取消</button></div>'+
     '</div></div>';
   el('occupyEdit').innerHTML=h;
   el('oe_cancel').onclick=()=>{ el('occupyEdit').innerHTML=''; };
+  el('oe_del').onclick=async()=>{
+    if(!confirm('删除该占用记录？删除即释放教室。')) return;
+    try{ await sbDelete('sched_bookings', b.id); await reloadBookings(); el('occupyEdit').innerHTML=''; renderMgmtTable(); renderGrid(); if(el('resBox').dataset.done) find(); toast('已删除（教室已释放）'); }
+    catch(e){ el('oe_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; }
+  };
   el('oe_save').onclick=async()=>{
     const patch={ room_id: el('oe_room').value||null, start_time: el('oe_st').value||null, end_time: el('oe_et').value||null,
       user_name: el('oe_user').value.trim()||null, status: el('oe_status').value, note: el('oe_note').value.trim()||null };
