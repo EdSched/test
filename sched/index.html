@@ -317,7 +317,13 @@ function tabPending(){
     h+='</tbody></table>'; }
   h+='<div id="pendGrid"></div><div id="pendReply"></div></div>'; render(h);
   bind('[data-ok]', async id=>{ await sbUpdate('sched_bookings',id,{status:'confirmed'}); await reloadAll(); show('pending'); toast('已确认'); });
-  bind('[data-no]', async id=>{ if(confirm('驳回并删除该预约？')){ await sbDelete('sched_bookings',id); await reloadAll(); show('pending'); toast('已驳回'); } });
+  bind('[data-no]', async id=>{
+    const b=BOOKINGS.find(x=>String(x.id)===String(id)); if(!b) return;
+    const reason=prompt('驳回理由（老师会在「我的预约」看到）：','该时段/教室不可用，请重新预约'); if(reason===null) return;
+    const r=ROOMS.find(x=>String(x.id)===String(b.room_id)); const campus=r?r.campus:(b.req_campus||'');
+    await sbUpdate('sched_bookings',id,{status:'rejected', room_id:null, req_campus:campus||null, reject_reason:reason||'管理员驳回'});
+    await reloadAll(); show('pending'); toast('已驳回（老师可在「我的预约」看到理由）');
+  });
   bind('[data-assign]', async id=>{
     const sel=document.querySelector('.asgRoom[data-b="'+id+'"]'); if(!sel){ toast('无可指派教室', false); return; }
     await sbUpdate('sched_bookings',id,{room_id:sel.value, req_other:false, status:'confirmed'});
@@ -370,7 +376,7 @@ function pendReject(id){
   box.scrollIntoView({behavior:'smooth',block:'end'});
   el('copyReply').onclick=()=>navigator.clipboard.writeText(reply).then(()=>toast('已复制'));
   el('cancelReject').onclick=()=>{ box.innerHTML=''; };
-  el('doReject').onclick=async()=>{ await sbDelete('sched_bookings',id); await reloadAll(); show('pending'); toast('已驳回'); };
+  el('doReject').onclick=async()=>{ await sbUpdate('sched_bookings',id,{status:'rejected', reject_reason:reply}); await reloadAll(); show('pending'); toast('已驳回（回复已随记录留给老师）'); };
 }
 
 /* ---------- 排教室：课程 -> 生成 weekly 占用 ---------- */
