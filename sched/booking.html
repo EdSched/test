@@ -154,7 +154,7 @@ function renderMgmtTable(){
         from=el('oc_from').value, to=el('oc_to').value, wd=el('oc_wd').value, q=(el('oc_q').value||'').trim().toLowerCase();
   const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r);
   const bWd=b=>{ if(b.recurrence==='weekly'){ const w=Number(b.weekday); return w===0?7:w; } if(b.booking_date){ const w=weekdayOf(b.booking_date); return w===0?7:w; } return null; };
-  let list=BOOKINGS.filter(b=>b.kind!=='course').filter(b=>{
+  let list=BOOKINGS.filter(b=>b.kind!=='course' && b.status!=='rejected').filter(b=>{
     if(kind && b.kind!==kind) return false;
     if(roomId){ if(String(b.room_id)!==String(roomId)) return false; }
     else if(campus){ const r=rmap[b.room_id]; if(!r||r.campus!==campus) return false; }
