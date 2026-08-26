@@ -361,6 +361,7 @@ const PERM_DEFS = [
   ['room_manage',     '教室管理',        'admin.html?tab=rooms'],
   ['account_manage',  '会议账号管理',    'admin.html?tab=accounts'],
   ['course',          '课程管理',        'entry.html'],
+  ['course_audit',    '课程审查',        'entry.html'],
   ['manage',          '账号与权限管理',  'admin.html'],           // 超级权限（分配UI里隐藏，仅admin）
 ];
 const PERM_LABEL = Object.fromEntries(PERM_DEFS.map(p=>[p[0],p[1]]));
