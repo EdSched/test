@@ -272,7 +272,16 @@ const isVIPRoom = r=>r.type==='VIP' && !/コスモ|cosmo|外借/i.test((r.name||
 const isBigRoom = r=>r.type==='大课' && !/コスモ|cosmo|外借|租/i.test((r.name||'')+(r.campus||''));
 function tabPending(){
   const list=BOOKINGS.filter(b=>b.status==='pending');
+  const nUrgent=list.filter(b=>b.urgent).length, nOther=list.filter(b=>b.req_other).length;
   let h='<div class="card"><h3 style="margin-top:2px">待确认预约</h3>';
+  if(nUrgent||nOther){
+    h+='<div style="background:#fdf1ed;border:1px solid #f2c9ba;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;line-height:1.6;color:#b0472b">'+
+      '⚠ 有需要特别处理的申请：'+
+      (nUrgent?('<b>紧急预约 '+nUrgent+' 条</b>（老师须已发群，未发群应驳回）'):'')+
+      (nUrgent&&nOther?'；':'')+
+      (nOther?('<b>其他教室申请 '+nOther+' 条</b>（VIP 已满，需指派大教室或驳回回复）'):'')+
+      '。请优先核对。</div>';
+  }
   if(!list.length) h+='<div class="muted">没有待确认的预约</div>';
   else{ h+='<table><thead><tr><th>类型</th><th>日期</th><th>教室</th><th>用途</th><th>时段</th><th>人</th><th>冲突/指派</th><th>操作</th></tr></thead><tbody>';
     list.forEach(b=>{
@@ -298,13 +307,15 @@ function tabPending(){
         midCell = rc.length?'<span class="badge b-err">有冲突</span>':'<span class="badge b-ok">无</span>';
         opCell='<button class="sm" data-ok="'+b.id+'">确认</button> <button class="sm ghost" data-no="'+b.id+'">驳回</button>';
       }
-      h+=`<tr><td>${tags}</td><td>${b.booking_date||''}</td><td>${roomCell}</td>`+
+      opCell += ' <button class="sm ghost" data-view="'+b.id+'">查看教室情况</button>';
+      const trStyle = b.urgent?' style="background:#fdf1ed"':(b.req_other?' style="background:#fef7f5"':'');
+      h+=`<tr${trStyle}><td>${tags}</td><td>${b.booking_date||''}</td><td>${roomCell}</td>`+
         `<td>${esc(b.title||KIND_LABEL[b.kind])}${b.student_name?(' <small class="muted">学生:'+esc(b.student_name)+'</small>'):''}</td>`+
         `<td>${b.start_time}-${b.end_time}</td><td>${esc(b.user_name||'')}</td>`+
         `<td>${midCell}</td><td>${opCell}</td></tr>`;
     });
     h+='</tbody></table>'; }
-  h+='<div id="pendReply"></div></div>'; render(h);
+  h+='<div id="pendGrid"></div><div id="pendReply"></div></div>'; render(h);
   bind('[data-ok]', async id=>{ await sbUpdate('sched_bookings',id,{status:'confirmed'}); await reloadAll(); show('pending'); toast('已确认'); });
   bind('[data-no]', async id=>{ if(confirm('驳回并删除该预约？')){ await sbDelete('sched_bookings',id); await reloadAll(); show('pending'); toast('已驳回'); } });
   bind('[data-assign]', async id=>{
@@ -313,6 +324,28 @@ function tabPending(){
     await reloadAll(); show('pending'); toast('已指派大教室并确认');
   });
   bind('[data-noreason]', id=>pendReject(id));
+  bind('[data-view]', id=>pendViewRooms(id));
+}
+function pendViewRooms(id){
+  const b=BOOKINGS.find(x=>String(x.id)===String(id)); if(!b) return;
+  const box=el('pendGrid'); if(!box) return;
+  if(box.dataset.for===String(id)){ box.innerHTML=''; box.dataset.for=''; return; }  // 再点收起
+  box.dataset.for=String(id);
+  const campus = b.req_other ? (b.req_campus||'') : (()=>{ const r=ROOMS.find(x=>String(x.id)===String(b.room_id)); return r?r.campus:''; })();
+  const date=b.booking_date;
+  const rooms=ROOMS.filter(r=>r.active!==false && r.campus===campus).map(r=>({id:r.id,name:r.name,sub:(r.type||'')+'·'+r.capacity+'人'}));
+  const todays=BOOKINGS.filter(x=>bookingOnDate(x,date) &&
+    !(x.course_id && window.SKIPMAP && window.SKIPMAP[x.course_id] && window.SKIPMAP[x.course_id].has(date)));
+  let h='<div class="card" style="margin-top:10px;background:#f7f9fb">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'+
+      '<b>'+esc(campus)+' · '+esc(date)+'（'+WEEKDAYS[weekdayOf(date)]+'）教室占用情况</b>'+
+      '<span class="badge b-warn">申请时段 '+b.start_time+'-'+b.end_time+'</span>'+
+      '<button class="ghost sm" id="pgClose" style="margin-left:auto">收起</button></div>';
+  h+= rooms.length ? renderOccupancyGrid(rooms, todays, 'room_id') : '<div class="muted">该校区暂无教室</div>';
+  h+='</div>';
+  box.innerHTML=h;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  if(el('pgClose')) el('pgClose').onclick=()=>{ box.innerHTML=''; box.dataset.for=''; };
 }
 function pendReject(id){
   const b=BOOKINGS.find(x=>String(x.id)===String(id)); if(!b) return;
