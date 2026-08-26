@@ -1811,26 +1811,45 @@ function previewImport(rows){
   }
   if(!rows.length){ el('cf_importPrev').innerHTML='<span class="badge b-err">这些课程都不在你可管理的类别范围内，无法导入</span>'; return; }
   const wdName=n=>({'1':'周一','2':'周二','3':'周三','4':'周四','5':'周五','6':'周六','7':'周日'}[n]||n);
-  let h='<div class="tip">共解析 '+rows.length+' 门课'+(blocked?('（另有 '+blocked+' 门不在你可管理类别，已跳过）'):'')+'，确认无误后点「确认导入」。</div>'+
-    '<div style="overflow-x:auto;max-height:300px;overflow-y:auto"><table style="font-size:12px"><thead><tr><th>课名</th><th>讲师</th><th>类别</th><th>校区</th><th>专业</th><th>期</th><th>方式</th><th>周几</th><th>时段</th><th>日期</th></tr></thead><tbody>'+
-    rows.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.teacher||'')}</td><td>${esc(c.category)}</td><td>${esc(c.campus)}</td><td>${esc(c.major||'')}</td><td>${esc(c.term||'')}</td><td>${esc(c.mode)}</td><td>${(c.weekdays||'').split(',').filter(Boolean).map(wdName).join('、')}</td><td>${esc((c.start_time||'')+'-'+(c.end_time||''))}</td><td>${esc((c.start_date||'')+'~'+(c.end_date||''))}</td></tr>`).join('')+
-    '</tbody></table></div>'+
-    '<div style="margin-top:10px"><button class="sm" id="cf_doImport">确认导入 '+rows.length+' 门</button> <span id="cf_impWarn"></span></div>';
-  el('cf_importPrev').innerHTML=h;
-  el('cf_doImport').onclick=async()=>{
+  // 完全重复检测：课名+校区+开课日+结课日+回数 与现有课程一致
+  const existing={}; COURSES.forEach(c=>{ existing[courseDupKey(c)]=c; });
+  rows.forEach(c=>{ const m=existing[courseDupKey(c)]; c.__dup=!!m; c.__import=!m; });   // 默认：重复的不导入
+  rows.sort((a,b)=>(b.__dup?1:0)-(a.__dup?1:0));   // 重复排最前，便于对比
+  const dupN=rows.filter(c=>c.__dup).length;
+  function render(){
+    const impN=rows.filter(c=>c.__import).length;
+    let h='<div class="tip">共解析 '+rows.length+' 门课'+(blocked?('（另有 '+blocked+' 门不在你可管理类别，已跳过）'):'')+'。'+
+      (dupN?('<b style="color:#c0392b">其中 '+dupN+' 门与已有课程完全重复</b>（课名+校区+开课日+结课日+回数一致），默认<b>跳过</b>、保留原有；点该行「跳过/导入」可切换。'):'无与现有课程完全重复的。')+'</div>'+
+      '<div style="overflow-x:auto;max-height:320px;overflow-y:auto"><table style="font-size:12px"><thead><tr><th>处理</th><th>课名</th><th>讲师</th><th>类别</th><th>校区</th><th>期</th><th>方式</th><th>周几</th><th>时段</th><th>日期</th><th>回数</th></tr></thead><tbody>'+
+      rows.map((c,i)=>{
+        const dupTag = c.__dup ? '<span class="badge b-err" style="font-size:10px">重复</span> ' : '';
+        const act = c.__dup
+          ? '<span class="dupTog" data-i="'+i+'" style="cursor:pointer;user-select:none;border:1px solid '+(c.__import?'#2c8a4f':'#c0392b')+';color:'+(c.__import?'#2c8a4f':'#c0392b')+';border-radius:10px;padding:1px 8px;font-size:11px">'+(c.__import?'导入':'跳过')+'</span>'
+          : '<span class="badge b-ok" style="font-size:10px">新增</span>';
+        const rowStyle = c.__dup ? (c.__import?' style="background:#fef7f5"':' style="opacity:.5;background:#fdf1ed"') : '';
+        return '<tr'+rowStyle+'><td>'+dupTag+act+'</td>'+
+          '<td>'+esc(c.name)+'</td><td>'+esc(c.teacher||'')+'</td><td>'+esc(c.category)+'</td><td>'+esc(c.campus)+'</td><td>'+esc(c.term||'')+'</td><td>'+esc(c.mode)+'</td><td>'+(c.weekdays||'').split(',').filter(Boolean).map(wdName).join('、')+'</td><td>'+esc((c.start_time||'')+'-'+(c.end_time||''))+'</td><td>'+esc((c.start_date||'')+'~'+(c.end_date||''))+'</td><td>'+esc(String(c.sessions||''))+'</td></tr>';
+      }).join('')+
+      '</tbody></table></div>'+
+      '<div style="margin-top:10px"><button class="sm" id="cf_doImport">确认导入 '+impN+' 门'+(dupN?('（跳过 '+(rows.length-impN)+'）'):'')+'</button> <span id="cf_impWarn"></span></div>';
+    el('cf_importPrev').innerHTML=h;
+    el('cf_importPrev').querySelectorAll('.dupTog').forEach(x=>x.onclick=()=>{ const i=Number(x.dataset.i); rows[i].__import=!rows[i].__import; render(); });
+    el('cf_doImport').onclick=doImport;
+  }
+  async function doImport(){
+    const use=rows.filter(c=>c.__import).map(c=>{ const {__dup,__import,...rest}=c; return rest; });
+    if(!use.length){ el('cf_impWarn').innerHTML=' <span class="badge b-err">没有要导入的课（全部跳过）</span>'; return; }
     const btn=el('cf_doImport'); if(btn.disabled) return; btn.disabled=true; btn.textContent='导入中…';
     let ok=0; const errs=[];
-    for(const c of rows){
-      try{ await sbInsert('sched_courses', c); ok++; }
-      catch(e){ errs.push((c.name||'?')+'：'+(e.message||e)); }
-    }
+    for(const c of use){ try{ await sbInsert('sched_courses', c); ok++; } catch(e){ errs.push((c.name||'?')+'：'+(e.message||e)); } }
     await reloadAll();
-    let msg='<span class="badge b-ok">导入成功 '+ok+' 门</span>';
+    let msg='<span class="badge b-ok">导入成功 '+ok+' 门</span>'+((rows.length-use.length)?(' <span class="muted" style="font-size:12px">（跳过 '+(rows.length-use.length)+' 门重复/未选，保留原有）</span>'):'');
     if(errs.length){ msg+='<div class="badge b-err" style="margin-top:8px">失败 '+errs.length+' 门</div>'+
       '<div style="max-height:160px;overflow:auto;font-size:12px;color:#a33;margin-top:6px">'+errs.slice(0,20).map(esc).join('<br>')+'</div>'; }
     el('cf_importPrev').innerHTML=msg;
     renderCoursesTable();
-  };
+  }
+  render();
 }
 function daysSince(iso){ if(!iso) return 0; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
 function renderTrash(){
@@ -1894,14 +1913,16 @@ function renderCoursesTable(){
   const LIMIT=50; const truncated = !hasFilter && !showAll && list.length>LIMIT;
   const shown = truncated ? list.slice(0,LIMIT) : list;
   const isAdmin = ROLE && (ROLE.role==='admin' || (ROLE.perms&&ROLE.perms.split(',').map(s=>s.trim()).includes('manage')));
+  const canAudit = isAdmin || (ROLE && ROLE.perms && ROLE.perms.split(',').map(s=>s.trim()).includes('course_audit'));
   let h='<div class="row" style="margin-bottom:8px">'+
     '<button class="ghost sm" id="cf_dupscan">查找重复</button>'+
     '<button class="ghost sm" id="cf_batch">批量修改所选</button>'+
     '<button class="danger sm" id="cf_delsel">删除所选</button>'+
-    (isAdmin?('<button class="ghost sm" id="cf_trash">已删除'+(DELETED_COURSES.length?('（'+DELETED_COURSES.length+'）'):'')+'</button>'+
-             '<button class="ghost sm" id="cf_review">回数审查</button>'+
-             '<button class="ghost sm" id="cf_backup">下载全部课程备份</button>'):'')+
+    (isAdmin?('<button class="ghost sm" id="cf_trash">已删除'+(DELETED_COURSES.length?('（'+DELETED_COURSES.length+'）'):'')+'</button>'):'')+
+    (canAudit?('<button class="ghost sm" id="cf_review">回数审查</button>'):'')+
+    (isAdmin?('<button class="ghost sm" id="cf_backup">下载全部课程备份</button>'):'')+
     '<span class="muted" id="cf_selinfo" style="align-self:center"></span></div>'+
+    '<div id="cf_dupPanel"></div>'+
     '<div id="cf_trashBox"></div>'+
     '<div id="cf_batchBox" class="hidden" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fafbfc">'+
       '<div class="row">'+
@@ -2170,19 +2191,37 @@ function renderCoursesTable(){
       changes:[{field:'_deleted',label:'整门课',from:c.name+'（'+(c.term||'')+' '+(c.category||'')+'）',to:'已删除'}], acked_by:'' }); }catch(e){} }
     await reloadAll(); tabCourses(); toast('已删除（可在「已删除」区恢复）'); });
 }
-/* 查找重复：同校区+同周几+同时段+同起止日 归为一组，组内>1 即疑似重复 */
+/* 完全重复判定键：课名+校区+开课日+结课日+回数 */
+function courseDupKey(c){ const n=v=>String(v==null?'':v).trim();
+  return [n(c.name),n(c.campus),n(c.start_date),n(c.end_date),n(c.sessions)].join('¦'); }
+/* 查找重复：仅当 课名+校区+开课日+结课日+回数 完全一致才算一组重复 */
 function dupScan(list){
   const groups={};
-  list.forEach(c=>{ const k=[c.campus,c.weekdays,c.start_time,c.end_time,c.start_date,c.end_date].join('|');
-    (groups[k]=groups[k]||[]).push(c); });
+  list.forEach(c=>{ const k=courseDupKey(c); (groups[k]=groups[k]||[]).push(c); });
   const dups=Object.values(groups).filter(g=>g.length>1);
-  if(!dups.length){ toast('未发现重复'); return; }
-  // 高亮并勾选每组“除第一门外”的其余（保留最早一门，其余可删）
+  const panel=el('cf_dupPanel');
+  if(!dups.length){ if(panel) panel.innerHTML=''; if(el('cf_selinfo')) el('cf_selinfo').textContent=''; toast('未发现完全重复的课程'); return; }
+  const wd=n=>({'1':'周一','2':'周二','3':'周三','4':'周四','5':'周五','6':'周六','7':'周日'}[n]||n);
+  let ph='<div style="border:1px solid #f2c9ba;background:#fdf1ed;border-radius:8px;padding:10px 12px;margin:8px 0">'+
+    '<div style="font-size:13px;margin-bottom:4px"><b style="color:#c0392b">发现 '+dups.length+' 组完全重复</b> '+
+    '<span class="muted" style="font-size:12px">（课名+校区+开课日+结课日+回数 完全一致）。每组保留最早一门、已勾选其余冗余，可点「删除所选」。</span></div>';
+  dups.forEach((g,gi)=>{
+    ph+='<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #e6b3a4">'+
+      '<div style="font-size:12px;color:#a33;margin-bottom:3px">第 '+(gi+1)+' 组（'+g.length+' 门）：<b>'+esc(g[0].name||'')+'</b> · '+esc(g[0].campus||'')+' · '+esc((g[0].start_date||'')+'~'+(g[0].end_date||''))+' · 回数 '+esc(String(g[0].sessions||'—'))+'</div>'+
+      '<table style="font-size:12px;width:100%"><thead><tr><th>状态</th><th>期</th><th>讲师</th><th>专业</th><th>周几</th><th>时段</th><th>方式</th></tr></thead><tbody>';
+    g.forEach((c,i)=>{ ph+='<tr'+(i>0?' style="background:#fff6f4"':'')+'>'+
+      '<td>'+(i===0?'<span class="badge b-ok" style="font-size:10px">保留</span>':'<span class="badge b-err" style="font-size:10px">冗余</span>')+'</td>'+
+      '<td>'+esc(c.term||'')+'</td><td>'+esc(c.teacher||'')+'</td><td>'+esc(c.major||'')+'</td><td>'+(c.weekdays||'').split(',').filter(Boolean).map(wd).join('、')+'</td><td>'+esc((c.start_time||'')+'-'+(c.end_time||''))+'</td><td>'+esc(c.mode||'')+'</td></tr>'; });
+    ph+='</tbody></table></div>';
+  });
+  ph+='</div>';
+  if(panel){ panel.innerHTML=ph; panel.scrollIntoView({behavior:'smooth',block:'start'}); }
+  // 勾选每组冗余（保留最早一门），并高亮表中对应行
   document.querySelectorAll('.cf_ck').forEach(c=>c.checked=false);
   let mark=0;
   dups.forEach(g=>{ g.slice(1).forEach(c=>{ const cb=document.querySelector('.cf_ck[value="'+c.id+'"]');
     if(cb){ cb.checked=true; mark++; } const tr=document.querySelector('tr[data-cid="'+c.id+'"]'); if(tr) tr.style.background='#fffdf0'; }); });
-  el('cf_selinfo').textContent='发现 '+dups.length+' 组重复，已勾选其中 '+mark+' 门冗余（各组保留最早一门），可点「删除所选」';
+  if(el('cf_selinfo')) el('cf_selinfo').textContent='已勾选 '+mark+' 门冗余，可点「删除所选」';
 }
 function courseEdit(id){
   const isNew = (id===null || id===undefined || id==='');
