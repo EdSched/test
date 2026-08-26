@@ -231,7 +231,7 @@ function renderOccupancyGrid(rooms, items, keyField, opts){
         let styleAttr='', cc=null;
         if(opts.catOf && b.course_id){ const cat=opts.catOf(b.course_id); if(cat){ cc=catColor(cat); } }
         if(cc) styleAttr=` style="background:${cc.bg};border-color:${cc.bd};color:${cc.tx}"`;
-        h+=`<td class="occ ${cc?'':(KIND_CLASS[b.kind]||'')}${pend?' occ-pend':''}" rowspan="${span}"${styleAttr}>`+
+        h+=`<td class="occ ${cc?'':(KIND_CLASS[b.kind]||'')}${pend?' occ-pend':''}" data-b="${b.id}" data-kind="${esc(b.kind||'')}" rowspan="${span}"${styleAttr}>`+
            `<div class="occ-in">${esc(label)}${mic}`+
            `<small>${esc(who)} ${b.start_time}-${b.end_time}${pend&&!(opts.hideWho||opts.labelOnly)?' · 待确认':''}</small></div></td>`;
       }else{
@@ -355,9 +355,9 @@ const PERM_DEFS = [
   ['entry_room_full', '教室占用录入',    'booking.html'],      // 全部用途（分配UI里隐藏，与上合并）
   ['approve',         '预约批准',        'admin.html?tab=pending'],
   ['assign',          '排教室',          'admin.html?tab=assign'],
-  ['meeting_arrange', '会议链接设定',    'admin.html?tab=mtgsetup'],
+  ['meeting_arrange', '会议链接设定',    'meeting.html'],
   ['conflict',        '冲突检查',        'admin.html?tab=conflict'],
-  ['occupy',          '教室占用管理',    'admin.html?tab=occupy'],
+  ['occupy',          '教室占用管理',    'booking.html'],
   ['room_manage',     '教室管理',        'admin.html?tab=rooms'],
   ['account_manage',  '会议账号管理',    'admin.html?tab=accounts'],
   ['course',          '课程管理',        'entry.html'],
