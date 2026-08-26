@@ -106,7 +106,6 @@ const HUB_CARDS = [
   ['assign',   '🧩','排教室','把课程分配到教室（周历排课）','tab','assign'],
   ['mtgsetup', '🔗','会议链接设定','进某教室，给该教室每周课程统一/单独设腾讯会议链接','tab','mtgsetup'],
   ['conflict', '⚠️','冲突检查','选日期，检查教室/账号有没有撞车','tab','conflict'],
-  ['occupy',   '📖','教室占用管理','查看/删除所有临时/VIP/出租/开会占用','tab','occupy'],
   ['rooms',    '🏠','教室管理','增删改教室、新增租借教室','tab','rooms'],
   ['accounts', '🎙️','会议账号管理','管理腾讯账号（固定/临时、登录名密码）','tab','accounts'],
   ['courses',  '✍️','课程管理','课程列表：新增/编辑/删除/查重','tab','courses'],
@@ -114,7 +113,7 @@ const HUB_CARDS = [
 /* 每张卡片需要的权限；manage(管理员)看到全部 */
 const CARD_PERM = {
   board:'board', timetable:'timetable', meeting:'meeting_view', bookingf:'entry_room',
-  pending:'approve', assign:'assign', mtgsetup:'meeting_arrange', conflict:'conflict', occupy:'occupy',
+  pending:'approve', assign:'assign', mtgsetup:'meeting_arrange', conflict:'conflict',
   rooms:'room_manage', accounts:'account_manage', courses:'course'
 };
 function canSee(key){
@@ -251,7 +250,10 @@ function openCard(key){
   const panel=el('panel'), frame=el('frame');
   if(type==='iframe'){
     panel.style.display='none'; panel.innerHTML='';
-    frame.style.display='block'; frame.src = target + (target.includes('?')?'&':'?') + 'embed=1';
+    const ps=permSet(ROLE); let cap='';
+    if(target==='booking.html' && (ps.has('occupy')||ps.has('manage'))) cap='&canmanage=1';
+    if(target==='meeting.html' && (ps.has('meeting_arrange')||ps.has('manage'))) cap='&canarrange=1';
+    frame.style.display='block'; frame.src = target + (target.includes('?')?'&':'?') + 'embed=1' + cap;
   }else{
     frame.style.display='none'; frame.src='about:blank';
     panel.style.display='block';
@@ -261,7 +263,7 @@ function openCard(key){
 el('backHub').onclick = ()=>{ el('frame').src='about:blank'; renderHub(); };
 
 function show(t){
-  ({pending:tabPending,assign:tabAssign,conflict:tabConflict,occupy:tabOccupy,rooms:tabRooms,
+  ({pending:tabPending,assign:tabAssign,conflict:tabConflict,rooms:tabRooms,
     accounts:tabAccounts,courses:tabCourses,mtgsetup:tabMtgSetup}[t])();
 }
 
@@ -1247,110 +1249,6 @@ function bindCourseConflictBtns(){
 }
 
 /* ---------- 教室占用总表（临时/VIP/出租/开会） ---------- */
-function tabOccupy(){
-  const t0=todayStr();
-  let h='<div class="card"><h3 style="margin-top:2px">教室占用（非课程：临时/VIP/出租/开会）</h3>'+
-    '<div class="row" style="margin-bottom:10px">'+
-      '<div class="field"><label>用途</label><select id="oc_kind"><option value="">全部用途</option>'+
-        '<option value="vip">VIP</option><option value="temp">临时使用</option><option value="rental">对外出租</option><option value="meeting">开会</option></select></div>'+
-      '<div class="field"><label>校区</label><select id="oc_campus"></select></div>'+
-      '<div class="field"><label>教室</label><select id="oc_room"><option value="">全部教室</option></select></div>'+
-      '<div class="field"><label>起</label><input type="date" id="oc_from" value="'+t0+'"></div>'+
-      '<div class="field"><label>止</label><input type="date" id="oc_to" value=""></div>'+
-      '<div class="field"><label>周几</label><select id="oc_wd"><option value="">不限</option>'+
-        '<option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option><option value="7">周日</option></select></div>'+
-      '<div class="field"><label>搜索使用人/备注</label><input id="oc_q" placeholder="关键词"></div>'+
-      '<div class="field"><label>&nbsp;</label><span class="muted" id="oc_count"></span></div>'+
-    '</div><div id="occupyTable"></div><div id="occupyEdit"></div></div>';
-  render(h);
-  fillSelect(el('oc_campus'), ['高马','市谷'], v=>v, v=>v, '全部校区');
-  const fillRooms=()=>{ const cp=el('oc_campus').value; const rs=ROOMS.filter(r=>!cp||r.campus===cp);
-    el('oc_room').innerHTML='<option value="">全部教室</option>'+rs.map(r=>`<option value="${r.id}">${esc(r.name)}（${esc(r.campus)}）</option>`).join(''); };
-  fillRooms();
-  el('oc_campus').onchange=()=>{ fillRooms(); renderOccupyTable(); };
-  ['oc_kind','oc_room','oc_from','oc_to','oc_wd','oc_q'].forEach(id=>el(id)[id==='oc_q'?'oninput':'onchange']=renderOccupyTable);
-  renderOccupyTable();
-}
-function renderOccupyTable(){
-  const kind=el('oc_kind').value, campus=el('oc_campus').value, roomId=el('oc_room').value,
-        from=el('oc_from').value, to=el('oc_to').value, wd=el('oc_wd').value, q=(el('oc_q').value||'').trim().toLowerCase();
-  const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r);
-  const bWd=b=>{ if(b.recurrence==='weekly'){ const w=Number(b.weekday); return w===0?7:w; } if(b.booking_date){ const w=weekdayOf(b.booking_date); return w===0?7:w; } return null; };
-  let list=BOOKINGS.filter(b=>b.kind!=='course').filter(b=>{
-    if(kind && b.kind!==kind) return false;
-    if(roomId){ if(String(b.room_id)!==String(roomId)) return false; }
-    else if(campus){ const r=rmap[b.room_id]; if(!r||r.campus!==campus) return false; }
-    // 日期区间：weekly 看跨度与[from,to]有交集；once 看 booking_date 落在区间
-    const s = b.recurrence==='weekly'? (b.start_date||b.booking_date||'') : (b.booking_date||'');
-    const e = b.recurrence==='weekly'? (b.end_date||b.start_date||b.booking_date||'') : (b.booking_date||'');
-    if(from && e && e<from) return false;
-    if(to && s && s>to) return false;
-    if(wd){ const w=bWd(b); if(w!==Number(wd)) return false; }
-    if(q && !((b.user_name||'').toLowerCase().includes(q)||(b.note||'').toLowerCase().includes(q)||(b.created_by||'').toLowerCase().includes(q))) return false;
-    return true;
-  }).sort((a,b)=>{ const da=a.booking_date||a.start_date||'', db=b.booking_date||b.start_date||''; return da.localeCompare(db); });
-  el('oc_count').textContent='共 '+list.length+' 条';
-  const showAll = window.OC_SHOWALL===true;
-  const LIMIT=50; const truncated = !showAll && list.length>LIMIT;
-  const shown = truncated ? list.slice(0,LIMIT) : list;
-  let h='<table><thead><tr><th>用途</th><th>校区</th><th>教室</th><th>日期/周期</th><th>时段</th><th>使用人</th><th>账号</th><th>状态</th><th>备注</th><th>操作</th></tr></thead><tbody>';
-  if(!shown.length) h+='<tr><td colspan="10" class="muted">无匹配记录</td></tr>';
-  shown.forEach(b=>{
-    const r=rmap[b.room_id];
-    const when = b.recurrence==='weekly'
-      ? (weekdaysLabel(String(b.weekday))+' '+(b.start_date||'')+'~'+(b.end_date||''))
-      : (b.booking_date||'');
-    h+=`<tr><td>${KIND_LABEL[b.kind]||esc(b.kind)}</td><td>${esc(r?r.campus:'')}</td><td>${esc(r?r.name:(b.room_id?('#'+b.room_id):'—'))}</td>`+
-      `<td>${esc(when)}</td><td>${b.start_time}-${b.end_time}</td><td>${esc(b.user_name||'')}</td>`+
-      `<td>${b.uses_meeting?esc(aname(b.meeting_account_id)):'—'}</td>`+
-      `<td>${b.status==='pending'?'<span class="badge b-warn">待确认</span>':'<span class="badge b-ok">已确认</span>'}</td>`+
-      `<td class="muted">${esc(b.note||'')}</td>`+
-      `<td><button class="sm ghost" data-edito="${b.id}">编辑</button> <button class="sm danger" data-delo="${b.id}">删</button></td></tr>`;
-  });
-  h+='</tbody></table>';
-  if(truncated) h+='<div style="text-align:center;margin-top:10px"><span class="muted" style="font-size:12px">仅显示前 '+LIMIT+' 条（共 '+list.length+' 条）。用上方筛选缩小范围，或 </span><button class="ghost sm" id="oc_showall">显示全部</button></div>';
-  else if(showAll && list.length>LIMIT) h+='<div style="text-align:center;margin-top:10px"><button class="ghost sm" id="oc_showless">收起（只看前 '+LIMIT+'）</button></div>';
-  el('occupyTable').innerHTML=h;
-  if(el('oc_showall')) el('oc_showall').onclick=()=>{ window.OC_SHOWALL=true; renderOccupyTable(); };
-  if(el('oc_showless')) el('oc_showless').onclick=()=>{ window.OC_SHOWALL=false; renderOccupyTable(); };
-  bind('[data-delo]', async id=>{ if(!confirm('删除该占用记录？')) return;
-    await sbDelete('sched_bookings',id); await reloadAll(); if(el('occupyTable')) renderOccupyTable(); toast('已删除'); });
-  bind('[data-edito]', id=>occupyEditForm(id));
-}
-function occupyEditForm(id){
-  const b=BOOKINGS.find(x=>String(x.id)===String(id)); if(!b) return;
-  const rmap={}; ROOMS.forEach(r=>rmap[r.id]=r); const r=rmap[b.room_id];
-  const roomOpts=ROOMS.filter(x=>!r||x.campus===r.campus).map(x=>`<option value="${x.id}"${String(x.id)===String(b.room_id)?' selected':''}>${esc(x.name)}（${esc(x.campus)}）</option>`).join('');
-  const isWeekly=b.recurrence==='weekly';
-  let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px"><div class="card" style="width:520px;max-width:94vw;margin:auto">'+
-    '<h3 style="margin-top:2px">编辑占用 · '+(KIND_LABEL[b.kind]||b.kind)+'</h3>'+
-    '<div class="row">'+
-      '<div class="field"><label>教室</label><select id="oe_room">'+roomOpts+'</select></div>'+
-      (isWeekly
-        ? '<div class="field"><label>起始日</label><input type="date" id="oe_sd" value="'+esc(b.start_date||'')+'"></div><div class="field"><label>结束日</label><input type="date" id="oe_ed" value="'+esc(b.end_date||'')+'"></div>'
-        : '<div class="field"><label>日期</label><input type="date" id="oe_date" value="'+esc(b.booking_date||'')+'"></div>')+
-      '<div class="field"><label>开始</label><input type="time" id="oe_st" value="'+esc(b.start_time||'')+'"></div>'+
-      '<div class="field"><label>结束</label><input type="time" id="oe_et" value="'+esc(b.end_time||'')+'"></div>'+
-      '<div class="field"><label>使用人</label><input id="oe_user" value="'+esc(b.user_name||'')+'"></div>'+
-      '<div class="field"><label>状态</label><select id="oe_status"><option value="confirmed"'+(b.status!=='pending'?' selected':'')+'>已确认</option><option value="pending"'+(b.status==='pending'?' selected':'')+'>待确认</option></select></div>'+
-    '</div>'+
-    '<div class="field" style="margin-top:8px"><label>备注</label><input id="oe_note" value="'+esc(b.note||'')+'" style="width:100%"></div>'+
-    '<div id="oe_warn" style="margin-top:8px"></div>'+
-    '<div style="margin-top:12px;display:flex;gap:8px"><button id="oe_save">保存</button><button class="ghost" id="oe_cancel">取消</button></div>'+
-    '</div></div>';
-  el('occupyEdit').innerHTML=h;
-  el('oe_cancel').onclick=()=>{ el('occupyEdit').innerHTML=''; };
-  el('oe_save').onclick=async()=>{
-    const patch={ room_id: el('oe_room').value||null, start_time: el('oe_st').value||null, end_time: el('oe_et').value||null,
-      user_name: el('oe_user').value.trim()||null, status: el('oe_status').value, note: el('oe_note').value.trim()||null };
-    if(isWeekly){ patch.start_date=el('oe_sd').value||null; patch.end_date=el('oe_ed').value||null; }
-    else { patch.booking_date=el('oe_date').value||null; }
-    const btn=el('oe_save'); btn.disabled=true; btn.textContent='保存中…';
-    try{ await sbUpdate('sched_bookings', b.id, patch); await reloadAll(); el('occupyEdit').innerHTML=''; renderOccupyTable(); toast('已保存'); }
-    catch(e){ el('oe_warn').innerHTML='<span class="badge b-err">'+esc(e.message)+'</span>'; btn.disabled=false; btn.textContent='保存'; }
-  };
-}
-
 /* ---------- 教室 CRUD ---------- */
 function tabRooms(){
   let h='<div class="card"><h3 style="margin-top:2px">教室</h3><table><thead><tr><th>校区</th><th>楼层</th><th>名称</th><th>类型</th><th>大小</th><th>容量</th><th>固定账号</th><th></th></tr></thead><tbody>';
