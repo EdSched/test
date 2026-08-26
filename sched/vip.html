@@ -243,19 +243,21 @@ async function submit(){
       const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
       localStorage.setItem(NKEY, user); el('modal').classList.add('hidden');
       const msg = URGENT
-        ? `【VIP其他教室紧急预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 ${campus}教室。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。VIP教室预约已满，2天内紧急，申请调整到大教室。⚠必须把本消息发到群里，否则管理员会驳回，谢谢！`
+        ? `【VIP其他教室紧急预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 ${campus}教室。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。VIP教室预约已满，2天内紧急，申请调整到大教室，谢谢！`
         : `【VIP其他教室预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 ${campus}教室。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。VIP教室预约已满，申请调整到大教室，谢谢！`;
       find(); renderGrid();
-      showReqCard('其他教室申请已提交 · 复制以下文字发到群里联系管理员', msg);
+      showReqCard('其他教室申请已提交 · 复制以下文字发到群里联系管理员', msg,
+        URGENT ? '⚠ 必须把下面这段发到群里，否则管理员会驳回该申请。' : '把下面这段发到群里，周知管理员安排大教室。');
       return;
     }
     if(URGENT){
       const rec={ ...base, room_id:CUR.id, urgent:true, req_other:false };
       const ins=await sbInsert('sched_bookings', rec); BOOKINGS.push(ins[0]);
       localStorage.setItem(NKEY, user); el('modal').classList.add('hidden');
-      const msg=`【VIP紧急预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 VIP教室「${CUR.name}」（${CUR.campus}）。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。已确认该时段空闲。⚠必须把本消息发到群里，否则管理员会驳回该预约，谢谢！`;
+      const msg=`【VIP紧急预约申请】麻烦管理员安排：${date}（${wd}）${s}-${e} 的 VIP教室「${CUR.name}」（${CUR.campus}）。讲师：${user}；学生：${stu}；专业：${major}${reason?('；事由：'+reason):''}。已确认该时段空闲，谢谢！`;
       find(); renderGrid();
-      showReqCard('紧急预约已提交 · 复制以下文字发到群里联系管理员', msg);
+      showReqCard('紧急预约已提交 · 复制以下文字发到群里联系管理员', msg,
+        '⚠ 必须把下面这段发到群里，否则管理员会驳回该预约。');
       return;
     }
     // 普通预约
@@ -268,11 +270,12 @@ async function submit(){
   }catch(err){ warn(esc(err.message)); }
   finally{ sb.disabled=false; sb.textContent = OTHER?'提交申请并生成文字':(URGENT?'提交并生成群消息':'提交预约'); }
 }
-function showReqCard(title, msg){
+function showReqCard(title, msg, note){
   const box=el('resBox');
   const div=document.createElement('div');
   div.className='card'; div.style.marginTop='10px'; div.style.background='#fff7f7';
   div.innerHTML='<b style="color:#e97457">'+esc(title)+'</b>'+
+    (note?('<div class="badge b-warn" style="margin:6px 0;display:block">'+esc(note)+'</div>'):'')+
     `<textarea rows="4" style="width:100%;margin-top:6px" readonly>${esc(msg)}</textarea>`+
     '<button class="sm" id="copyReqBtn">复制文字</button>';
   box.appendChild(div);
@@ -295,19 +298,42 @@ async function loadMine(name){
   let h='<table><thead><tr><th>日期</th><th>时段</th><th>教室</th><th>学生</th><th>状态</th><th>操作</th></tr></thead><tbody>';
   rows.forEach(b=>{
     const r=rmap[b.room_id]; const past=b.booking_date<todayStr();
+    const rejected = b.status==='rejected';
     let tag='';
     if(b.urgent) tag+='<span class="badge b-err" style="font-size:10px">紧急</span> ';
     if(b.req_other) tag+='<span class="badge b-warn" style="font-size:10px">其他教室</span> ';
-    const st = b.status==='confirmed'?'<span class="badge b-ok">已批准</span>':'<span class="badge b-warn">待确认</span>';
-    const roomCell = b.req_other && !r ? ('<span class="muted">待指派大教室</span><br><small class="muted">'+esc(b.req_campus||'')+'</small>') : (esc(r?r.name:'')+'<br><small class="muted">'+esc(r?r.campus:'')+'</small>');
-    h+=`<tr${past?' style="opacity:.5"':''}><td>${b.booking_date}<br><small class="muted">${WEEKDAYS[weekdayOf(b.booking_date)]}</small></td>`+
+    const st = rejected ? '<span class="badge b-err">已驳回</span>'
+      : (b.status==='confirmed'?'<span class="badge b-ok">已批准</span>':'<span class="badge b-warn">待确认</span>');
+    const roomCell = rejected ? '<span class="muted">—</span>'
+      : (b.req_other && !r ? ('<span class="muted">待指派大教室</span><br><small class="muted">'+esc(b.req_campus||'')+'</small>') : (esc(r?r.name:'')+'<br><small class="muted">'+esc(r?r.campus:'')+'</small>'));
+    let opCell;
+    if(rejected) opCell = `<button class="sm" data-rebook="${b.id}">重新预约</button> <button class="sm ghost" data-drop="${b.id}">放弃</button>`;
+    else if(past) opCell = '<span class="muted">已过期</span>';
+    else opCell = `<button class="sm danger" data-cancel="${b.id}">取消</button>`;
+    const trStyle = rejected ? ' style="opacity:.55;background:#f3f3f3"' : (past?' style="opacity:.5"':'');
+    h+=`<tr${trStyle}><td>${b.booking_date}<br><small class="muted">${WEEKDAYS[weekdayOf(b.booking_date)]}</small></td>`+
       `<td>${b.start_time}-${b.end_time}</td><td>${roomCell}</td>`+
-      `<td>${esc(b.student_name||'')}</td><td>${tag}${st}</td>`+
-      `<td>${past?'<span class="muted">已过期</span>':`<button class="sm danger" data-cancel="${b.id}">取消</button>`}</td></tr>`;
+      `<td>${esc(b.student_name||'')}</td><td>${tag}${st}${rejected&&b.reject_reason?('<br><small style="color:#c0392b">理由：'+esc(b.reject_reason)+'</small>'):''}</td>`+
+      `<td>${opCell}</td></tr>`;
   });
   h+='</tbody></table>';
   box.innerHTML=h;
   box.querySelectorAll('button[data-cancel]').forEach(btn=>btn.onclick=()=>cancelBooking(btn.dataset.cancel, name));
+  box.querySelectorAll('button[data-drop]').forEach(btn=>btn.onclick=async()=>{
+    if(!confirm('放弃这条被驳回的记录？')) return;
+    try{ await sbDelete('sched_bookings', btn.dataset.drop); BOOKINGS=BOOKINGS.filter(x=>String(x.id)!==String(btn.dataset.drop)); loadMine(name); }
+    catch(e){ toast('操作失败：'+e.message, false); }
+  });
+  box.querySelectorAll('button[data-rebook]').forEach(btn=>btn.onclick=()=>{
+    const b=rows.find(x=>String(x.id)===String(btn.dataset.rebook)); if(!b) return;
+    seg('book');
+    if(b.req_campus && [...el('campus').options].some(o=>o.value===b.req_campus)) el('campus').value=b.req_campus;
+    if(b.booking_date) el('date').value = b.booking_date<todayStr()? el('date').value : b.booking_date;
+    if(b.start_time && [...el('st').options].some(o=>o.value===b.start_time)) el('st').value=b.start_time;
+    if(b.end_time && [...el('et').options].some(o=>o.value===b.end_time)) el('et').value=b.end_time;
+    checkAdvance(); find(); renderGrid();
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
 }
 async function cancelBooking(id, name){
   if(!confirm('确定取消这条预约？取消后教室将释放。')) return;
