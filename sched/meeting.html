@@ -210,18 +210,19 @@ function renderOverview(){
   if(stF) list=list.filter(b=>(b.status||'confirmed')===stF);
   list=list.slice().sort((a,b)=>{ const da=a.booking_date||a.start_date||'', db=b.booking_date||b.start_date||''; return da.localeCompare(db); });
   el('v_count').textContent='共 '+list.length+' 条';
-  let h='<table><thead><tr><th>账号</th><th>对象</th><th>时段</th><th>状态</th><th>详情</th><th>操作</th></tr></thead><tbody>';
-  if(!list.length) h+='<tr><td colspan="6" class="muted">无占用</td></tr>';
+  const hasLink=b=>{ if(b.meeting_link||b.meeting_id) return true; if(b.course_id){ const c=COURSES.find(x=>String(x.id)===String(b.course_id)); return !!(c&&(c.meeting_link||c.meeting_id)); } return false; };
+  let h='<table><thead><tr><th>账号</th><th>对象</th><th>周期</th><th>时段</th><th>状态</th><th>链接</th><th>操作</th></tr></thead><tbody>';
+  if(!list.length) h+='<tr><td colspan="7" class="muted">无占用</td></tr>';
   list.forEach(b=>{ const st=b.status||'confirmed';
-    h+=`<tr><td>${esc(aname(b.meeting_account_id))}</td><td><b>${esc(occTitle(b))}</b></td><td>${esc(b.start_time||'')}-${esc(b.end_time||'')}</td>`+
+    const when=b.recurrence==='weekly'?(weekdaysLabel(String(b.weekday))+' '+(b.start_date||'')+'~'+(b.end_date||'')):(b.booking_date||'');
+    h+=`<tr><td>${esc(aname(b.meeting_account_id))}</td><td><b>${esc(occTitle(b))}</b>${b.note?(' <small class="muted">'+esc(b.note)+'</small>'):''}</td>`+
+      `<td style="font-size:12px">${esc(when)}</td><td>${esc(b.start_time||'')}-${esc(b.end_time||'')}</td>`+
       `<td>${st==='reserved'?'<span class="badge b-warn">预留</span>':'<span class="badge b-ok">正式</span>'}</td>`+
-      `<td><button class="sm ghost" data-detail="${b.id}">查看</button></td>`+
-      `<td><button class="sm ghost" data-edito="${b.id}">编辑</button> <button class="sm danger" data-delo="${b.id}">删</button></td></tr>`+
-      `<tr id="det_${b.id}" class="hidden"><td colspan="6" class="muted" style="font-size:12px">${esc(detailText(b))}</td></tr>`;
+      `<td>${hasLink(b)?'<span class="badge b-ok" style="font-size:10px">已设</span>':'<span class="muted">—</span>'}</td>`+
+      `<td><button class="sm ghost" data-edito="${b.id}">编辑</button> <button class="sm danger" data-delo="${b.id}">删</button></td></tr>`;
   });
   h+='</tbody></table>';
   el('v_box').innerHTML=h;
-  el('v_box').querySelectorAll('[data-detail]').forEach(x=>x.onclick=()=>{ const r=el('det_'+x.dataset.detail); if(r) r.classList.toggle('hidden'); });
   el('v_box').querySelectorAll('[data-delo]').forEach(x=>x.onclick=async()=>{ if(!confirm('删除该账号占用？')) return; await sbDelete('sched_bookings',x.dataset.delo); BOOKINGS=await sbGet('sched_bookings','select=*'); refreshCourseDropdown(); renderPickList(); renderOverview(); toast('已删除'); });
   el('v_box').querySelectorAll('[data-edito]').forEach(x=>x.onclick=()=>editOccupy(x.dataset.edito));
 }
