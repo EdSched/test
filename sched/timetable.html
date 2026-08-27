@@ -102,7 +102,7 @@ html.shareview #calBody:empty::after{ content:'课表加载中…'; color:#9a959
     <div class="row" style="margin-top:8px;align-items:flex-end">
       <div class="field"><label>限制日期范围</label><select id="ttLimit"><option value="0">不限（全部）</option><option value="1">只看某段时间</option></select></div>
       <div class="field"><label>封面显示课程小标</label><select id="ttLegend"><option value="1">显示</option><option value="0">不显示</option></select></div>
-      <div class="field"><label>封面图</label><select id="ttCover"><option value="1">封面 1</option><option value="2">封面 2</option></select></div>
+      <div class="field"><label>封面图</label><select id="ttCover"><option value="1">封面 1</option><option value="2">封面 2</option><option value="3">封面 3</option><option value="4">封面 4</option></select></div>
       <div class="field ttRange hidden"><label>起</label><input type="date" id="ttStart"></div>
       <div class="field ttRange hidden"><label>止</label><input type="date" id="ttEnd"></div>
       <div class="field ttRange hidden"><label>&nbsp;</label><span class="muted" style="font-size:12px">只生成这段时间内在上的课，跨度大时更清爽</span></div>
@@ -595,7 +595,19 @@ async function doPrint(){
       return await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b); });
     }catch(e){ return ''; }
   }
-  const coverFile = (el('ttCover') && el('ttCover').value==='2') ? 'back2.jpg' : 'back.jpg';
+  // 获取值，如果找不到元素则默认使用 '1'
+const coverVal = el('ttCover')?.value || '1';
+
+// 映射对应的文件名
+const coverMap = {
+  '1': 'back.jpg',
+  '2': 'back2.jpg',
+  '3': 'back3.jpg',
+  '4': 'back4.jpg'
+};
+
+// 得到最终的文件名（和以前一样的字符串）
+const coverFile = coverMap[coverVal] || 'back.jpg';
   const [bgData, logoData] = await Promise.all([toDataURL(base+coverFile), toDataURL(base+'logo.png')]);
 
   // 月历：每月一块，块内 break-inside avoid，块间分页
