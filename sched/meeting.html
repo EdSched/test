@@ -14,12 +14,14 @@
 </head><body>
 <div id="nav"></div>
 <div class="wrap">
+  <div style="margin:2px 0 12px"><span class="vt2"><button class="ghost sm on" id="topTabBind">绑定账号</button><button class="ghost sm" id="topTabLink">链接设定</button></span></div>
+
+  <div id="bindPane">
   <div class="tip">给<b>没排账号的线上课</b>或<b>临时用途</b>找一个空闲的腾讯账号并预留/占用。选好对象→自动筛出能用的账号→选一个→预留（先占住）或正式占用。</div>
 
   <!-- 一条龙：选对象 → 筛空闲账号 → 预留/占用 -->
   <!-- 区块1：绑定账号 -->
   <div class="card" id="sec1card">
-    <h3 style="margin-top:2px">绑定账号</h3>
     <div style="display:flex;gap:16px;flex-wrap:wrap">
       <!-- 左：对象与条件 -->
       <div style="flex:1;min-width:320px">
@@ -52,11 +54,14 @@
     <div id="r_warn" style="margin-top:6px"></div>
   </div>
 
+  </div><!-- /bindPane -->
+
+  <div id="linkPane" class="hidden">
   <!-- 区块2：链接设定 -->
   <div class="card" id="sec2card">
-    <h3 style="margin-top:2px">链接设定</h3>
     <div id="sec2body"></div>
   </div>
+  </div><!-- /linkPane -->
 
   <!-- 区块3：账号占用一览（管理者可见） -->
   <div class="card" id="sec3card">
@@ -100,6 +105,8 @@ async function boot(){
   ['v_acc','v_status'].forEach(id=>el(id).onchange=renderOverview);
   el('v_toggle').onclick=()=>{ const w=el('v_wrap'); const open=!w.classList.contains('hidden');
     w.classList.toggle('hidden'); el('v_toggle').textContent=open?'展开':'收起'; if(!open) renderOverview(); };
+  el('topTabBind').onclick=()=>{ el('topTabBind').classList.add('on'); el('topTabLink').classList.remove('on'); el('bindPane').classList.remove('hidden'); el('linkPane').classList.add('hidden'); };
+  el('topTabLink').onclick=()=>{ el('topTabLink').classList.add('on'); el('topTabBind').classList.remove('on'); el('linkPane').classList.remove('hidden'); el('bindPane').classList.add('hidden'); };
   syncBind(); syncRec(); renderPickList(); renderOverview();
   applyPerm();
 }
@@ -336,7 +343,7 @@ function renderOnlineMtg(){
   if(onlineCourses.length){
     h+='<table><thead><tr><th>课程</th><th>账号</th><th>周期</th><th>状态</th><th>会议链接</th><th>操作</th></tr></thead><tbody>';
     onlineCourses.forEach(({c,b})=>{ const hasLink=!!(c.meeting_link||c.meeting_id);
-      h+=`<tr><td><b>${esc(c.name)}</b></td><td>${esc(aname(b.meeting_account_id))}</td><td>${weekdaysLabel(String(b.weekday||c.weekdays||''))} ${esc(b.start_time||'')}-${esc(b.end_time||'')}</td>`+
+      h+=`<tr><td><b>${esc((c.term?c.term+' ':'')+(c.name||''))}</b>${c.category?(' <small class="muted">'+esc(c.category)+'</small>'):''}</td><td>${esc(aname(b.meeting_account_id))}</td><td>${weekdaysLabel(String(b.weekday||c.weekdays||''))} ${esc(b.start_time||'')}-${esc(b.end_time||'')}${(c.start_date||c.end_date)?('<br><small class="muted">'+esc((c.start_date||'')+'~'+(c.end_date||''))+'</small>'):''}</td>`+
         `<td>${b.status==='reserved'?'<span class="badge b-warn">预留</span>':'<span class="badge b-ok">正式</span>'}</td>`+
         `<td>${hasLink?('<span class="badge b-ok" style="font-size:10px">已设</span>'+(c.meeting_id?(' '+esc(c.meeting_id)):'')):'<span class="muted">—</span>'}</td>`+
         `<td><button class="sm ghost" data-msonline="${c.id}">${hasLink?'重设链接':'设链接'}</button></td></tr>`;
@@ -364,7 +371,8 @@ function onlineMtgForm(courseId){
   const c=COURSES.find(x=>String(x.id)===String(courseId)); if(!c) return;
   let parsed=null;
   const html='<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:40px 16px"><div class="card" style="width:560px;max-width:94vw;margin:auto">'+
-    '<h3 style="margin-top:2px">线上课设会议链接 · 「'+esc(c.name)+'」</h3>'+
+    '<h3 style="margin-top:2px">线上课设会议链接 · 「'+esc((c.term?c.term+' ':'')+c.name)+'」</h3>'+
+    '<div class="muted" style="font-size:12px;margin:-2px 0 8px">'+esc([c.term,c.category,c.major].filter(Boolean).join(' · '))+' ｜ '+weekdaysLabel(c.weekdays)+' '+esc((c.start_time||'')+'-'+(c.end_time||''))+((c.start_date||c.end_date)?(' ｜ '+esc((c.start_date||'')+'~'+(c.end_date||''))):'')+'</div>'+
     '<div class="field"><label>会议标题</label><input id="mo_title" value="'+esc([c.term,c.category,c.name].filter(Boolean).join('-'))+'" style="width:100%"></div>'+
     '<div class="field" style="margin-top:8px"><label>粘贴会议邀请解析</label><textarea id="mo_txt" rows="5" placeholder="把腾讯会议邀请整段粘贴进来" style="width:100%"></textarea></div>'+
     '<button type="button" class="ghost sm" id="mo_parse">解析</button><div id="mo_prev" style="margin-top:8px"></div>'+
@@ -429,9 +437,9 @@ function renderMtgRoom(){
     }
   }
   h+='<table><thead><tr><th>课程</th><th>专业</th><th>周几·时段</th><th>会议链接</th><th>操作</th></tr></thead><tbody>';
-  courses.sort((a,b)=>(a.weekdays||'').localeCompare(b.weekdays||'')).forEach(c=>{
+  courses.sort((a,b)=>(a.term||'').localeCompare(b.term||'')||(a.weekdays||'').localeCompare(b.weekdays||'')).forEach(c=>{
     const hasLink=!!(c.meeting_link||c.meeting_id);
-    h+=`<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.major||c.category||'')}</td>`+
+    h+=`<tr><td><b>${esc((c.term?c.term+' ':'')+(c.name||''))}</b>${(c.start_date||c.end_date)?('<br><small class="muted">'+esc((c.start_date||'')+'~'+(c.end_date||''))+'</small>'):''}</td><td>${esc(c.major||c.category||'')}</td>`+
       `<td>${weekdaysLabel(c.weekdays)} ${c.start_time||''}-${c.end_time||''}</td>`+
       `<td>${hasLink?('<span class="badge b-ok">已设</span> <small class="muted">'+esc((c.meeting_id||'')||'有链接')+'</small>'):'<span class="badge b-warn">未设</span>'}</td>`+
       `<td><button class="sm ghost" data-msset="${c.id}">${hasLink?'重设':'设链接'}</button>${hasLink?(' <button class="sm ghost" data-mscopy="'+c.id+'">统一覆盖其他课</button>'):''}</td></tr>`;
@@ -547,7 +555,7 @@ function mtgCopyForm(courseId, room){
       '<div class="tip">把「'+esc(src.name)+'」的会议链接/会议号，覆盖到本教室下面勾选的课程（默认勾选同专业）。上课时段各课不变。</div>'+
       '<div style="max-height:300px;overflow:auto;margin:8px 0">'+
       others.map(c=>{ const on=sel.has(String(c.id)); const same=(c.major||'')===(src.major||'');
-        return `<div class="mscov" data-cov="${c.id}" style="cursor:pointer;border:1px solid ${on?'#2c8a4f':'var(--line)'};background:${on?'#e7f6ec':'#fff'};border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px">${on?'✓ ':''}<b>${esc(c.name)}</b> <small class="muted">${esc(c.major||c.category||'')}${same?'':' · 非同专业'} · ${weekdaysLabel(c.weekdays)} ${c.start_time||''}-${c.end_time||''}</small></div>`;
+        return `<div class="mscov" data-cov="${c.id}" style="cursor:pointer;border:1px solid ${on?'#2c8a4f':'var(--line)'};background:${on?'#e7f6ec':'#fff'};border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:13px">${on?'✓ ':''}<b>${esc((c.term?c.term+' ':'')+(c.name||''))}</b> <small class="muted">${esc(c.major||c.category||'')}${same?'':' · 非同专业'} · ${weekdaysLabel(c.weekdays)} ${c.start_time||''}-${c.end_time||''}</small></div>`;
       }).join('')+'</div>'+
       '<div style="display:flex;gap:8px"><button id="ms_covdo">覆盖到所选</button><button class="ghost" id="ms_covcancel">取消</button></div></div></div>';
     el('ms_form').innerHTML=h;
