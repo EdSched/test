@@ -60,13 +60,18 @@
 
   <!-- 区块3：账号占用一览（管理者可见） -->
   <div class="card" id="sec3card">
-    <h3 style="margin-top:2px">管理账号一览</h3>
-    <div class="row">
-      <div class="field"><label>账号</label><select id="v_acc"><option value="">全部账号</option></select></div>
-      <div class="field"><label>状态</label><select id="v_status"><option value="">全部</option><option value="reserved">预留</option><option value="confirmed">正式</option></select></div>
-      <div class="field"><label>&nbsp;</label><span class="muted" id="v_count"></span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <h3 style="margin:2px 0">管理账号一览</h3>
+      <span class="muted" id="v_count" style="font-size:12px"></span>
+      <button class="ghost sm" id="v_toggle" style="margin-left:auto">展开</button>
     </div>
-    <div id="v_box"></div>
+    <div id="v_wrap" class="hidden">
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>账号</label><select id="v_acc"><option value="">全部账号</option></select></div>
+        <div class="field"><label>状态</label><select id="v_status"><option value="">全部</option><option value="reserved">预留</option><option value="confirmed">正式</option></select></div>
+      </div>
+      <div id="v_box"></div>
+    </div>
   </div>
 </div>
 <script src="common.js"></script>
@@ -93,6 +98,8 @@ async function boot(){
   el('r_course').onchange=()=>{ prefillFromCourse(el('r_course').value); };
   el('r_find').onclick=findAccounts;
   ['v_acc','v_status'].forEach(id=>el(id).onchange=renderOverview);
+  el('v_toggle').onclick=()=>{ const w=el('v_wrap'); const open=!w.classList.contains('hidden');
+    w.classList.toggle('hidden'); el('v_toggle').textContent=open?'展开':'收起'; if(!open) renderOverview(); };
   syncBind(); syncRec(); renderPickList(); renderOverview();
   applyPerm();
 }
@@ -210,6 +217,7 @@ function renderOverview(){
   if(stF) list=list.filter(b=>(b.status||'confirmed')===stF);
   list=list.slice().sort((a,b)=>{ const da=a.booking_date||a.start_date||'', db=b.booking_date||b.start_date||''; return da.localeCompare(db); });
   el('v_count').textContent='共 '+list.length+' 条';
+  if(el('v_wrap') && el('v_wrap').classList.contains('hidden')) return;   // 收起状态：只更新条数，不渲染长表
   const hasLink=b=>{ if(b.meeting_link||b.meeting_id) return true; if(b.course_id){ const c=COURSES.find(x=>String(x.id)===String(b.course_id)); return !!(c&&(c.meeting_link||c.meeting_id)); } return false; };
   let h='<table><thead><tr><th>账号</th><th>对象</th><th>周期</th><th>时段</th><th>状态</th><th>链接</th><th>操作</th></tr></thead><tbody>';
   if(!list.length) h+='<tr><td colspan="7" class="muted">无占用</td></tr>';
