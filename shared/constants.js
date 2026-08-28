@@ -11,6 +11,19 @@ let MAJORS = {
 };
 const SHAKAI_GROUP = ['shakai', 'shinpan', 'fukushi'];
 
+// ── 领域（domain）视角 ──
+// CURRENT_DOMAIN：当前登录视角所在的领域。''（空）或 'all' 表示总览（admin 看全部）。
+// 领域负责人登录后会被锁定为某个具体领域（如「大学院理科」）。
+let CURRENT_DOMAIN = '';
+// MAJOR_DOMAIN：专业 key → 所属领域，由 loadMajorsFromDB() 从 DB majors.domain 填充。
+// 不写死、可动态增长：新建专业时填 domain 即自动流通，符合「数据不锁死」原则。
+let MAJOR_DOMAIN = {};
+// 判断某专业是否属于当前视角领域（总览时永远 true）
+function majorInCurrentDomain(key) {
+  if (!CURRENT_DOMAIN || CURRENT_DOMAIN === 'all') return true;
+  return MAJOR_DOMAIN[key] === CURRENT_DOMAIN;
+}
+
 // ── 专业派生工具（单一数据源；新增专业只需写入 DB majors 表，即可自动流通全站）──
 // MAJOR_GROUPS：虚拟分组 key → 展开后的真实专业 key 列表（目前仅「社会人文」一组）
 const MAJOR_GROUPS = { shakai_group: SHAKAI_GROUP };
@@ -35,8 +48,15 @@ function expandMajorFilter(key) {
 // 筛选栏 chip 顺序：经营 经济 [社会人文组] 社会 新传 福祉 …新增专业追加末尾
 //   opts.includeAll=true 时在最前面加入 'all'
 function majorFilterKeys(opts = {}) {
-  const ordered = ['keiei', 'keizai', 'shakai_group', 'shakai', 'shinpan', 'fukushi'];
+  let ordered = ['keiei', 'keizai', 'shakai_group', 'shakai', 'shinpan', 'fukushi'];
   allMajorKeys().forEach(k => { if (!ordered.includes(k)) ordered.push(k); });
+  // 领域视角过滤：非总览时，只保留属于当前领域的专业（shakai_group 组只要有成员在领域内就保留）
+  if (CURRENT_DOMAIN && CURRENT_DOMAIN !== 'all') {
+    ordered = ordered.filter(k => {
+      if (k === 'shakai_group') return SHAKAI_GROUP.some(m => majorInCurrentDomain(m));
+      return majorInCurrentDomain(k);
+    });
+  }
   return opts.includeAll ? ['all', ...ordered] : ordered;
 }
 
@@ -69,8 +89,11 @@ function majorKeyFromText(text) {
 let majorsLoadedFromDB = false;
 async function loadMajorsFromDB() {
   try {
-    const rows = await sb('/rest/v1/majors?select=key,label');
-    (rows || []).forEach(r => { if (r.key && r.label) MAJORS[r.key] = r.label; });
+    const rows = await sb('/rest/v1/majors?select=key,label,domain');
+    (rows || []).forEach(r => {
+      if (r.key && r.label) MAJORS[r.key] = r.label;
+      if (r.key && r.domain) MAJOR_DOMAIN[r.key] = r.domain;
+    });
     majorsLoadedFromDB = true;
   } catch (e) {
     // 加载失败不影响主流程，MAJORS 仍保留核心5个专业
