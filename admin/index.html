@@ -16,6 +16,7 @@
     <div style="font-size:10px;color:var(--text-3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:28px">Transform Education</div>
     <div style="text-align:left;margin-bottom:8px">
       <label style="font-size:11px;color:var(--text-2);display:block;margin-bottom:5px">管理密码</label>
+      <div id="loginHint" style="font-size:11px;color:var(--primary,#8b5cf6);margin-bottom:6px;min-height:0"></div>
       <input type="password" id="loginPw" placeholder="请输入密码">
     </div>
     <div id="loginErr" style="font-size:11px;color:var(--danger);min-height:18px;margin-bottom:10px;text-align:left"></div>
@@ -57,7 +58,7 @@
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="domainTag" style="font-size:11px;color:var(--text-2);background:var(--surface);border:1px solid var(--border-light);border-radius:3px;padding:2px 8px"></span>
-      <button class="btn btn-outline btn-sm" onclick="backToHub()">切换视角</button>
+      <button id="switchViewBtn" class="btn btn-outline btn-sm" onclick="backToHub()">切换视角</button>
       <button class="btn btn-outline btn-sm" onclick="doLogout()">退出登录</button>
     </div>
   </div>
