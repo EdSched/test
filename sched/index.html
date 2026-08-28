@@ -734,7 +734,7 @@ function renderAssignWeek(){
       for(const cid of pend){
         const c=COURSES.find(x=>String(x.id)===String(cid)); if(!c) continue;
         const useAcc = (window.WK_UM[cid]!==false) && !!room.meeting_account_id;
-        const wdays=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(Boolean);
+        const wdays=(c.weekdays||'').split(',').map(s=>String(s).trim()).filter(Boolean).map(Number).map(n=>n===0?7:n).filter(n=>n>=1&&n<=7);
         const existing=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(cid));
         for(const o of existing) await sbDelete('sched_bookings', o.id);
         const recs=wdays.map(wd=>({ room_id:room.id, kind:'course', course_id:c.id,
@@ -804,7 +804,8 @@ function assignRoomOnly(courseId){
   const groupCourses = c.merge_group ? COURSES.filter(x=>x.merge_group===c.merge_group) : [c];
   const groupIds = groupCourses.map(x=>String(x.id));
   const dispName = c.merge_name || c.name;
-  const wdays=(c.weekdays||'').split(',').map(Number).filter(Boolean);
+  const wdays=(c.weekdays||'').split(',').map(s=>String(s).trim()).filter(Boolean).map(Number).map(n=>n===0?7:n).filter(n=>n>=1&&n<=7);
+  if(!wdays.length){ toast('这门课没有设置上课日（周几），无法排。请先在课程管理里给它补上周几。', false); return; }
   const existing=BOOKINGS.filter(b=>b.kind==='course'&&groupIds.includes(String(b.course_id)));
   const ex=existing[0]||null;
   const noDate = !c.start_date || !c.end_date;
@@ -901,7 +902,8 @@ function assignRoomOnly(courseId){
 }
 function assignForm(courseId){
   const c=COURSES.find(x=>String(x.id)===String(courseId));
-  const wdays=(c.weekdays||'').split(',').map(Number).filter(Boolean);
+  const wdays=(c.weekdays||'').split(',').map(s=>String(s).trim()).filter(Boolean).map(Number).map(n=>n===0?7:n).filter(n=>n>=1&&n<=7);
+  if(!wdays.length){ toast('这门课没有设置上课日（周几），无法排。请先在课程管理里给它补上周几。', false); return; }
   const online=c.mode==='线上';
   const existing=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
   const ex=existing[0]||null;  // 重排时回显
