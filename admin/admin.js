@@ -3,10 +3,36 @@ const ADMIN_PW='weixin$2026';
 function checkLogin(){const r=localStorage.getItem('txe_login');if(r){const{ts}=JSON.parse(r);if(Date.now()-ts<30*24*60*60*1000)return true}return false}
 function doLogin(){
   const pw=document.getElementById('loginPw').value;
-  if(pw===ADMIN_PW){localStorage.setItem('txe_login',JSON.stringify({ts:Date.now()}));document.getElementById('loginOverlay').style.display='none';initApp()}
+  if(pw===ADMIN_PW){localStorage.setItem('txe_login',JSON.stringify({ts:Date.now()}));document.getElementById('loginOverlay').style.display='none';showHub()}
   else{document.getElementById('loginErr').textContent='密码错误，请重试';document.getElementById('loginPw').value='';document.getElementById('loginPw').focus()}
 }
-function doLogout(){localStorage.removeItem('txe_login');location.reload()}
+function doLogout(){localStorage.removeItem('txe_login');localStorage.removeItem('txe_domain');location.reload()}
+
+// ── 中枢层：选择领域视角 ──
+// 第一步骨架：admin 登录后到这里，选一个领域视角（或总览）再进入系统。
+const HUB_DOMAINS=['大学院文科','大学院理科','学部文科','学部理科','语言-日语','语言-英语'];
+function showHub(){
+  const el=document.getElementById('hubOverlay');
+  if(el){ el.style.display='flex'; }
+  else { enterDomain('all'); } // 兜底：没有中枢层界面则直接进总览，保证系统始终可用
+}
+async function enterDomain(domain){
+  CURRENT_DOMAIN = (domain==='all'||!domain) ? 'all' : domain;
+  try{ localStorage.setItem('txe_domain', CURRENT_DOMAIN); }catch(e){}
+  const el=document.getElementById('hubOverlay'); if(el) el.style.display='none';
+  // 在顶栏显示当前视角
+  const tag=document.getElementById('domainTag');
+  if(tag) tag.textContent = CURRENT_DOMAIN==='all' ? '总览·全部领域' : CURRENT_DOMAIN;
+  await initApp();
+}
+function backToHub(){ // 从系统内返回中枢层重新选领域
+  const el=document.getElementById('hubOverlay'); if(el) el.style.display='flex';
+}
+// 按当前领域视角过滤课程数组（总览时原样返回）
+function filterByDomain(list){
+  if(!CURRENT_DOMAIN || CURRENT_DOMAIN==='all') return list;
+  return (list||[]).filter(c => c.domain === CURRENT_DOMAIN);
+}
 document.getElementById('loginPw').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 
 function locationShort(loc) {
@@ -84,6 +110,7 @@ async function renderPage(){
         sb('/rest/v1/courses?select=*&order=created_at.desc'),
         sb('/rest/v1/course_sessions?select=*&order=session_date.asc')
       ]);
+      cachedCourses=filterByDomain(cachedCourses);
       renderCoursesPage(mc);
     } else if(curPage==='promo'){
       renderPromoAdminPage(mc);
@@ -591,7 +618,7 @@ async function initApp(){
   await loadMajorsFromDB();
   await renderPage();
 }
-if(checkLogin()){initApp()}else{document.getElementById('loginOverlay').style.display='flex'}
+if(checkLogin()){showHub()}else{document.getElementById('loginOverlay').style.display='flex'}
 
 // ══════════════════════════════════
 // 讲师档案（teacher_profiles）：内部讲师信息库
