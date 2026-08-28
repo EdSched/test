@@ -14,7 +14,7 @@ function sbHeaders(extra){
 }
 async function sbGet(table, query){
   const url = SB_URL + '/rest/v1/' + table + '?' + (query || 'select=*');
-  const r = await fetch(url, { headers: sbHeaders() });
+  const r = await fetch(url, { headers: sbHeaders(), cache:'no-store' });
   if(!r.ok) throw new Error(table + ' 读取失败: ' + r.status + ' ' + await r.text());
   return r.json();
 }
