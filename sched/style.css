@@ -13,7 +13,7 @@ header.top{ background:#fff; border-bottom:1px solid var(--line); }
 header.top .wrap{ display:flex; align-items:center; gap:16px; padding:20px 24px; }
 header.top h1{ font-size:17px; margin:0; }
 header.top nav{ margin-left:auto; display:flex; gap:14px; font-size:13px; }
-header.top nav a{ color:var(--sub); }
+header.top nav a{ color:var(--sub); display:inline-block; padding:2px 4px; white-space:nowrap; position:relative; z-index:1; }
 header.top nav a:hover{ color:var(--blue); }
 
 .card{ background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; }
