@@ -210,7 +210,7 @@ async function confirmCourseImport(){
   }catch(e){alert('导入失败：'+e.message);btn.textContent='确认导入';btn.disabled=false}
 }
 
-let coursesMajorFilter='keizai';
+let coursesMajorFilter='none';  // 初始不选任何专业，需手动点选后才显示课程（避免一打开满屏）
 let coursesPeriodFilter='current'; // 'current' | 'all'
 
 // 判断当前是哪个期（按当前月份）
@@ -672,8 +672,20 @@ async function openApplyTemplate(templateId){
 function renderCoursesPage(mc){
 
   const curPeriod=currentPeriodKey();
-  let majorList=expandMajorFilter(coursesMajorFilter);
-  let filtered=cachedCourses.filter(c=>(c.major||[]).some(m=>majorList.includes(m)));
+  // 领域感知筛选：
+  //  - coursesMajorFilter==='none'：未选专业，不显示任何课（初始态，避免满屏）
+  //  - 非总览视角：先限定在当前领域 CURRENT_DOMAIN 的课
+  //  - 有专业的课按专业 majorList 筛；无专业的课（学部/语言）靠 domain 圈定，不被专业滤掉
+  let majorList=coursesMajorFilter==='none'?[]:expandMajorFilter(coursesMajorFilter);
+  let filtered=coursesMajorFilter==='none'?[]:cachedCourses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(coursesMajorFilter==='all'){
+      // 「全部」：本视角内所有课都要（含无专业的学部/语言课）
+      return true;
+    }
+    if(c.major&&c.major.length) return c.major.some(m=>majorList.includes(m));
+    return false; // 选了具体专业时，无专业的课不匹配
+  });
   if(coursesPeriodFilter==='current') filtered=filtered.filter(c=>c.period===curPeriod);
   else if(coursesPeriodFilter!=='all'){
     const [filterYear,filterPeriod]=coursesPeriodFilter.match(/(\d{4})年(.+)/)?.slice(1)||[];
@@ -730,8 +742,10 @@ function renderCoursesPage(mc){
     </div>
   </div>
 
-  ${!filtered.length
-    ?`<div class="empty" style="padding:60px 0">暂无课程数据<br><span style="font-size:11px;color:var(--text-3);margin-top:6px;display:block">请切换期数筛选，或点击右上角导入课程安排</span></div>`
+  ${coursesMajorFilter==='none'
+    ?`<div class="empty" style="padding:60px 0">请先在上方选择专业<br><span style="font-size:11px;color:var(--text-3);margin-top:6px;display:block">点「全部」查看本视角所有课程，或点某个专业查看该专业课程</span></div>`
+    :!filtered.length
+    ?`<div class="empty" style="padding:60px 0">暂无课程数据<br><span style="font-size:11px;color:var(--text-3);margin-top:6px;display:block">请切换期数/专业筛选，或点击右上角导入课程安排</span></div>`
     :renderCoursesSummary(filtered)
   }`;
 }
