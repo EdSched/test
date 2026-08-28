@@ -24,6 +24,27 @@
   </div>
 </div>
 
+<!-- Hub 中枢层：选择领域视角 -->
+<div id="hubOverlay" style="display:none;position:fixed;inset:0;z-index:900;background:var(--bg,#f5f5f4);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:36px 40px;width:min(640px,92vw);text-align:center">
+    <div style="font-family:'Noto Serif SC',serif;font-size:1.3rem;font-weight:600;margin-bottom:4px">唯新教育 · 中枢台</div>
+    <div style="font-size:10px;color:var(--text-3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:24px">选择要进入的领域视角</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:18px">
+      <div onclick="enterDomain('all')" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface);transition:.15s" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-weight:600;font-size:14px">总览</div>
+        <div style="font-size:10px;color:var(--text-3);margin-top:3px">全部领域 · admin</div>
+      </div>
+      <div onclick="enterDomain('大学院文科')" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface)" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'"><div style="font-weight:600;font-size:14px">大学院文科</div></div>
+      <div onclick="enterDomain('大学院理科')" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface)" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'"><div style="font-weight:600;font-size:14px">大学院理科</div></div>
+      <div onclick="enterDomain('学部文科')" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface)" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'"><div style="font-weight:600;font-size:14px">学部文科</div></div>
+      <div onclick="enterDomain('学部理科')" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface)" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'"><div style="font-weight:600;font-size:14px">学部理科</div></div>
+      <div onclick="enterDomain('语言-日语')" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface)" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'"><div style="font-weight:600;font-size:14px">语言 · 日语</div></div>
+      <div onclick="enterDomain('语言-英语')" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface)" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'"><div style="font-weight:600;font-size:14px">语言 · 英语</div></div>
+    </div>
+    <div style="font-size:10px;color:var(--text-3)">进入后可在顶栏「切换视角」返回此处</div>
+  </div>
+</div>
+
 <div class="shell">
   <!-- Topbar -->
   <div class="topbar">
@@ -34,7 +55,11 @@
         <div class="topbar-sub">Transform Education · Admin</div>
       </div>
     </div>
-    <button class="btn btn-outline btn-sm" onclick="doLogout()">退出登录</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="domainTag" style="font-size:11px;color:var(--text-2);background:var(--surface);border:1px solid var(--border-light);border-radius:3px;padding:2px 8px"></span>
+      <button class="btn btn-outline btn-sm" onclick="backToHub()">切换视角</button>
+      <button class="btn btn-outline btn-sm" onclick="doLogout()">退出登录</button>
+    </div>
   </div>
 
   <!-- Drawer overlay (mobile) -->
