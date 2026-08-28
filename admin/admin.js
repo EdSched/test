@@ -95,20 +95,20 @@ async function renderPage(){
       [cachedSlots,cachedBookings,cachedStudents]=await Promise.all([
         sb('/rest/v1/slots?select=*&order=date.asc,time_range.asc'),
         sb('/rest/v1/bookings?select=*&order=slot_date.asc,slot_time_range.asc'),
-        sb('/rest/v1/students?select=*&order=name.asc')
+        sbAll('/rest/v1/students?select=*&order=name.asc')
       ]);
       curPage==='booking'?renderBookingPage(mc):renderSlotsPage(mc);
     } else if(curPage==='students'){
       [cachedStudents,cachedTeachers]=await Promise.all([
-        sb('/rest/v1/students?select=*&order=name.asc'),
+        sbAll('/rest/v1/students?select=*&order=name.asc'),
         sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[])
       ]);
       renderStudentsPage(mc);
     } else if(curPage==='courses'){
       [cachedStudents,cachedCourses,cachedSessions]=await Promise.all([
-        sb('/rest/v1/students?select=*&order=name.asc'),
-        sb('/rest/v1/courses?select=*&order=created_at.desc'),
-        sb('/rest/v1/course_sessions?select=*&order=session_date.asc')
+        sbAll('/rest/v1/students?select=*&order=name.asc'),
+        sbAll('/rest/v1/courses?select=*&order=created_at.desc'),
+        sbAll('/rest/v1/course_sessions?select=*&order=session_date.asc')
       ]);
       cachedCourses=filterByDomain(cachedCourses);
       renderCoursesPage(mc);
@@ -116,15 +116,15 @@ async function renderPage(){
       renderPromoAdminPage(mc);
     } else if(curPage==='coursecleanup'){
       [cachedCourses,cachedSessions,cachedTeachers]=await Promise.all([
-        sb('/rest/v1/courses?select=*&order=created_at.desc'),
-        sb('/rest/v1/course_sessions?select=*&order=session_date.asc'),
+        sbAll('/rest/v1/courses?select=*&order=created_at.desc'),
+        sbAll('/rest/v1/course_sessions?select=*&order=session_date.asc'),
         sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[])
       ]);
       renderCourseCleanupPage(mc);
     } else if(curPage==='schedule'){
       [cachedCourses,cachedSessions,cachedScheduleSlots,cachedTeacherAvail,cachedTeachers]=await Promise.all([
-        sb('/rest/v1/courses?select=*&order=created_at.desc'),
-        sb('/rest/v1/course_sessions?select=*&order=session_date.asc'),
+        sbAll('/rest/v1/courses?select=*&order=created_at.desc'),
+        sbAll('/rest/v1/course_sessions?select=*&order=session_date.asc'),
         sb('/rest/v1/schedule_slots?select=*&order=session_date.asc').catch(()=>[]),
         sb('/rest/v1/teacher_availability?select=*').catch(()=>[]),
         sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[])
@@ -133,7 +133,7 @@ async function renderPage(){
     } else if(curPage==='teachers'){
       [cachedTeachers, cachedSessions]=await Promise.all([
         sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[]),
-        sb('/rest/v1/course_sessions?homework_enabled=is.true&select=id,course_name&order=course_name.asc').catch(()=>[]),
+        sbAll('/rest/v1/course_sessions?homework_enabled=is.true&select=id,course_name&order=course_name.asc').catch(()=>[]),
       ]);
       renderTeachersPage(mc);
     } else if(curPage==='payroll'){
@@ -148,14 +148,14 @@ async function renderPage(){
       renderAdmissionDbPage(mc);
     } else if(curPage==='attendance'){
       [cachedStudents,cachedCourses,cachedSessions,cachedSessionRecords]=await Promise.all([
-        sb('/rest/v1/students?select=*&order=name.asc'),
-        sb('/rest/v1/courses?select=*&order=created_at.desc'),
-        sb('/rest/v1/course_sessions?select=*&order=session_date.asc,session_number.asc'),
-        sb('/rest/v1/session_records?select=*')
+        sbAll('/rest/v1/students?select=*&order=name.asc'),
+        sbAll('/rest/v1/courses?select=*&order=created_at.desc'),
+        sbAll('/rest/v1/course_sessions?select=*&order=session_date.asc,session_number.asc'),
+        sbAll('/rest/v1/session_records?select=*')
       ]);
       renderAttendancePage(mc);
     } else if(curPage==='progress'){
-      cachedStudents=await sb('/rest/v1/students?select=*&order=name.asc');
+      cachedStudents=await sbAll('/rest/v1/students?select=*&order=name.asc');
       renderProgressPage(mc);
     } else if(curPage==='vipframework'){
       cachedTeachers=await sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[]);
