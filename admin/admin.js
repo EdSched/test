@@ -1,11 +1,39 @@
 // ── Auth ──
 const ADMIN_PW='weixin$2026';
+
+// 当前访问钥匙（从 URL ?k=xxx 解析并查库）。null=按老方式(admin密码→中枢台)
+let ACCESS_KEY=null; // {k, password, domain, is_admin, label, active}
+
+// 读取 URL 的 ?k= 并查钥匙表；页面加载时调用一次
+async function loadAccessKey(){
+  const k=new URLSearchParams(location.search).get('k');
+  if(!k || k==='admin'){ ACCESS_KEY=null; return; } // 无k或admin → 走管理员流程
+  try{
+    const rows=await sb(`/rest/v1/access_keys?k=eq.${encodeURIComponent(k)}&select=*`);
+    if(rows && rows[0] && rows[0].active){ ACCESS_KEY=rows[0]; }
+    else { ACCESS_KEY={invalid:true}; } // 钥匙不存在或已停用
+  }catch(e){ ACCESS_KEY=null; }
+}
+
 function checkLogin(){const r=localStorage.getItem('txe_login');if(r){const{ts}=JSON.parse(r);if(Date.now()-ts<30*24*60*60*1000)return true}return false}
+
 function doLogin(){
   const pw=document.getElementById('loginPw').value;
+  // 领域钥匙登录：验证该钥匙的密码
+  if(ACCESS_KEY && !ACCESS_KEY.invalid){
+    if(pw===ACCESS_KEY.password){
+      localStorage.setItem('txe_login',JSON.stringify({ts:Date.now()}));
+      document.getElementById('loginOverlay').style.display='none';
+      if(ACCESS_KEY.is_admin){ showHub(); }           // admin钥匙 → 中枢台
+      else { enterDomain(ACCESS_KEY.domain); }         // 领域钥匙 → 直达该领域
+    } else { loginErr('密码错误，请重试'); }
+    return;
+  }
+  // 默认：管理员密码 → 中枢台
   if(pw===ADMIN_PW){localStorage.setItem('txe_login',JSON.stringify({ts:Date.now()}));document.getElementById('loginOverlay').style.display='none';showHub()}
-  else{document.getElementById('loginErr').textContent='密码错误，请重试';document.getElementById('loginPw').value='';document.getElementById('loginPw').focus()}
+  else{ loginErr('密码错误，请重试'); }
 }
+function loginErr(msg){document.getElementById('loginErr').textContent=msg;document.getElementById('loginPw').value='';document.getElementById('loginPw').focus();}
 function doLogout(){localStorage.removeItem('txe_login');localStorage.removeItem('txe_domain');location.reload()}
 
 // ── 中枢层：选择领域视角 ──
@@ -23,9 +51,14 @@ async function enterDomain(domain){
   // 在顶栏显示当前视角
   const tag=document.getElementById('domainTag');
   if(tag) tag.textContent = CURRENT_DOMAIN==='all' ? '总览·全部领域' : CURRENT_DOMAIN;
+  // 领域钥匙用户：隐藏「切换视角」（锁定在自己领域）
+  const sw=document.getElementById('switchViewBtn');
+  if(sw) sw.style.display=(ACCESS_KEY && !ACCESS_KEY.invalid && !ACCESS_KEY.is_admin)?'none':'';
   await initApp();
 }
 function backToHub(){ // 从系统内返回中枢层重新选领域
+  // 领域钥匙用户被锁定在自己领域，不能切换视角
+  if(ACCESS_KEY && !ACCESS_KEY.invalid && !ACCESS_KEY.is_admin) return;
   const el=document.getElementById('hubOverlay'); if(el) el.style.display='flex';
 }
 // 按当前领域视角过滤课程数组（总览时原样返回）
@@ -618,7 +651,28 @@ async function initApp(){
   await loadMajorsFromDB();
   await renderPage();
 }
-if(checkLogin()){showHub()}else{document.getElementById('loginOverlay').style.display='flex'}
+// 页面启动：先解析访问钥匙，再决定登录流程
+(async function bootAuth(){
+  await loadAccessKey();
+  // 钥匙无效：提示并停在登录框
+  if(ACCESS_KEY && ACCESS_KEY.invalid){
+    document.getElementById('loginOverlay').style.display='flex';
+    loginErr('此访问链接无效或已停用');
+    return;
+  }
+  // 已登录：admin钥匙/无k → 中枢台；领域钥匙 → 直达该领域
+  if(checkLogin()){
+    if(ACCESS_KEY && !ACCESS_KEY.is_admin){ enterDomain(ACCESS_KEY.domain); }
+    else { showHub(); }
+    return;
+  }
+  // 未登录：显示登录框（领域钥匙可提示其领域）
+  document.getElementById('loginOverlay').style.display='flex';
+  if(ACCESS_KEY && !ACCESS_KEY.is_admin){
+    const hint=document.getElementById('loginHint');
+    if(hint) hint.textContent=`${ACCESS_KEY.label||ACCESS_KEY.domain} · 请输入访问密码`;
+  }
+})();
 
 // ══════════════════════════════════
 // 讲师档案（teacher_profiles）：内部讲师信息库
