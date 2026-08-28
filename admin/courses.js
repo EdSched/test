@@ -844,13 +844,7 @@ function renderCoursesSummary(courses){
                 </div>`;
               }).join('')}
             </div>`
-          :`<div style="padding:12px 14px;font-size:11px;color:var(--text-2);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <span style="color:var(--text-3)">未排单回</span>
-              ${course.start_date?`<span>📅 ${course.start_date}${course.end_date?' ~ '+course.end_date:''}</span>`:''}
-              ${course.total_sessions?`<span>共 ${course.total_sessions} 回</span>`:''}
-              ${course.weekdays?`<span>每周 ${course.weekdays}</span>`:''}
-              <button onclick="openAddCourseModal('${course.id}')" style="font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:2px 8px;cursor:pointer;font-family:inherit;margin-left:auto">排单回</button>
-            </div>`
+          :`<div style="padding:14px;font-size:11px;color:var(--text-3)">暂无课次数据</div>`
         }
       </div>`;
     }).join('')}
