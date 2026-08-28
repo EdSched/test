@@ -15,9 +15,16 @@ const SHAKAI_GROUP = ['shakai', 'shinpan', 'fukushi'];
 // CURRENT_DOMAIN：当前登录视角所在的领域。''（空）或 'all' 表示总览（admin 看全部）。
 // 领域负责人登录后会被锁定为某个具体领域（如「大学院理科」）。
 let CURRENT_DOMAIN = '';
-// MAJOR_DOMAIN：专业 key → 所属领域，由 loadMajorsFromDB() 从 DB majors.domain 填充。
-// 不写死、可动态增长：新建专业时填 domain 即自动流通，符合「数据不锁死」原则。
-let MAJOR_DOMAIN = {};
+// MAJOR_DOMAIN：专业 key → 所属领域。
+// 初始给 5 个写死的核心专业兜底 domain（都属大学院文科），保证 DB 未加载完/加载失败时领域也不错位；
+// loadMajorsFromDB() 会用 DB majors.domain 覆盖/补充，日常修改一律走 DB，此处不锁死。
+let MAJOR_DOMAIN = {
+  keiei: '大学院文科',
+  keizai: '大学院文科',
+  shakai: '大学院文科',
+  shinpan: '大学院文科',
+  fukushi: '大学院文科',
+};
 // 判断某专业是否属于当前视角领域（总览时永远 true）
 function majorInCurrentDomain(key) {
   if (!CURRENT_DOMAIN || CURRENT_DOMAIN === 'all') return true;
@@ -217,10 +224,16 @@ function fmtSessionDate(dateStr) {
 
 // ── 課次日期生成 ──
 function parseWeekdays(str) {
-  if (!str) return [];
-  const map = { '周日': 0, '周一': 1, '周二': 2, '周三': 3, '周四': 4, '周五': 5, '周六': 6 };
+  if (str === null || str === undefined || str === '') return [];
+  str = String(str);
   const days = [];
-  for (const [k, v] of Object.entries(map)) { if (str.includes(k)) days.push(v); }
+  // ① 中文：周X/星期X/礼拜X 及单字 一二三…日/天
+  const cnMap = { '日': 0, '天': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
+  const cnMatches = str.match(/[周星期礼拜]+\s*([日天一二三四五六])/g);
+  if (cnMatches) { cnMatches.forEach(m => { const ch = m.slice(-1); if (ch in cnMap) days.push(cnMap[ch]); }); }
+  // ② 数字：1-7（ISO：周一=1…周日=7），转 JS getDay()（周日=0）；7→0，1-6 原样
+  const numMatches = str.match(/\d+/g);
+  if (numMatches) { numMatches.forEach(n => { let v = parseInt(n, 10); if (v >= 1 && v <= 7) days.push(v === 7 ? 0 : v); }); }
   return [...new Set(days)];
 }
 function generateSessionDatesFromFirst(firstDate, weekdays, totalSessions) {
