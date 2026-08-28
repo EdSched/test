@@ -1006,8 +1006,10 @@ function openAddCourseModal(editId){
     document.getElementById('ac_confirm_publish').checked=isConfirmed;
     // load existing session details（编辑时始终展示明细表，date 按真实日期排序，便于直接调整）
     const sessions=cachedSessions.filter(s=>s.course_id===editId).sort((a,b)=>a.session_date.localeCompare(b.session_date));
-    document.getElementById('ac_has_details').checked=true;
-    document.getElementById('ac_details_section').style.display='';
+    // 有单回才勾「有单回明细」并展开明细表；没有单回的课（如排课来的）保持不勾、不展开
+    const hasDetails=sessions.length>0;
+    document.getElementById('ac_has_details').checked=hasDetails;
+    document.getElementById('ac_details_section').style.display=hasDetails?'':'none';
     acPopulateRows(sessions.map(s=>({
       id:s.id,
       num:s.is_cancelled?'休讲':s.session_number,
