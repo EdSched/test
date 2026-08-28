@@ -274,15 +274,16 @@ function populateMajorSelect(selectId, selectedValue){
 
 // 新增专业：输入中文名 → 调用 createMajor（写入数据库 majors 表）→ 刷新下拉并选中新专业
 async function addNewMajor(){
-  const label=prompt('请输入新专业名称（中文），例如：観光学');
+  const label=prompt('请输入新专业名称（中文），例如：观光学');
   if(!label||!label.trim()) return;
-  const suggested=(typeof generateMajorKey==='function')?generateMajorKey(label.trim()):'';
-  const keyInput=prompt('英文代号（系统内部使用）已自动生成，可直接确认或修改：\n\n规则：只能小写字母/数字/下划线，以字母开头。\n若不满意可自行改写（如改成 kankou / kanko 皆可）。', suggested);
-  if(keyInput===null) return; // 用户取消
-  const key=await createMajor(label.trim(), keyInput.trim());
+  // 代号统一用日语罗马音（与全站专业代码风格一致，避免拼音/英文混用）
+  const romaji=prompt(`请输入「${label.trim()}」的日语罗马音，作为系统代号。\n\n例如：观光学→kankou，经营学→keiei，社会学→shakai。\n\n规则：只能小写字母/数字/下划线，以字母开头。`);
+  if(romaji===null) return; // 用户取消
+  if(!romaji.trim()){ alert('必须输入日语罗马音代号'); return; }
+  const key=await createMajor(label.trim(), romaji.trim());
   if(key){
     populateMajorSelect('st_major', key);
-    alert(`已新增专业「${label.trim()}」，英文代号：${key}\n现在全站（课程/老师/预约/学生档案等）都能选到它了。`);
+    alert(`已新增专业「${label.trim()}」，代号：${key}\n现在全站（课程/老师/预约/学生档案等）都能选到它了。`);
   }
 }
 
