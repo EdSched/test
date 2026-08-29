@@ -695,11 +695,11 @@ function renderCoursesPage(mc){
     if(c.major&&c.major.length) return c.major.some(m=>majorList.includes(m));
     return false; // 选了具体专业时，无专业的课不匹配
   });
-  if(coursesPeriodFilter==='current') filtered=filtered.filter(c=>c.period===curPeriod);
+  if(coursesPeriodFilter==='current') filtered=filtered.filter(c=>periodFromDate(c.first_session_date)===curPeriod);
   else if(coursesPeriodFilter!=='all'){
     const [filterYear,filterPeriod]=coursesPeriodFilter.match(/(\d{4})年(.+)/)?.slice(1)||[];
-    if(filterYear&&filterPeriod) filtered=filtered.filter(c=>c.period===filterPeriod&&c.first_session_date?.startsWith(filterYear));
-    else filtered=filtered.filter(c=>c.period===coursesPeriodFilter);
+    if(filterYear&&filterPeriod) filtered=filtered.filter(c=>periodFromDate(c.first_session_date)===filterPeriod&&c.first_session_date?.startsWith(filterYear));
+    else filtered=filtered.filter(c=>periodFromDate(c.first_session_date)===coursesPeriodFilter);
   }
   // 课程属性筛选
   if(coursesTypeFilter==='专业课') filtered=filtered.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
@@ -707,8 +707,8 @@ function renderCoursesPage(mc){
   else if(coursesTypeFilter==='VIP') filtered=filtered.filter(c=>c.course_type?.includes('VIP'));
 
   const allPeriods=[...new Map(cachedCourses
-    .filter(c=>c.period&&c.first_session_date)
-    .map(c=>{const year=c.first_session_date.slice(0,4);const key=`${year}年${c.period}`;return [key,{key,period:c.period,year}]})
+    .filter(c=>c.first_session_date)
+    .map(c=>{const year=c.first_session_date.slice(0,4);const per=periodFromDate(c.first_session_date);const key=`${year}年${per}`;return [key,{key,period:per,year}]})
   ).values()].sort((a,b)=>a.key.localeCompare(b.key));
 
   mc.innerHTML=`
@@ -772,7 +772,7 @@ function renderCoursesSummary(courses){
     // 这样同名不同期的课分成独立组，不再混在一起；同期同名（含分班）才合并
     const nameKey=courseGroupKey(c.name);
     const yr=c.first_session_date?c.first_session_date.slice(0,4):'';
-    const key=`${nameKey}|${c.period||''}|${yr}`;
+    const key=`${nameKey}|${periodFromDate(c.first_session_date)}|${yr}`;
     if(!groups[key]){groups[key]={course:c,sessions:[]};groupOrder.push(key)}
     const sess=cachedSessions.filter(s=>s.course_id===c.id).sort((a,b)=>a.session_date.localeCompare(b.session_date));
     groups[key].sessions.push(...sess);
@@ -799,7 +799,7 @@ function renderCoursesSummary(courses){
         <div style="background:${color.bg};color:${color.text};padding:8px 14px;display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span style="font-size:12px;font-weight:600">${dispName}</span>
-            ${course.period?`<span style="font-size:10px;opacity:.7;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 6px">${course.period}</span>`:''}
+            ${course.first_session_date?`<span style="font-size:10px;opacity:.7;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 6px">${periodFromDate(course.first_session_date)}</span>`:''}
             ${course.first_session_date?`<span style="font-size:10px;opacity:.6;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 5px">${course.first_session_date.slice(0,4)}年</span>`:''}
             ${(course.major||[]).length>1?`<span style="font-size:9px;opacity:.6">${(course.major||[]).map(m=>MAJORS[m]||m).join('・')}</span>`:''}
             ${course.teacher?`<span style="font-size:10px;opacity:.75">👤 ${course.teacher}</span>`:''}
