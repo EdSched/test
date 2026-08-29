@@ -28,10 +28,16 @@ function dateToStr(d){
 
 // 星期字符串 → 星期数组 [0=日,1=一…]
 function parseWeekdays(str){
-  if(!str) return [];
-  const map={'周日':0,'周一':1,'周二':2,'周三':3,'周四':4,'周五':5,'周六':6};
+  if(str===null||str===undefined||str==='') return [];
+  str=String(str);
   const days=[];
-  for(const [k,v] of Object.entries(map)){if(str.includes(k)) days.push(v)}
+  // 中文：周X/星期X/礼拜X 及单字 一二三…日/天
+  const cn={'日':0,'天':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6};
+  const cm=str.match(/[周星期礼拜]+\s*([日天一二三四五六])/g);
+  if(cm) cm.forEach(m=>{const ch=m.slice(-1); if(ch in cn) days.push(cn[ch]);});
+  // 数字：1-7（ISO：周一=1…周日=7）→ JS getDay()（周日=0）；7→0，1-6原样
+  const nm=str.match(/\d+/g);
+  if(nm) nm.forEach(n=>{let v=parseInt(n,10); if(v>=1&&v<=7) days.push(v===7?0:v);});
   return [...new Set(days)];
 }
 
