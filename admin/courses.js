@@ -290,7 +290,7 @@ function renderCourseCleanupPage(mc){
   if(cleanupYearFilter!=='all') filtered=filtered.filter(c=>c.first_session_date?.startsWith(cleanupYearFilter));
 
   const allYears=[...new Set(cachedCourses.filter(c=>c.first_session_date).map(c=>c.first_session_date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
-  const allCleanupPeriods=PERIODS.length?PERIODS.map(p=>p.name):['1月期','4月期','7月期','10月期'];
+  const allCleanupPeriods=[...new Set(cachedCourses.map(c=>effectivePeriod(c)).filter(p=>p&&p!=='未分期'))].sort();
 
   const groups={};
   filtered.forEach(c=>{
@@ -407,15 +407,11 @@ function renderCourseCleanupPage(mc){
   </div>
 
   <!-- 批量改期浮动条：选中课时才显示 -->
-  <div id="cleanup_period_bar" style="display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px 16px;align-items:center;gap:8px;flex-wrap:wrap">
-    <span style="font-size:12px;color:var(--text-2)">已选 <b id="cleanup_bar_count">0</b> 门 · 期数</span>
-    <input id="cp_name" placeholder="期名，如 春季期" style="width:110px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
-    <select id="cp_start" style="padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px">${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}月</option>`).join('')}</select>
-    <span style="font-size:11px;color:var(--text-3)">到</span>
-    <select id="cp_end" style="padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px">${Array.from({length:12},(_,i)=>`<option value="${i+1}"${i===2?' selected':''}>${i+1}月</option>`).join('')}</select>
+  <div id="cleanup_period_bar" style="display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px 16px;align-items:center;gap:8px">
+    <span style="font-size:12px;color:var(--text-2)">已选 <b id="cleanup_bar_count">0</b> 门 · 期数改为</span>
+    <input id="cp_name" placeholder="期名，如 秋冬期" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
     <button class="btn btn-primary btn-sm" onclick="cleanupApplyPeriod()">应用</button>
     <button class="btn btn-outline btn-sm" onclick="cleanupClearSelection()">取消</button>
-    <span style="font-size:10px;color:var(--text-3);width:100%">结束月小于起始月＝跨年（如 9月到1月）</span>
   </div>`;
 
   renderTemplateList();
@@ -462,22 +458,9 @@ function updateCleanupPeriodBar(){
 async function cleanupApplyPeriod(){
   if(!cleanupSelected.size){alert('请先选中课程');return}
   const name=document.getElementById('cp_name').value.trim();
-  const s=parseInt(document.getElementById('cp_start').value);
-  const e=parseInt(document.getElementById('cp_end').value);
   if(!name){alert('请填期名');return}
-  const cross=s>e?'（跨年）':'';
-  if(!confirm(`把选中的 ${cleanupSelected.size} 门课定义为「${name}」（${s}月到${e}月${cross}）？`))return;
+  if(!confirm(`把选中的 ${cleanupSelected.size} 门课定义为「${name}」？`))return;
   try{
-    // 1) 登记期到 periods 表：同名则更新月份范围，否则新增（供筛选识别、跨年归类）
-    const exist=PERIODS.find(p=>p.name===name);
-    if(exist){
-      await sb(`/rest/v1/periods?id=eq.${exist.id}`,'PATCH',{start_month:s,end_month:e});
-    }else{
-      const maxOrder=Math.max(0,...PERIODS.map(p=>p.sort_order||0));
-      await sb('/rest/v1/periods','POST',{name,start_month:s,end_month:e,sort_order:maxOrder+1});
-    }
-    await loadPeriodsFromDB();
-    // 2) 选中课贴上这个期名
     for(const id of cleanupSelected){
       await sb(`/rest/v1/courses?id=eq.${id}`,'PATCH',{period_override:name});
       const c=cachedCourses.find(x=>x.id===id); if(c) c.period_override=name;
