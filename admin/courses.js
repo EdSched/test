@@ -224,7 +224,8 @@ let coursesPeriodFilter='current'; // 'current' | 'all'
 
 // 课程名去掉末尾数字 → 归组key
 function courseGroupKey(name){
-  return name.replace(/[\s　]*\d+$/, '').trim();
+  // 用完整课程名（分班1/2、N1/N2 等都是不同的课，不做任何删减）
+  return (name||'').trim();
 }
 
 // 课程名颜色（根据关键词）
