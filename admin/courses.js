@@ -273,10 +273,14 @@ let cleanupYearFilter='all';
 
 function renderCourseCleanupPage(mc){
   // 按「年份 + 期数」分组，年份取自 first_session_date
-  let majorList=expandMajorFilter(cleanupMajorFilter);
-  let filtered=cachedCourses.filter(c=>(c.major||[]).some(m=>majorList.includes(m)));
-  // 领域过滤：非总览视角只看当前领域的课
-  if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all') filtered=filtered.filter(c=>c.domain===CURRENT_DOMAIN);
+  // 领域感知筛选（与课程安排页一致）：先限定当前领域；专业筛选='all'时显示领域内全部课，
+  // 选了具体专业才按 major 匹配；无专业的课（学部/语言）靠 domain 显示，不被专业滤掉
+  let filtered=cachedCourses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(cleanupMajorFilter==='all') return true;
+    const majorList=expandMajorFilter(cleanupMajorFilter);
+    return (c.major||[]).some(m=>majorList.includes(m));
+  });
 
   if(cleanupTypeFilter==='专业课') filtered=filtered.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
   else if(cleanupTypeFilter==='共通课') filtered=filtered.filter(c=>c.course_type?.includes('共通'));
@@ -286,7 +290,7 @@ function renderCourseCleanupPage(mc){
   if(cleanupYearFilter!=='all') filtered=filtered.filter(c=>c.first_session_date?.startsWith(cleanupYearFilter));
 
   const allYears=[...new Set(cachedCourses.filter(c=>c.first_session_date).map(c=>c.first_session_date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
-  const allCleanupPeriods=PERIODS.map(p=>p.name);
+  const allCleanupPeriods=PERIODS.length?PERIODS.map(p=>p.name):['1月期','4月期','7月期','10月期'];
 
   const groups={};
   filtered.forEach(c=>{
@@ -2545,8 +2549,12 @@ async function ssPublish(){
 
 // 全选当前筛选条件下显示的全部课程（沿用清理页的专业/期数筛选逻辑）
 function cleanupSelectAllFiltered(){
-  const majorList=expandMajorFilter(cleanupMajorFilter);
-  let filtered=cachedCourses.filter(c=>(c.major||[]).some(m=>majorList.includes(m)));
+  let filtered=cachedCourses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(cleanupMajorFilter==='all') return true;
+    const majorList=expandMajorFilter(cleanupMajorFilter);
+    return (c.major||[]).some(m=>majorList.includes(m));
+  });
   // 与清理页筛选逻辑完全一致（类型三分支 + 期数）
   if(cleanupTypeFilter==='专业课') filtered=filtered.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
   else if(cleanupTypeFilter==='共通课') filtered=filtered.filter(c=>c.course_type?.includes('共通'));
