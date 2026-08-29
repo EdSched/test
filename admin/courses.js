@@ -312,13 +312,6 @@ function renderCourseCleanupPage(mc){
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-outline btn-sm" onclick="cleanupSelectAllFiltered()">☑ 全选当前筛选</button>
       <button class="btn btn-outline btn-sm" onclick="cleanupClearSelection()">清空选择</button>
-      ${(!ACCESS_KEY||ACCESS_KEY.is_admin)?`<button class="btn btn-outline btn-sm" onclick="openPeriodManager()" title="定义期数（月份范围/跨年）">⚙ 期数定义</button>`:''}
-      <select id="cleanup_period_target" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
-        <option value="">批量改期数…</option>
-        ${PERIODS.map(p=>`<option value="${p.name}">${p.name}</option>`).join('')}
-        <option value="__auto__">↺ 恢复自动分期</option>
-      </select>
-      <button class="btn btn-outline btn-sm" onclick="cleanupApplyPeriod()">应用 (<span id="cleanup_count2">0</span>)</button>
       <button class="btn btn-primary btn-sm" onclick="cleanupExportInfo()">📄 导出所选信息</button>
       <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger);background:none" onclick="cleanupDeleteSelected()">删除已选 (<span id="cleanup_count">0</span>)</button>
     </div>
@@ -341,7 +334,7 @@ function renderCourseCleanupPage(mc){
       </div>
     </div>
     <div>
-      <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">期数</div>
+      <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">期数${(!ACCESS_KEY||ACCESS_KEY.is_admin)?` <span onclick="openPeriodManager()" style="cursor:pointer;color:var(--primary,#8b5cf6);font-size:11px;margin-left:2px" title="编辑期数定义">✏</span>`:''}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap">
         <div class="filter-chip${cleanupPeriodFilter==='all'?' active':''}" onclick="setCleanupPeriod('all',this)" style="font-size:11px;padding:3px 10px">全部</div>
         ${allCleanupPeriods.map(p=>`<div class="filter-chip${cleanupPeriodFilter===p?' active':''}" onclick="setCleanupPeriod('${p}',this)" style="font-size:11px;padding:3px 10px">${p}</div>`).join('')}
@@ -407,6 +400,17 @@ function renderCourseCleanupPage(mc){
       <div class="section-title" style="font-size:14px">课程模板</div>
     </div>
     <div id="template_list"></div>
+  </div>
+
+  <!-- 批量改期浮动条：选中课时才显示 -->
+  <div id="cleanup_period_bar" style="display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px 16px;align-items:center;gap:10px">
+    <span style="font-size:12px;color:var(--text-2)">已选 <b id="cleanup_bar_count">0</b> 门 → 期数改为</span>
+    <select id="cleanup_period_target" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
+      ${PERIODS.map(p=>`<option value="${p.name}">${p.name}</option>`).join('')}
+      <option value="__auto__">↺ 恢复自动分期</option>
+    </select>
+    <button class="btn btn-primary btn-sm" onclick="cleanupApplyPeriod()">应用</button>
+    <button class="btn btn-outline btn-sm" onclick="cleanupClearSelection()">取消</button>
   </div>`;
 
   renderTemplateList();
@@ -439,6 +443,15 @@ function cleanupRowClick(e,id){
   const c2=document.getElementById('cleanup_count2');
   document.getElementById('cleanup_count').textContent=cleanupSelected.size;
   if(c2) c2.textContent=cleanupSelected.size;
+  updateCleanupPeriodBar();
+}
+// 批量改期浮动条：有选中才显示
+function updateCleanupPeriodBar(){
+  const bar=document.getElementById('cleanup_period_bar');
+  const cnt=document.getElementById('cleanup_bar_count');
+  if(!bar) return;
+  if(cleanupSelected.size>0){ bar.style.display='flex'; if(cnt) cnt.textContent=cleanupSelected.size; }
+  else { bar.style.display='none'; }
 }
 // 批量把选中课的期数设为指定值（写 period_override）；__auto__=清除覆盖恢复自动
 async function cleanupApplyPeriod(){
@@ -465,6 +478,7 @@ function cleanupClearSelection(){
     row.style.borderColor=row.dataset.dup==='1'?'#e0c060':'var(--border-light)';
   });
   document.getElementById('cleanup_count').textContent=0;
+  updateCleanupPeriodBar();
 }
 async function cleanupDeleteSingle(courseId){
   if(!confirm('确定删除这门课程及其所有课次记录？此操作不可恢复。'))return;
@@ -2537,7 +2551,7 @@ function cleanupSelectAllFiltered(){
   if(cleanupTypeFilter==='专业课') filtered=filtered.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
   else if(cleanupTypeFilter==='共通课') filtered=filtered.filter(c=>c.course_type?.includes('共通'));
   else if(cleanupTypeFilter==='VIP') filtered=filtered.filter(c=>c.course_type?.includes('VIP'));
-  if(typeof cleanupPeriodFilter!=='undefined'&&cleanupPeriodFilter!=='all') filtered=filtered.filter(c=>c.period===cleanupPeriodFilter);
+  if(typeof cleanupPeriodFilter!=='undefined'&&cleanupPeriodFilter!=='all') filtered=filtered.filter(c=>effectivePeriod(c)===cleanupPeriodFilter);
   filtered.forEach(c=>cleanupSelected.add(c.id));
   renderCourseCleanupPage(document.getElementById('mainContent'));
 }
