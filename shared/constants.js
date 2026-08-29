@@ -198,6 +198,10 @@ function matchesMajorFilter(major, filter) {
 // ── 期数工具 ──
 function currentPeriodKey() {
   const m = new Date().getMonth() + 1;
+  if (typeof PERIODS !== 'undefined' && PERIODS.length) {
+    const p = PERIODS.find(x => monthInPeriod(m, x));
+    return p ? p.name : '未分期';
+  }
   if (m >= 1 && m <= 3) return '1月期';
   if (m >= 4 && m <= 6) return '4月期';
   if (m >= 7 && m <= 9) return '7月期';
@@ -205,11 +209,41 @@ function currentPeriodKey() {
 }
 function periodFromDate(dateStr) {
   if (!dateStr) return '未分期';
+  // 优先用 DB periods 表；表为空时回退默认4季度
+  if (typeof PERIODS !== 'undefined' && PERIODS.length) {
+    const m = parseInt(dateStr.slice(5, 7));
+    const p = PERIODS.find(x => monthInPeriod(m, x));
+    return p ? p.name : '未分期';
+  }
   const m = parseInt(dateStr.slice(5, 7));
   if (m >= 1 && m <= 3) return '1月期';
   if (m >= 4 && m <= 6) return '4月期';
   if (m >= 7 && m <= 9) return '7月期';
   return '10月期';
+}
+
+// ── 期数（可自定义的月份范围筛选器）──
+// PERIODS：从 DB periods 表加载。每个期 = 名字 + 起始月 + 结束月（跨年时 end<start）。
+// 期是筛选维度，不是给课贴的归属标签——点某个期=筛出开课月份落在该范围的课。
+let PERIODS = [];
+async function loadPeriodsFromDB() {
+  try {
+    const rows = await sb('/rest/v1/periods?select=*&order=sort_order.asc');
+    PERIODS = rows || [];
+  } catch (e) { PERIODS = []; }
+}
+// 某月份 m(1-12) 是否落在期 p 的范围内（支持跨年：end<start 表示跨年，如 9→1 = 9,10,11,12,1）
+function monthInPeriod(m, p) {
+  if (!p) return false;
+  const s = p.start_month, e = p.end_month;
+  if (s <= e) return m >= s && m <= e;      // 普通范围
+  return m >= s || m <= e;                    // 跨年范围
+}
+// 某开课日期落在哪个期（返回期对象；用于分组/显示）。可能匹配多个，取第一个。
+function periodOfDate(dateStr) {
+  if (!dateStr) return null;
+  const m = parseInt(dateStr.slice(5, 7));
+  return PERIODS.find(p => monthInPeriod(m, p)) || null;
 }
 
 // ── 课程颜色 ──
