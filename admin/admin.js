@@ -775,6 +775,7 @@ async function deleteTeacher(id){
 async function initApp(){
   bkMonth=new Date().getMonth();bkYear=new Date().getFullYear();
   await loadMajorsFromDB();
+  await loadPeriodsFromDB();
   await renderPage();
 }
 // 页面启动：先解析访问钥匙，再决定登录流程
