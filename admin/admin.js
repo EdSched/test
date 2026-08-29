@@ -41,8 +41,114 @@ function doLogout(){localStorage.removeItem('txe_login');localStorage.removeItem
 const HUB_DOMAINS=['大学院文科','大学院理科','学部文科','学部理科','语言-日语','语言-英语'];
 function showHub(){
   const el=document.getElementById('hubOverlay');
-  if(el){ el.style.display='flex'; }
+  if(el){ renderHubCards(); el.style.display='flex'; }
   else { enterDomain('all'); } // 兜底：没有中枢层界面则直接进总览，保证系统始终可用
+}
+// 从 DOMAINS 动态生成中枢台领域卡片（含「总览」+ 管控台入口）
+function renderHubCards(){
+  const grid=document.getElementById('hubDomainGrid');
+  if(!grid) return;
+  const card=(onclick,title,sub)=>`<div onclick="${onclick}" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:16px 12px;background:var(--surface);transition:.15s" onmouseover="this.style.borderColor='var(--primary,#8b5cf6)'" onmouseout="this.style.borderColor='var(--border)'"><div style="font-weight:600;font-size:14px">${title}</div>${sub?`<div style="font-size:10px;color:var(--text-3);margin-top:3px">${sub}</div>`:''}</div>`;
+  let html=card("enterDomain('all')",'总览','全部领域 · admin');
+  DOMAINS.forEach(d=>{ html+=card(`enterDomain('${d.label}')`, d.label, ''); });
+  // 管控台入口（仅 admin 可见——领域钥匙用户不会进到中枢台）
+  html+=card("openConsole()",'⚙ 管控台','生成领域访问链接');
+  grid.innerHTML=html;
+}
+
+// ══════════ 管控台：领域访问链接管理 ══════════
+let _consoleKeys=[];
+function openConsole(){
+  const el=document.getElementById('consoleOverlay'); if(!el) return;
+  document.getElementById('hubOverlay').style.display='none';
+  el.style.display='flex';
+  loadConsole();
+}
+function closeConsole(){
+  document.getElementById('consoleOverlay').style.display='none';
+  showHub();
+}
+async function loadConsole(){
+  const body=document.getElementById('consoleBody');
+  body.innerHTML='<div style="padding:20px;color:var(--text-3);font-size:12px">加载中…</div>';
+  try{
+    _consoleKeys=await sb('/rest/v1/access_keys?select=*&order=created_at.desc')||[];
+    renderConsole();
+  }catch(e){ body.innerHTML=`<div style="padding:20px;color:var(--danger)">加载失败：${e.message}</div>`; }
+}
+function renderConsole(){
+  const body=document.getElementById('consoleBody');
+  const base=location.origin+location.pathname.replace(/[^/]*$/,'')+'index.html';
+  // 新建区（用 select 选领域，不用 radio）
+  const domainOpts=DOMAINS.map(d=>`<option value="${d.label}">${d.label}</option>`).join('');
+  let html=`
+  <div style="border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:18px;background:var(--bg,#faf9f7)">
+    <div style="font-size:12px;font-weight:600;margin-bottom:10px">＋ 新建访问链接</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">领域</div>
+        <select id="nk_domain" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">${domainOpts}</select></div>
+      <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">密码</div>
+        <input id="nk_pw" placeholder="设置访问密码" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;width:130px"></div>
+      <div style="flex:1;min-width:120px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">备注（如负责人名）</div>
+        <input id="nk_label" placeholder="选填" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;width:100%"></div>
+      <button class="btn btn-primary btn-sm" onclick="createAccessKey()">生成链接</button>
+    </div>
+  </div>`;
+  // 钥匙列表
+  if(!_consoleKeys.length){
+    html+='<div style="padding:16px;color:var(--text-3);font-size:12px">暂无访问链接</div>';
+  } else {
+    html+='<div style="display:flex;flex-direction:column;gap:8px">';
+    _consoleKeys.forEach(kk=>{
+      if(kk.is_admin) return; // admin 那把不在此管理
+      const url=`${base}?k=${kk.k}`;
+      html+=`<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;${kk.active?'':'opacity:.5'}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:13px">${kk.domain}</span>
+          ${kk.label?`<span style="font-size:11px;color:var(--text-2)">${kk.label}</span>`:''}
+          <span style="font-size:11px;color:var(--text-3)">密码：${kk.password}</span>
+          ${kk.active?'':'<span style="font-size:10px;color:var(--danger)">已停用</span>'}
+          <span style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-outline btn-sm" onclick="copyKeyLink('${kk.k}')">复制链接</button>
+            <button class="btn btn-outline btn-sm" onclick="toggleKey('${kk.k}',${kk.active})">${kk.active?'停用':'启用'}</button>
+            <button class="btn btn-outline btn-sm" onclick="deleteKey('${kk.k}')">删除</button>
+          </span>
+        </div>
+        <div style="font-size:10px;color:var(--text-3);margin-top:5px;word-break:break-all">${url}</div>
+      </div>`;
+    });
+    html+='</div>';
+  }
+  body.innerHTML=html;
+}
+async function createAccessKey(){
+  const domain=document.getElementById('nk_domain').value;
+  const pw=document.getElementById('nk_pw').value.trim();
+  const label=document.getElementById('nk_label').value.trim();
+  if(!pw){ alert('请设置访问密码'); return; }
+  // 标识 = 领域代码 + 短随机后缀（一个领域可多把）
+  const code=domainCode(domain)||'dom';
+  const k=code+'-'+Date.now().toString(36).slice(-4);
+  try{
+    await sb('/rest/v1/access_keys','POST',{k,password:pw,domain,is_admin:false,label:label||null,active:true});
+    document.getElementById('nk_pw').value=''; document.getElementById('nk_label').value='';
+    await loadConsole();
+    alert(`已生成「${domain}」访问链接，密码：${pw}`);
+  }catch(e){ alert('生成失败：'+e.message); }
+}
+function copyKeyLink(k){
+  const base=location.origin+location.pathname.replace(/[^/]*$/,'')+'index.html';
+  const url=`${base}?k=${k}`;
+  navigator.clipboard?.writeText(url).then(()=>alert('链接已复制：\n'+url)).catch(()=>prompt('复制此链接：',url));
+}
+async function toggleKey(k,cur){
+  try{ await sb(`/rest/v1/access_keys?k=eq.${k}`,'PATCH',{active:!cur}); await loadConsole(); }
+  catch(e){ alert('操作失败：'+e.message); }
+}
+async function deleteKey(k){
+  if(!confirm('确定删除这个访问链接？删除后该链接立即失效。')) return;
+  try{ await sb(`/rest/v1/access_keys?k=eq.${k}`,'DELETE'); await loadConsole(); }
+  catch(e){ alert('删除失败：'+e.message); }
 }
 async function enterDomain(domain){
   CURRENT_DOMAIN = (domain==='all'||!domain) ? 'all' : domain;
