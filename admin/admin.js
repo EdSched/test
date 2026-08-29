@@ -25,7 +25,7 @@ function doLogin(){
       localStorage.setItem('txe_login',JSON.stringify({ts:Date.now()}));
       document.getElementById('loginOverlay').style.display='none';
       if(ACCESS_KEY.is_admin){ showHub(); }           // admin钥匙 → 中枢台
-      else { enterDomain(ACCESS_KEY.domain); }         // 领域钥匙 → 直达该领域
+      else { enterDomain(ACCESS_KEY.domain, ACCESS_KEY.major); } // 领域/专业钥匙 → 直达
     } else { loginErr('密码错误，请重试'); }
     return;
   }
@@ -86,7 +86,9 @@ function renderConsole(){
     <div style="font-size:12px;font-weight:600;margin-bottom:10px">＋ 新建访问链接</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
       <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">领域</div>
-        <select id="nk_domain" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">${domainOpts}</select></div>
+        <select id="nk_domain" onchange="updateConsoleMajorOpts()" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">${domainOpts}</select></div>
+      <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">限定专业（选填）</div>
+        <select id="nk_major" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px"><option value="">整个领域</option></select></div>
       <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">密码</div>
         <input id="nk_pw" placeholder="设置访问密码" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;width:130px"></div>
       <div style="flex:1;min-width:120px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">备注（如负责人名）</div>
@@ -104,7 +106,7 @@ function renderConsole(){
       const url=`${base}?k=${kk.k}`;
       html+=`<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;${kk.active?'':'opacity:.5'}">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span style="font-weight:600;font-size:13px">${kk.domain}</span>
+          <span style="font-weight:600;font-size:13px">${kk.domain}${kk.major?' · '+(MAJORS[kk.major]||kk.major):''}</span>
           ${kk.label?`<span style="font-size:11px;color:var(--text-2)">${kk.label}</span>`:''}
           <span style="font-size:11px;color:var(--text-3)">密码：${kk.password}</span>
           ${kk.active?'':'<span style="font-size:10px;color:var(--danger)">已停用</span>'}
@@ -120,21 +122,34 @@ function renderConsole(){
     html+='</div>';
   }
   body.innerHTML=html;
+  updateConsoleMajorOpts(); // 初始化「限定专业」下拉为默认领域的专业
 }
 async function createAccessKey(){
   const domain=document.getElementById('nk_domain').value;
+  const major=document.getElementById('nk_major').value;
   const pw=document.getElementById('nk_pw').value.trim();
   const label=document.getElementById('nk_label').value.trim();
   if(!pw){ alert('请设置访问密码'); return; }
-  // 标识 = 领域代码 + 短随机后缀（一个领域可多把）
+  // 标识 = 领域代码(+专业代码) + 短随机后缀
   const code=domainCode(domain)||'dom';
-  const k=code+'-'+Date.now().toString(36).slice(-4);
+  const k=code+(major?'_'+major:'')+'-'+Date.now().toString(36).slice(-4);
   try{
-    await sb('/rest/v1/access_keys','POST',{k,password:pw,domain,is_admin:false,label:label||null,active:true});
+    await sb('/rest/v1/access_keys','POST',{k,password:pw,domain,major:major||null,is_admin:false,label:label||null,active:true});
     document.getElementById('nk_pw').value=''; document.getElementById('nk_label').value='';
     await loadConsole();
-    alert(`已生成「${domain}」访问链接，密码：${pw}`);
+    alert(`已生成「${domain}${major?' · '+(MAJORS[major]||major):''}」访问链接，密码：${pw}`);
   }catch(e){ alert('生成失败：'+e.message); }
+}
+// 领域下拉变化时，联动更新「限定专业」选项（只出该领域的专业）
+function updateConsoleMajorOpts(){
+  const domain=document.getElementById('nk_domain').value;
+  const sel=document.getElementById('nk_major');
+  if(!sel) return;
+  let opts='<option value="">整个领域</option>';
+  allMajorKeys().forEach(k=>{
+    if(MAJOR_DOMAIN[k]===domain) opts+=`<option value="${k}">${MAJORS[k]||k}</option>`;
+  });
+  sel.innerHTML=opts;
 }
 function copyKeyLink(k){
   const base=location.origin+location.pathname.replace(/[^/]*$/,'')+'index.html';
@@ -150,14 +165,19 @@ async function deleteKey(k){
   try{ await sb(`/rest/v1/access_keys?k=eq.${k}`,'DELETE'); await loadConsole(); }
   catch(e){ alert('删除失败：'+e.message); }
 }
-async function enterDomain(domain){
+async function enterDomain(domain, major){
   CURRENT_DOMAIN = (domain==='all'||!domain) ? 'all' : domain;
+  CURRENT_MAJOR = major || '';   // 专业锁（专业钥匙才有）
   try{ localStorage.setItem('txe_domain', CURRENT_DOMAIN); }catch(e){}
   const el=document.getElementById('hubOverlay'); if(el) el.style.display='none';
-  // 在顶栏显示当前视角
+  // 在顶栏显示当前视角（专业锁时附带专业名）
   const tag=document.getElementById('domainTag');
-  if(tag) tag.textContent = CURRENT_DOMAIN==='all' ? '总览·全部领域' : CURRENT_DOMAIN;
-  // 领域钥匙用户：隐藏「切换视角」（锁定在自己领域）
+  if(tag){
+    let t = CURRENT_DOMAIN==='all' ? '总览·全部领域' : CURRENT_DOMAIN;
+    if(CURRENT_MAJOR) t += ' · '+(MAJORS[CURRENT_MAJOR]||CURRENT_MAJOR);
+    tag.textContent = t;
+  }
+  // 领域/专业钥匙用户：隐藏「切换视角」（锁定）
   const sw=document.getElementById('switchViewBtn');
   if(sw) sw.style.display=(ACCESS_KEY && !ACCESS_KEY.invalid && !ACCESS_KEY.is_admin)?'none':'';
   await initApp();
@@ -768,7 +788,7 @@ async function initApp(){
   }
   // 已登录：admin钥匙/无k → 中枢台；领域钥匙 → 直达该领域
   if(checkLogin()){
-    if(ACCESS_KEY && !ACCESS_KEY.is_admin){ enterDomain(ACCESS_KEY.domain); }
+    if(ACCESS_KEY && !ACCESS_KEY.is_admin){ enterDomain(ACCESS_KEY.domain, ACCESS_KEY.major); }
     else { showHub(); }
     return;
   }
