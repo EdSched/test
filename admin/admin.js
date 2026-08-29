@@ -781,6 +781,9 @@ async function initApp(){
 // 页面启动：先解析访问钥匙，再决定登录流程
 (async function bootAuth(){
   await loadAccessKey();
+  // 基础数据（专业、期数）在任何分支前先加载，保证中枢台/各页面都能用
+  await loadMajorsFromDB();
+  await loadPeriodsFromDB();
   // 钥匙无效：提示并停在登录框
   if(ACCESS_KEY && ACCESS_KEY.invalid){
     document.getElementById('loginOverlay').style.display='flex';
