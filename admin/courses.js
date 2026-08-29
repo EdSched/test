@@ -312,6 +312,7 @@ function renderCourseCleanupPage(mc){
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-outline btn-sm" onclick="cleanupSelectAllFiltered()">☑ 全选当前筛选</button>
       <button class="btn btn-outline btn-sm" onclick="cleanupClearSelection()">清空选择</button>
+      ${(!ACCESS_KEY||ACCESS_KEY.is_admin)?`<button class="btn btn-outline btn-sm" onclick="openPeriodManager()" title="定义期数（月份范围/跨年）">⚙ 期数定义</button>`:''}
       <select id="cleanup_period_target" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
         <option value="">批量改期数…</option>
         ${PERIODS.map(p=>`<option value="${p.name}">${p.name}</option>`).join('')}
@@ -775,7 +776,6 @@ function renderCoursesPage(mc){
         <div class="filter-chip${coursesPeriodFilter==='current'?' active':''}" onclick="setCoursesPeriod('current',this)" style="font-size:11px;padding:3px 10px">当前期（${curPeriod}）</div>
         ${allPeriods.map(p=>`<div class="filter-chip${coursesPeriodFilter===p.key?' active':''}" onclick="setCoursesPeriod('${p.key}',this)" style="font-size:11px;padding:3px 10px">${p.key}</div>`).join('')}
         <div class="filter-chip${coursesPeriodFilter==='all'?' active':''}" onclick="setCoursesPeriod('all',this)" style="font-size:11px;padding:3px 10px">全部</div>
-        ${(!ACCESS_KEY||ACCESS_KEY.is_admin)?`<div onclick="openPeriodManager()" style="font-size:11px;padding:3px 10px;cursor:pointer;color:var(--text-3);border:1px dashed var(--border);border-radius:3px" title="管理期数定义">⚙ 期数</div>`:''}
       </div>
     </div>
   </div>
@@ -958,7 +958,7 @@ async function savePeriod(id){
   try{
     await sb(`/rest/v1/periods?id=eq.${id}`,'PATCH',{name,start_month:s,end_month:e});
     await loadPeriodsFromDB(); renderPeriodMgr();
-    renderCoursesPage(document.getElementById('mainContent'));
+    renderCourseCleanupPage(document.getElementById('mainContent'));
   }catch(err){ alert('保存失败：'+err.message); }
 }
 async function addPeriod(){
@@ -970,7 +970,7 @@ async function addPeriod(){
     const maxOrder=Math.max(0,...PERIODS.map(p=>p.sort_order||0));
     await sb('/rest/v1/periods','POST',{name,start_month:s,end_month:e,sort_order:maxOrder+1});
     await loadPeriodsFromDB(); renderPeriodMgr();
-    renderCoursesPage(document.getElementById('mainContent'));
+    renderCourseCleanupPage(document.getElementById('mainContent'));
   }catch(err){ alert('新增失败：'+err.message); }
 }
 async function deletePeriod(id){
@@ -978,7 +978,7 @@ async function deletePeriod(id){
   try{
     await sb(`/rest/v1/periods?id=eq.${id}`,'DELETE');
     await loadPeriodsFromDB(); renderPeriodMgr();
-    renderCoursesPage(document.getElementById('mainContent'));
+    renderCourseCleanupPage(document.getElementById('mainContent'));
   }catch(err){ alert('删除失败：'+err.message); }
 }
 function setCoursesType(t,el){
