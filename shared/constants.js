@@ -19,8 +19,7 @@ const DOMAINS = [
   { code: 'daigakuin_rika',  label: '大学院理科' },
   { code: 'gakubu_bunka',    label: '学部文科' },
   { code: 'gakubu_rika',     label: '学部理科' },
-  { code: 'gengo_nihongo',   label: '语言-日语' },
-  { code: 'gengo_eigo',      label: '语言-英语' },
+  { code: 'gengo',           label: '语言' },
 ];
 // 领域中文 → 代码
 function domainCode(label){ const d=DOMAINS.find(x=>x.label===label); return d?d.code:''; }
