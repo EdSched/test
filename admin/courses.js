@@ -677,6 +677,8 @@ async function openApplyTemplate(templateId){
 }
 
 function renderCoursesPage(mc){
+  // 专业钥匙锁定：强制默认选中锁定的专业（用户不能改）
+  if(CURRENT_MAJOR) coursesMajorFilter=CURRENT_MAJOR;
 
   const curPeriod=currentPeriodKey();
   // 领域感知筛选：
