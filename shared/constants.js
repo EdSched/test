@@ -198,10 +198,6 @@ function matchesMajorFilter(major, filter) {
 // ── 期数工具 ──
 function currentPeriodKey() {
   const m = new Date().getMonth() + 1;
-  if (typeof PERIODS !== 'undefined' && PERIODS.length) {
-    const p = PERIODS.find(x => monthInPeriod(m, x));
-    return p ? p.name : '未分期';
-  }
   if (m >= 1 && m <= 3) return '1月期';
   if (m >= 4 && m <= 6) return '4月期';
   if (m >= 7 && m <= 9) return '7月期';
@@ -209,12 +205,6 @@ function currentPeriodKey() {
 }
 function periodFromDate(dateStr) {
   if (!dateStr) return '未分期';
-  // 优先用 DB periods 表；表为空时回退默认4季度
-  if (typeof PERIODS !== 'undefined' && PERIODS.length) {
-    const m = parseInt(dateStr.slice(5, 7));
-    const p = PERIODS.find(x => monthInPeriod(m, x));
-    return p ? p.name : '未分期';
-  }
   const m = parseInt(dateStr.slice(5, 7));
   if (m >= 1 && m <= 3) return '1月期';
   if (m >= 4 && m <= 6) return '4月期';
