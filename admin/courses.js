@@ -759,7 +759,11 @@ function renderCoursesSummary(courses){
   const groups={};
   const groupOrder=[];
   uniqueCourses.forEach(c=>{
-    const key=courseGroupKey(c.name);
+    // 分组 key = 课程名（去末尾数字，合并分班1/2）+ 期数 + 年份
+    // 这样同名不同期的课分成独立组，不再混在一起；同期同名（含分班）才合并
+    const nameKey=courseGroupKey(c.name);
+    const yr=c.first_session_date?c.first_session_date.slice(0,4):'';
+    const key=`${nameKey}|${c.period||''}|${yr}`;
     if(!groups[key]){groups[key]={course:c,sessions:[]};groupOrder.push(key)}
     const sess=cachedSessions.filter(s=>s.course_id===c.id).sort((a,b)=>a.session_date.localeCompare(b.session_date));
     groups[key].sessions.push(...sess);
@@ -777,14 +781,16 @@ function renderCoursesSummary(courses){
   return `<div style="display:flex;flex-direction:column;gap:12px">
     ${groupOrder.map(key=>{
       const {course,sessions}=groups[key];
-      const color=courseColor(key);
+      const dispName=courseGroupKey(course.name);
+      const color=courseColor(dispName);
       const total=sessions.length||course.total_sessions||0;
       const teacherStr=course.teacher?` · ${course.teacher}`:'';
       const timeStr=course.time_range?` · ${course.time_range}`:'';
   return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden">
         <div style="background:${color.bg};color:${color.text};padding:8px 14px;display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-size:12px;font-weight:600">${key}</span>
+            <span style="font-size:12px;font-weight:600">${dispName}</span>
+            ${course.period?`<span style="font-size:10px;opacity:.7;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 6px">${course.period}</span>`:''}
             ${course.first_session_date?`<span style="font-size:10px;opacity:.6;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 5px">${course.first_session_date.slice(0,4)}年</span>`:''}
             ${(course.major||[]).length>1?`<span style="font-size:9px;opacity:.6">${(course.major||[]).map(m=>MAJORS[m]||m).join('・')}</span>`:''}
             ${course.teacher?`<span style="font-size:10px;opacity:.75">👤 ${course.teacher}</span>`:''}
