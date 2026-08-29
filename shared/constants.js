@@ -232,6 +232,12 @@ async function loadPeriodsFromDB() {
     PERIODS = rows || [];
   } catch (e) { PERIODS = []; }
 }
+// 某课的「有效期数」：手动指定(period_override)优先，否则按开课月份自动落入 PERIODS
+function effectivePeriod(c) {
+  if (c && c.period_override) return c.period_override;
+  return periodFromDate(c && c.first_session_date);
+}
+
 // 某月份 m(1-12) 是否落在期 p 的范围内（支持跨年：end<start 表示跨年，如 9→1 = 9,10,11,12,1）
 function monthInPeriod(m, p) {
   if (!p) return false;
