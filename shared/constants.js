@@ -11,6 +11,22 @@ let MAJORS = {
 };
 const SHAKAI_GROUP = ['shakai', 'shinpan', 'fukushi'];
 
+// ── 领域（domain）对照 ──
+// 领域中文 ↔ 罗马音代码。中枢台卡片、访问钥匙标识都从这里读，统一来源避免不一致。
+// 领域不常变；如需增删领域，改这一处即可。
+const DOMAINS = [
+  { code: 'daigakuin_bunka', label: '大学院文科' },
+  { code: 'daigakuin_rika',  label: '大学院理科' },
+  { code: 'gakubu_bunka',    label: '学部文科' },
+  { code: 'gakubu_rika',     label: '学部理科' },
+  { code: 'gengo_nihongo',   label: '语言-日语' },
+  { code: 'gengo_eigo',      label: '语言-英语' },
+];
+// 领域中文 → 代码
+function domainCode(label){ const d=DOMAINS.find(x=>x.label===label); return d?d.code:''; }
+// 代码 → 领域中文
+function domainLabel(code){ const d=DOMAINS.find(x=>x.code===code); return d?d.label:''; }
+
 // ── 领域（domain）视角 ──
 // CURRENT_DOMAIN：当前登录视角所在的领域。''（空）或 'all' 表示总览（admin 看全部）。
 // 领域负责人登录后会被锁定为某个具体领域（如「大学院理科」）。
