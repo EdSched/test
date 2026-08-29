@@ -30,6 +30,9 @@ function domainLabel(code){ const d=DOMAINS.find(x=>x.code===code); return d?d.l
 // CURRENT_DOMAIN：当前登录视角所在的领域。''（空）或 'all' 表示总览（admin 看全部）。
 // 领域负责人登录后会被锁定为某个具体领域（如「大学院理科」）。
 let CURRENT_DOMAIN = '';
+// CURRENT_MAJOR：专业锁。空=不锁（看整个领域）；有值=锁定到某专业（专业钥匙用户）。
+// 与 CURRENT_DOMAIN 并列的全局锁，任何页面需要时按它过滤即可（先课程页，以后可扩展）。
+let CURRENT_MAJOR = '';
 // MAJOR_DOMAIN：专业 key → 所属领域。
 // 初始给 5 个写死的核心专业兜底 domain（都属大学院文科），保证 DB 未加载完/加载失败时领域也不错位；
 // loadMajorsFromDB() 会用 DB majors.domain 覆盖/补充，日常修改一律走 DB，此处不锁死。
@@ -70,6 +73,8 @@ function expandMajorFilter(key) {
 // 筛选栏 chip 顺序：经营 经济 [社会人文组] 社会 新传 福祉 …新增专业追加末尾
 //   opts.includeAll=true 时在最前面加入 'all'
 function majorFilterKeys(opts = {}) {
+  // 专业锁（专业钥匙用户）：只显示锁定的那一个专业，不能切换
+  if (CURRENT_MAJOR) return [CURRENT_MAJOR];
   let ordered = ['keiei', 'keizai', 'shakai_group', 'shakai', 'shinpan', 'fukushi'];
   allMajorKeys().forEach(k => { if (!ordered.includes(k)) ordered.push(k); });
   // 领域视角过滤：非总览时，只保留属于当前领域的专业（shakai_group 组只要有成员在领域内就保留）
