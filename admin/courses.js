@@ -275,21 +275,23 @@ function renderCourseCleanupPage(mc){
   // 按「年份 + 期数」分组，年份取自 first_session_date
   let majorList=expandMajorFilter(cleanupMajorFilter);
   let filtered=cachedCourses.filter(c=>(c.major||[]).some(m=>majorList.includes(m)));
+  // 领域过滤：非总览视角只看当前领域的课
+  if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all') filtered=filtered.filter(c=>c.domain===CURRENT_DOMAIN);
 
   if(cleanupTypeFilter==='专业课') filtered=filtered.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
   else if(cleanupTypeFilter==='共通课') filtered=filtered.filter(c=>c.course_type?.includes('共通'));
   else if(cleanupTypeFilter==='VIP') filtered=filtered.filter(c=>c.course_type?.includes('VIP'));
 
-  if(cleanupPeriodFilter!=='all') filtered=filtered.filter(c=>c.period===cleanupPeriodFilter);
+  if(cleanupPeriodFilter!=='all') filtered=filtered.filter(c=>effectivePeriod(c)===cleanupPeriodFilter);
   if(cleanupYearFilter!=='all') filtered=filtered.filter(c=>c.first_session_date?.startsWith(cleanupYearFilter));
 
   const allYears=[...new Set(cachedCourses.filter(c=>c.first_session_date).map(c=>c.first_session_date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
-  const allCleanupPeriods=['1月期','4月期','7月期','10月期'];
+  const allCleanupPeriods=PERIODS.map(p=>p.name);
 
   const groups={};
   filtered.forEach(c=>{
     const year=c.first_session_date?c.first_session_date.slice(0,4):'未知年份';
-    const period=c.period||'未设期数';
+    const period=effectivePeriod(c)||'未设期数';
     const key=`${year}年 ${period}`;
     if(!groups[key]) groups[key]={key,year,period,courses:[]};
     groups[key].courses.push(c);
@@ -310,6 +312,12 @@ function renderCourseCleanupPage(mc){
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-outline btn-sm" onclick="cleanupSelectAllFiltered()">☑ 全选当前筛选</button>
       <button class="btn btn-outline btn-sm" onclick="cleanupClearSelection()">清空选择</button>
+      <select id="cleanup_period_target" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
+        <option value="">批量改期数…</option>
+        ${PERIODS.map(p=>`<option value="${p.name}">${p.name}</option>`).join('')}
+        <option value="__auto__">↺ 恢复自动分期</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="cleanupApplyPeriod()">应用 (<span id="cleanup_count2">0</span>)</button>
       <button class="btn btn-primary btn-sm" onclick="cleanupExportInfo()">📄 导出所选信息</button>
       <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger);background:none" onclick="cleanupDeleteSelected()">删除已选 (<span id="cleanup_count">0</span>)</button>
     </div>
@@ -427,7 +435,27 @@ function cleanupRowClick(e,id){
     row.style.backgroundColor='var(--accent-light, #e8e0d0)';
     row.style.borderColor='var(--accent)';
   }
+  const c2=document.getElementById('cleanup_count2');
   document.getElementById('cleanup_count').textContent=cleanupSelected.size;
+  if(c2) c2.textContent=cleanupSelected.size;
+}
+// 批量把选中课的期数设为指定值（写 period_override）；__auto__=清除覆盖恢复自动
+async function cleanupApplyPeriod(){
+  if(!cleanupSelected.size){alert('请先选中课程');return}
+  const target=document.getElementById('cleanup_period_target').value;
+  if(!target){alert('请选择要设置的期数');return}
+  const val = target==='__auto__' ? null : target;
+  const label = target==='__auto__' ? '恢复自动分期' : target;
+  if(!confirm(`把选中的 ${cleanupSelected.size} 门课的期数设为「${label}」？`))return;
+  try{
+    for(const id of cleanupSelected){
+      await sb(`/rest/v1/courses?id=eq.${id}`,'PATCH',{period_override:val});
+      const c=cachedCourses.find(x=>x.id===id); if(c) c.period_override=val;
+    }
+    alert(`已更新 ${cleanupSelected.size} 门课的期数`);
+    cleanupSelected.clear();
+    renderCourseCleanupPage(document.getElementById('mainContent'));
+  }catch(e){alert('设置失败：'+e.message)}
 }
 function cleanupClearSelection(){
   cleanupSelected.clear();
@@ -695,11 +723,11 @@ function renderCoursesPage(mc){
     if(c.major&&c.major.length) return c.major.some(m=>majorList.includes(m));
     return false; // 选了具体专业时，无专业的课不匹配
   });
-  if(coursesPeriodFilter==='current') filtered=filtered.filter(c=>periodFromDate(c.first_session_date)===curPeriod);
+  if(coursesPeriodFilter==='current') filtered=filtered.filter(c=>effectivePeriod(c)===curPeriod);
   else if(coursesPeriodFilter!=='all'){
     const [filterYear,filterPeriod]=coursesPeriodFilter.match(/(\d{4})年(.+)/)?.slice(1)||[];
-    if(filterYear&&filterPeriod) filtered=filtered.filter(c=>periodFromDate(c.first_session_date)===filterPeriod&&c.first_session_date?.startsWith(filterYear));
-    else filtered=filtered.filter(c=>periodFromDate(c.first_session_date)===coursesPeriodFilter);
+    if(filterYear&&filterPeriod) filtered=filtered.filter(c=>effectivePeriod(c)===filterPeriod&&c.first_session_date?.startsWith(filterYear));
+    else filtered=filtered.filter(c=>effectivePeriod(c)===coursesPeriodFilter);
   }
   // 课程属性筛选
   if(coursesTypeFilter==='专业课') filtered=filtered.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
@@ -708,7 +736,7 @@ function renderCoursesPage(mc){
 
   const allPeriods=[...new Map(cachedCourses
     .filter(c=>c.first_session_date)
-    .map(c=>{const year=c.first_session_date.slice(0,4);const per=periodFromDate(c.first_session_date);const key=`${year}年${per}`;return [key,{key,period:per,year}]})
+    .map(c=>{const year=c.first_session_date.slice(0,4);const per=effectivePeriod(c);const key=`${year}年${per}`;return [key,{key,period:per,year}]})
   ).values()].sort((a,b)=>a.key.localeCompare(b.key));
 
   mc.innerHTML=`
@@ -773,7 +801,7 @@ function renderCoursesSummary(courses){
     // 这样同名不同期的课分成独立组，不再混在一起；同期同名（含分班）才合并
     const nameKey=courseGroupKey(c.name);
     const yr=c.first_session_date?c.first_session_date.slice(0,4):'';
-    const key=`${nameKey}|${periodFromDate(c.first_session_date)}|${yr}`;
+    const key=`${nameKey}|${effectivePeriod(c)}|${yr}`;
     if(!groups[key]){groups[key]={course:c,sessions:[]};groupOrder.push(key)}
     const sess=cachedSessions.filter(s=>s.course_id===c.id).sort((a,b)=>a.session_date.localeCompare(b.session_date));
     groups[key].sessions.push(...sess);
@@ -800,7 +828,7 @@ function renderCoursesSummary(courses){
         <div style="background:${color.bg};color:${color.text};padding:8px 14px;display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span style="font-size:12px;font-weight:600">${dispName}</span>
-            ${course.first_session_date?`<span style="font-size:10px;opacity:.7;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 6px">${periodFromDate(course.first_session_date)}</span>`:''}
+            ${course.first_session_date?`<span style="font-size:10px;opacity:.7;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 6px">${effectivePeriod(course)}</span>`:''}
             ${course.first_session_date?`<span style="font-size:10px;opacity:.6;background:rgba(0,0,0,.08);border-radius:2px;padding:1px 5px">${course.first_session_date.slice(0,4)}年</span>`:''}
             ${(course.major||[]).length>1?`<span style="font-size:9px;opacity:.6">${(course.major||[]).map(m=>MAJORS[m]||m).join('・')}</span>`:''}
             ${course.teacher?`<span style="font-size:10px;opacity:.75">👤 ${course.teacher}</span>`:''}
