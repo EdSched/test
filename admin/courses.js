@@ -338,7 +338,7 @@ function renderCourseCleanupPage(mc){
       </div>
     </div>
     <div>
-      <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">期数${(!ACCESS_KEY||ACCESS_KEY.is_admin)?` <span onclick="openPeriodManager()" style="cursor:pointer;color:var(--primary,#8b5cf6);font-size:11px;margin-left:2px" title="编辑期数定义">✏</span>`:''}</div>
+      <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">期数</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap">
         <div class="filter-chip${cleanupPeriodFilter==='all'?' active':''}" onclick="setCleanupPeriod('all',this)" style="font-size:11px;padding:3px 10px">全部</div>
         ${allCleanupPeriods.map(p=>`<div class="filter-chip${cleanupPeriodFilter===p?' active':''}" onclick="setCleanupPeriod('${p}',this)" style="font-size:11px;padding:3px 10px">${p}</div>`).join('')}
@@ -407,14 +407,15 @@ function renderCourseCleanupPage(mc){
   </div>
 
   <!-- 批量改期浮动条：选中课时才显示 -->
-  <div id="cleanup_period_bar" style="display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px 16px;align-items:center;gap:10px">
-    <span style="font-size:12px;color:var(--text-2)">已选 <b id="cleanup_bar_count">0</b> 门 → 期数改为</span>
-    <select id="cleanup_period_target" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
-      ${PERIODS.map(p=>`<option value="${p.name}">${p.name}</option>`).join('')}
-      <option value="__auto__">↺ 恢复自动分期</option>
-    </select>
+  <div id="cleanup_period_bar" style="display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px 16px;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--text-2)">已选 <b id="cleanup_bar_count">0</b> 门 · 期数</span>
+    <input id="cp_name" placeholder="期名，如 春季期" style="width:110px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
+    <select id="cp_start" style="padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px">${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}月</option>`).join('')}</select>
+    <span style="font-size:11px;color:var(--text-3)">到</span>
+    <select id="cp_end" style="padding:5px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px">${Array.from({length:12},(_,i)=>`<option value="${i+1}"${i===2?' selected':''}>${i+1}月</option>`).join('')}</select>
     <button class="btn btn-primary btn-sm" onclick="cleanupApplyPeriod()">应用</button>
     <button class="btn btn-outline btn-sm" onclick="cleanupClearSelection()">取消</button>
+    <span style="font-size:10px;color:var(--text-3);width:100%">结束月小于起始月＝跨年（如 9月到1月）</span>
   </div>`;
 
   renderTemplateList();
@@ -460,20 +461,31 @@ function updateCleanupPeriodBar(){
 // 批量把选中课的期数设为指定值（写 period_override）；__auto__=清除覆盖恢复自动
 async function cleanupApplyPeriod(){
   if(!cleanupSelected.size){alert('请先选中课程');return}
-  const target=document.getElementById('cleanup_period_target').value;
-  if(!target){alert('请选择要设置的期数');return}
-  const val = target==='__auto__' ? null : target;
-  const label = target==='__auto__' ? '恢复自动分期' : target;
-  if(!confirm(`把选中的 ${cleanupSelected.size} 门课的期数设为「${label}」？`))return;
+  const name=document.getElementById('cp_name').value.trim();
+  const s=parseInt(document.getElementById('cp_start').value);
+  const e=parseInt(document.getElementById('cp_end').value);
+  if(!name){alert('请填期名');return}
+  const cross=s>e?'（跨年）':'';
+  if(!confirm(`把选中的 ${cleanupSelected.size} 门课定义为「${name}」（${s}月到${e}月${cross}）？`))return;
   try{
-    for(const id of cleanupSelected){
-      await sb(`/rest/v1/courses?id=eq.${id}`,'PATCH',{period_override:val});
-      const c=cachedCourses.find(x=>x.id===id); if(c) c.period_override=val;
+    // 1) 登记期到 periods 表：同名则更新月份范围，否则新增（供筛选识别、跨年归类）
+    const exist=PERIODS.find(p=>p.name===name);
+    if(exist){
+      await sb(`/rest/v1/periods?id=eq.${exist.id}`,'PATCH',{start_month:s,end_month:e});
+    }else{
+      const maxOrder=Math.max(0,...PERIODS.map(p=>p.sort_order||0));
+      await sb('/rest/v1/periods','POST',{name,start_month:s,end_month:e,sort_order:maxOrder+1});
     }
-    alert(`已更新 ${cleanupSelected.size} 门课的期数`);
+    await loadPeriodsFromDB();
+    // 2) 选中课贴上这个期名
+    for(const id of cleanupSelected){
+      await sb(`/rest/v1/courses?id=eq.${id}`,'PATCH',{period_override:name});
+      const c=cachedCourses.find(x=>x.id===id); if(c) c.period_override=name;
+    }
+    alert(`已把 ${cleanupSelected.size} 门课定义为「${name}」`);
     cleanupSelected.clear();
     renderCourseCleanupPage(document.getElementById('mainContent'));
-  }catch(e){alert('设置失败：'+e.message)}
+  }catch(err){alert('设置失败：'+err.message)}
 }
 function cleanupClearSelection(){
   cleanupSelected.clear();
