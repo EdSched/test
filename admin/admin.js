@@ -361,13 +361,19 @@ function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── 管理老师 modal ──
 // ── 老师管理页面 ──
+// 老师页宿主容器：管控台打开时渲染到 consoleBody，否则渲染到导航主区 mainContent
+function teacherPageHost(){
+  const ov=document.getElementById('consoleOverlay');
+  if(ov && ov.style.display!=='none'){ const b=document.getElementById('consoleBody'); if(b) return b; }
+  return document.getElementById('mainContent');
+}
 function renderTeachersPage(mc){
   mc.innerHTML=`
   <div class="page-header">
     <div class="section-title">老师管理 <span class="badge-count">${cachedTeachers.length}</span></div>
     <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:3px;overflow:hidden">
       <button style="font-size:11px;padding:5px 16px;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff">👥 老师账号</button>
-      <button onclick="renderTeacherProfilesPage(document.getElementById('mainContent'))" style="font-size:11px;padding:5px 16px;border:none;cursor:pointer;font-family:inherit;background:var(--surface);color:var(--text-2)">📇 讲师档案</button>
+      <button onclick="renderTeacherProfilesPage(teacherPageHost())" style="font-size:11px;padding:5px 16px;border:none;cursor:pointer;font-family:inherit;background:var(--surface);color:var(--text-2)">📇 讲师档案</button>
     </div>
   </div>
   <div class="swipe-row" style="grid-template-columns:1fr 1.6fr">
@@ -851,7 +857,7 @@ async function renderTeacherProfilesPage(mc){
     <div class="section-title">讲师档案 <span class="badge-count" id="prof_count">…</span></div>
     <div style="display:flex;gap:8px;align-items:center">
       <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:3px;overflow:hidden">
-        <button onclick="renderTeachersPage(document.getElementById('mainContent'));renderTeacherList()" style="font-size:11px;padding:5px 16px;border:none;cursor:pointer;font-family:inherit;background:var(--surface);color:var(--text-2)">👥 老师账号</button>
+        <button onclick="renderTeachersPage(teacherPageHost());renderTeacherList()" style="font-size:11px;padding:5px 16px;border:none;cursor:pointer;font-family:inherit;background:var(--surface);color:var(--text-2)">👥 老师账号</button>
         <button style="font-size:11px;padding:5px 16px;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff">📇 讲师档案</button>
       </div>
       <label class="btn btn-outline btn-sm" style="cursor:pointer">⬆ 导入 Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="profImportExcel(this)"></label>
