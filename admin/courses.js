@@ -229,8 +229,15 @@ function courseGroupKey(name){
 }
 
 // 课程名颜色（根据关键词）
-function courseColor(name){
+// 字符串 → 稳定柔和颜色（HSL，低饱和高亮度，保证浅底深字可读）
+function autoColorFromStr(str){
+  str=String(str||'x');
+  let h=0; for(let i=0;i<str.length;i++){ h=(h*31+str.charCodeAt(i))%360; }
+  return { bg:`hsl(${h},46%,90%)`, text:`hsl(${h},55%,30%)` };
+}
+function courseColor(name, course){
   const n=name||'';
+  // ① 文科现有关键词配色（保留，好看）
   if(/宏观/.test(n)) return {bg:'#ddeaf8',text:'#1a3a6a'};
   if(/微观/.test(n)) return {bg:'#ddf0e0',text:'#1a4a28'};
   if(/数学/.test(n)) return {bg:'#e8e4f8',text:'#3a2a7a'};
@@ -243,7 +250,16 @@ function courseColor(name){
   if(/新闻|新伝/.test(n)) return {bg:'#e8e4f8',text:'#3a2a7a'};
   if(/福祉/.test(n)) return {bg:'#faecd8',text:'#5a3010'};
   if(/zemi|ゼミ|seminar/i.test(n)) return {bg:'#d8f0ea',text:'#0a4038'};
-  return {bg:'#ece8e0',text:'#3a3830'};
+  // ② 有专业：按专业代码自动生成（同专业同色）
+  const mj=(course&&(course.major||[])[0])||'';
+  if(mj) return autoColorFromStr('major_'+mj);
+  // ③ 没专业：按期数 / 名字关键词生成
+  const kw=(n.match(/托福|托业|托業|衔接|衝刺|冲刺|基础|基礎|N[1-5]|口语|写作/)||[])[0];
+  if(kw) return autoColorFromStr('kw_'+kw);
+  const per=(course&&course.period)||'';
+  if(per) return autoColorFromStr('period_'+per);
+  // ④ 兜底：按名字生成（也不再是灰）
+  return autoColorFromStr('name_'+n);
 }
 
 // 课程期判断（根据 start_date 月份）
@@ -856,7 +872,7 @@ function renderCoursesSummary(courses){
     ${groupOrder.map(key=>{
       const {course,sessions}=groups[key];
       const dispName=courseGroupKey(course.name);
-      const color=courseColor(dispName);
+      const color=courseColor(dispName,course);
       const total=sessions.length||course.total_sessions||0;
       const teacherStr=course.teacher?` · ${course.teacher}`:'';
       const timeStr=course.time_range?` · ${course.time_range}`:'';
@@ -1868,7 +1884,7 @@ function renderScheduleSlots(slots){
   return `<div style="display:flex;flex-direction:column;gap:16px">
     ${Object.entries(byCourse).map(([courseName,courseSlots])=>{
       const course=cachedCourses.find(c=>c.name===courseName)||{};
-      const color=courseColor(courseName);
+      const color=courseColor(courseName,course);
       const yearStr=course.first_session_date?.slice(0,4)||'';
       const periodStr=course.period||'';
       // 按日期去重
