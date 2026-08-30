@@ -446,8 +446,17 @@
       <div class="form-group" style="margin:0"><label class="form-label">校区</label><input id="ac_campus" placeholder="市谷 / 高马 / 腾讯会议…"></div>
       <div class="form-group" style="margin:0"><label class="form-label">授课形式</label>
         <select id="ac_delivery"><option value="">请选择</option><option>线下</option><option>线上</option><option>线下＋线上</option></select></div>
-      <div class="form-group" style="margin:0"><label class="form-label">星期</label>
-        <select id="ac_weekday"><option value="">请选择</option><option>周一</option><option>周二</option><option>周三</option><option>周四</option><option>周五</option><option>周六</option><option>周日</option></select></div>
+      <div class="form-group" style="margin:0"><label class="form-label">星期（可多选）</label>
+        <div id="ac_weekday_chips" style="display:flex;flex-wrap:wrap;gap:5px">
+          <div class="filter-chip" data-wd="周一" onclick="this.classList.toggle('active')" style="font-size:12px;padding:5px 12px;cursor:pointer">周一</div>
+          <div class="filter-chip" data-wd="周二" onclick="this.classList.toggle('active')" style="font-size:12px;padding:5px 12px;cursor:pointer">周二</div>
+          <div class="filter-chip" data-wd="周三" onclick="this.classList.toggle('active')" style="font-size:12px;padding:5px 12px;cursor:pointer">周三</div>
+          <div class="filter-chip" data-wd="周四" onclick="this.classList.toggle('active')" style="font-size:12px;padding:5px 12px;cursor:pointer">周四</div>
+          <div class="filter-chip" data-wd="周五" onclick="this.classList.toggle('active')" style="font-size:12px;padding:5px 12px;cursor:pointer">周五</div>
+          <div class="filter-chip" data-wd="周六" onclick="this.classList.toggle('active')" style="font-size:12px;padding:5px 12px;cursor:pointer">周六</div>
+          <div class="filter-chip" data-wd="周日" onclick="this.classList.toggle('active')" style="font-size:12px;padding:5px 12px;cursor:pointer">周日</div>
+        </div>
+      </div>
       <div class="form-group" style="margin:0"><label class="form-label">上课时间</label><input id="ac_time_range" placeholder="14:00-18:00"></div>
       <div class="form-group" style="margin:0"><label class="form-label">课时（小时，用于工资核算）</label><input type="number" id="ac_actual_hours" step="0.5" min="0" placeholder="例：4"></div>
       <div class="form-group" style="margin:0"><label class="form-label">课程回数 *</label><input type="number" id="ac_total" min="1" placeholder="10"></div>
@@ -485,9 +494,16 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
         <div style="font-size:11px;color:var(--text-2)">每回的日期/编号/名称/任课老师均可自由调整（用于休讲、调课等场景）</div>
         <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="acToggleTextMode()">📝 文本编辑</button>
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('ac_paste_area').style.display=document.getElementById('ac_paste_area').style.display==='none'?'block':'none'">📋 从Excel粘贴</button>
           <button class="btn btn-outline btn-sm" onclick="acSyncRows()">↺ 同步行数</button>
         </div>
+      </div>
+      <!-- 文本编辑区：整份单回明细以文字呈现，方便批量改（尤其改老师） -->
+      <div id="ac_text_area" style="display:none;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:10px">
+        <div style="font-size:11px;color:var(--text-2);margin-bottom:6px">每行一回，用 <b>|</b> 分隔：回数|日期|时间|单回标题|老师（如 <code>1|2026-07-16|10:00-12:00|社会学导论|田跃</code>）。改完点「应用到明细」。</div>
+        <textarea id="ac_text_input" rows="10" style="width:100%;font-size:11px;line-height:1.7;padding:7px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:'DM Mono',monospace;resize:vertical"></textarea>
+        <button class="btn btn-primary btn-sm" style="margin-top:6px" onclick="acApplyTextMode()">应用到明细</button>
       </div>
       <!-- 粘贴区域 -->
       <div id="ac_paste_area" style="display:none;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:10px">
