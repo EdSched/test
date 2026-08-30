@@ -1663,7 +1663,10 @@ async function confirmCopyPeriod(){
   btn.textContent='生成中…';btn.disabled=true;
   try{
     const newId=`c-${Date.now()}-${Math.random().toString(36).slice(2,5)}`;
-    const newCourse={...src,id:newId,period:newPeriod,first_session_date:newFirstDate};
+    // 用生成的课次首尾日期设置 start_date/end_date（sched 靠这两个显示日期区间）
+    const newStart=dates[0];
+    const newEnd=dates[dates.length-1];
+    const newCourse={...src,id:newId,period:newPeriod,first_session_date:newFirstDate,start_date:newStart,end_date:newEnd,period_override:null};
     delete newCourse.created_at;
     const res=await sb('/rest/v1/courses','POST',[newCourse]);
     cachedCourses.push(Array.isArray(res)?res[0]:newCourse);
