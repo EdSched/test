@@ -501,7 +501,7 @@
       </div>
       <!-- 文本编辑区：整份单回明细以文字呈现，方便批量改（尤其改老师） -->
       <div id="ac_text_area" style="display:none;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:10px">
-        <div style="font-size:11px;color:var(--text-2);margin-bottom:6px">每行一回，用 <b>|</b> 分隔：回数|日期|时间|单回标题|老师（如 <code>1|2026-07-16|10:00-12:00|社会学导论|田跃</code>）。改完点「应用到明细」。</div>
+        <div style="font-size:11px;color:var(--text-2);margin-bottom:6px">每行一回，列之间用 <b>Tab（制表符）</b> 分隔：回数→日期→时间→标题→老师。可直接与 Excel 互相复制粘贴（整块复制到 Excel 会自动分列；从 Excel 复制回来也能识别）。改完点「应用到明细」。</div>
         <textarea id="ac_text_input" rows="10" style="width:100%;font-size:11px;line-height:1.7;padding:7px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:'DM Mono',monospace;resize:vertical"></textarea>
         <button class="btn btn-primary btn-sm" style="margin-top:6px" onclick="acApplyTextMode()">应用到明细</button>
       </div>
