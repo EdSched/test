@@ -259,6 +259,7 @@ function fmtSessionDate(dateStr){
 }
 
 let coursesTypeFilter='all';
+let coursesCampusFilter='all'; // 校区筛选：all/高马/市谷/线上
 
 // ══════════════════════════════════
 // COURSE CLEANUP PAGE
@@ -759,6 +760,7 @@ function renderCoursesPage(mc){
   if(coursesTypeFilter==='专业课') filtered=filtered.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
   else if(coursesTypeFilter==='共通课') filtered=filtered.filter(c=>c.course_type?.includes('共通'));
   else if(coursesTypeFilter==='VIP') filtered=filtered.filter(c=>c.course_type?.includes('VIP'));
+  if(coursesCampusFilter!=='all') filtered=filtered.filter(c=>(c.campus||'')===coursesCampusFilter);
 
   const allPeriods=[...new Map(cachedCourses
     .filter(c=>c.first_session_date)
@@ -803,6 +805,15 @@ function renderCoursesPage(mc){
         <div class="filter-chip${coursesPeriodFilter==='all'?' active':''}" onclick="setCoursesPeriod('all',this)" style="font-size:11px;padding:3px 10px">全部</div>
       </div>
     </div>
+    <div>
+      <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">校区</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <div class="filter-chip${coursesCampusFilter==='all'?' active':''}" onclick="setCoursesCampus('all',this)" style="font-size:11px;padding:3px 10px">全部</div>
+        <div class="filter-chip${coursesCampusFilter==='高马'?' active':''}" onclick="setCoursesCampus('高马',this)" style="font-size:11px;padding:3px 10px">高马</div>
+        <div class="filter-chip${coursesCampusFilter==='市谷'?' active':''}" onclick="setCoursesCampus('市谷',this)" style="font-size:11px;padding:3px 10px">市谷</div>
+        <div class="filter-chip${coursesCampusFilter==='线上'?' active':''}" onclick="setCoursesCampus('线上',this)" style="font-size:11px;padding:3px 10px">线上</div>
+      </div>
+    </div>
   </div>
 
   ${coursesMajorFilter==='none'
@@ -826,7 +837,7 @@ function renderCoursesSummary(courses){
     // 这样同名不同期的课分成独立组，不再混在一起；同期同名（含分班）才合并
     const nameKey=courseGroupKey(c.name);
     const yr=c.first_session_date?c.first_session_date.slice(0,4):'';
-    const key=`${nameKey}|${effectivePeriod(c)}|${yr}`;
+    const key=`${nameKey}|${effectivePeriod(c)}|${yr}|${c.campus||''}`;
     if(!groups[key]){groups[key]={course:c,sessions:[]};groupOrder.push(key)}
     const sess=cachedSessions.filter(s=>s.course_id===c.id).sort((a,b)=>a.session_date.localeCompare(b.session_date));
     groups[key].sessions.push(...sess);
@@ -926,6 +937,10 @@ function setCoursesMajor(m,el){
 }
 function setCoursesPeriod(p,el){
   coursesPeriodFilter=p;
+  renderCoursesPage(document.getElementById('mainContent'));
+}
+function setCoursesCampus(c,el){
+  coursesCampusFilter=c;
   renderCoursesPage(document.getElementById('mainContent'));
 }
 
