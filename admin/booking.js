@@ -7,6 +7,12 @@ function renderBookingPage(mc){
   if(bkSection==='vip'){ renderVipBookingPage(mc); return; }
   const ym=`${bkYear}-${String(bkMonth+1).padStart(2,'0')}`;
   let filtered=cachedBookings.filter(b=>b.slot_date&&b.slot_date.startsWith(ym)&&b.type!=='vip');
+  // 视角过滤（跟随链接）：非总览时，按学生真实专业判断是否属于当前领域/专业
+  filtered=filtered.filter(b=>{
+    const stu=cachedStudents?.find(s=>s.name===b.name);
+    const realMajor=stu?.major||b.major;
+    return majorInCurrentView(realMajor);
+  });
   if(bkTab!=='all') filtered=filtered.filter(b=>b.status===bkTab);
   if(bkType!=='all') filtered=filtered.filter(b=>b.type===bkType);
   if(bkMajor!=='all') filtered=filtered.filter(b=>{
@@ -73,6 +79,12 @@ function setBkSection(s){ bkSection=s; renderBookingPage(document.getElementById
 function renderVipBookingPage(mc){
   const ym=`${bkYear}-${String(bkMonth+1).padStart(2,'0')}`;
   let filtered=cachedBookings.filter(b=>b.type==='vip'&&b.slot_date&&b.slot_date.startsWith(ym));
+  // 视角过滤（跟随链接）：按学生真实专业判断领域/专业归属
+  filtered=filtered.filter(b=>{
+    const stu=cachedStudents?.find(s=>s.name===b.name);
+    const realMajor=stu?.major||b.major;
+    return majorInCurrentView(realMajor);
+  });
   if(bkTab!=='all') filtered=filtered.filter(b=>b.status===bkTab);
   const total=filtered.length;
 
@@ -563,7 +575,7 @@ function exportExcel(){
 // ══════════════════════════════════
 function renderSlotsPage(mc){
   const ym=`${bkYear}-${String(bkMonth+1).padStart(2,'0')}`;
-  const monthSlots=cachedSlots.filter(s=>s.date.startsWith(ym)).sort((a,b)=>a.date.localeCompare(b.date)||a.time_range.localeCompare(b.time_range));
+  const monthSlots=cachedSlots.filter(s=>s.date.startsWith(ym)&&majorInCurrentView(s.major)).sort((a,b)=>a.date.localeCompare(b.date)||a.time_range.localeCompare(b.time_range));
   const slotBookedCount={};
   cachedBookings.filter(b=>b.status!=='cancelled').forEach(b=>{slotBookedCount[b.slot_id]=(slotBookedCount[b.slot_id]||0)+1});
 
