@@ -48,6 +48,14 @@ function majorInCurrentDomain(key) {
   if (!CURRENT_DOMAIN || CURRENT_DOMAIN === 'all') return true;
   return MAJOR_DOMAIN[key] === CURRENT_DOMAIN;
 }
+// 统一视角判断：某专业是否在「当前登录视角」内（跟随链接：领域链接=看整个领域；专业链接=只看该专业）
+// 所有功能页（预约/时间槽/出勤等）都用它做数据过滤，标准一致。
+// 空 major 的处理由调用方决定（如学部无专业课靠 domain 显示）。
+function majorInCurrentView(major) {
+  if (CURRENT_MAJOR) return major === CURRENT_MAJOR;       // 专业链接：锁定该专业
+  if (!CURRENT_DOMAIN || CURRENT_DOMAIN === 'all') return true; // 总览：全部可见
+  return majorInCurrentDomain(major);                       // 领域链接：该专业属于当前领域
+}
 
 // ── 专业派生工具（单一数据源；新增专业只需写入 DB majors 表，即可自动流通全站）──
 // MAJOR_GROUPS：虚拟分组 key → 展开后的真实专业 key 列表（目前仅「社会人文」一组）
