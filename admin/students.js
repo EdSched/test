@@ -32,6 +32,7 @@ function renderStudentsPage(mc){
   let list=cachedStudents;
   // 视角过滤（叠加逻辑）：非总览时，主专业或附加专业任一属于当前领域/专业即可见
   list=list.filter(s=>studentInCurrentView(s));
+  const viewTotal=list.length; // 当前视角学生总数（不受下方专业/状态/搜索筛选影响）
   if(stMajorFilter!=='all') list=list.filter(s=>matchesMajorFilter(s.major,stMajorFilter));
   if(stStatus!=='all') list=list.filter(s=>s.status===stStatus);
   if(stVipFilter==='vip_only') list=list.filter(s=>s.is_vip_course==='VIP'||s.is_vip_course==='大课+VIP');
@@ -44,7 +45,7 @@ function renderStudentsPage(mc){
   <div id="spe_bar"></div>
   ${(setTimeout(()=>speRenderBar(),0),'')}
   <div class="page-header">
-    <div class="section-title">学生档案 <span class="badge-count">${cachedStudents.length}</span></div>
+    <div class="section-title">学生档案 <span class="badge-count">${viewTotal}</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-outline btn-sm" onclick="exportStudents()">↓ 导出 Excel</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('importFileInput').click()">↑ 导入 Excel</button>
