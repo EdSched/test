@@ -384,17 +384,15 @@ function renderTeachersPage(mc){
       <div class="form-group"><label class="form-label">备注 / 对外宣传姓名</label><input id="new_teacher_notes" placeholder="填写后，宣传页课程担当将显示此名（如：周老师）"></div>
       <div class="form-group"><label class="form-label">分类标签（可叠加，用于搜索标记，不影响任何功能权限）</label><input id="new_teacher_tags" placeholder="用逗号或顿号分隔，如：计划书指导、模拟面试、兼职"></div>
       <div class="form-group">
-        <label class="form-label">负责专业（可多选）</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px" id="new_teacher_majors">
-          ${majorFilterKeys().map(m=>`<div class="filter-chip" data-value="${m}" onclick="toggleChip(this)" style="padding:4px 10px">${majorLabel(m)}</div>`).join('')}
+        <label class="form-label">负责领域（可多选）</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="new_teacher_domains">
+          ${DOMAINS.map(d=>`<div class="filter-chip" data-value="${d.label}" onclick="toggleChip(this)" style="padding:4px 10px">${d.label}</div>`).join('')}
         </div>
       </div>
-      <div class="form-group" style="border:1px solid var(--border-light);border-radius:3px;padding:10px;background:var(--bg)">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap"><input type="checkbox" id="perm_subject_lead" style="accent-color:var(--accent);width:16px;height:16px" onchange="document.getElementById('lead_code_wrap').style.display=this.checked?'block':'none'">学科负责人</label>
-        <div style="font-size:10px;color:var(--text-3);margin:4px 0 0">开启后，此人可用「上方所选专业」登录学科负责人端口管理课程安排。</div>
-        <div id="lead_code_wrap" style="display:none;margin-top:8px">
-          <label class="form-label" style="font-size:11px">登录授权码</label>
-          <input id="lead_code_input" placeholder="设定一个授权码（登录学科负责人端口用）" style="font-size:12px">
+      <div class="form-group">
+        <label class="form-label">负责专业（可多选）</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="new_teacher_majors">
+          ${allMajorKeys().map(m=>`<div class="filter-chip" data-value="${m}" onclick="toggleChip(this)" style="padding:4px 10px">${majorLabel(m)}</div>`).join('')}
         </div>
       </div>
       <div class="form-group">
@@ -532,7 +530,7 @@ function cancelEditTeacher(){
   document.getElementById('new_teacher_name').value='';
   document.getElementById('new_teacher_notes').value='';
   document.getElementById('new_teacher_tags').value='';
-  document.querySelectorAll('#new_teacher_majors .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('#new_teacher_majors .filter-chip,#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
   document.getElementById('perm_booking').checked=false;
   document.getElementById('perm_slots').checked=false;
   document.getElementById('perm_schedule').checked=false;
@@ -552,7 +550,7 @@ function openTeacherManager(){
   document.getElementById('new_teacher_name').value='';
   document.getElementById('new_teacher_notes').value='';
   document.getElementById('new_teacher_tags').value='';
-  document.querySelectorAll('#new_teacher_majors .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('#new_teacher_majors .filter-chip,#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
   document.getElementById('perm_booking').checked=false;
   document.getElementById('perm_slots').checked=false;
   document.getElementById('perm_schedule').checked=false;
@@ -579,11 +577,17 @@ function escTM(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g
 
 let teacherSearch='';
 let teacherTagFilter='';
+let teacherDomainFilter='';
 let teacherExpandedId=null;
 
 function teacherFilteredList(){
   let list=cachedTeachers;
   if(teacherTagFilter) list=list.filter(t=>(t.tags||[]).includes(teacherTagFilter));
+  if(teacherDomainFilter) list=list.filter(t=>{
+    // 老师直接标了该领域，或其负责专业里有属于该领域的（兼容只填了专业的旧数据）
+    if((t.domains||[]).includes(teacherDomainFilter)) return true;
+    return (t.majors||[]).some(m=>MAJOR_DOMAIN[m]===teacherDomainFilter);
+  });
   const q=teacherSearch.trim();
   // 拼音严格匹配失败时退回首字母匹配姓氏（zs 也能命中张老师）
   const nameMatch=n=>{
@@ -607,6 +611,11 @@ function renderTeacherList(){
         oninput="teacherSearch=this.value;renderTeacherRows()"
         style="font-size:11px;padding:6px 10px;border:1px solid var(--border);border-radius:3px;background:var(--bg);font-family:inherit;flex:1;min-width:180px">
       <span style="font-size:10px;color:var(--text-3)" id="teacherCount"></span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:8px">
+      <span style="font-size:10px;color:var(--text-3)">领域：</span>
+      <div class="filter-chip ${teacherDomainFilter===''?'active':''}" onclick="teacherDomainFilter='';renderTeacherList()" style="padding:2px 9px;font-size:10px">全部</div>
+      ${DOMAINS.map(d=>`<div class="filter-chip ${teacherDomainFilter===d.label?'active':''}" onclick="teacherDomainFilter='${escTM(d.label)}';renderTeacherList()" style="padding:2px 9px;font-size:10px">${escTM(d.label)}</div>`).join('')}
     </div>
     ${allTags.length?`<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:8px">
       <span style="font-size:10px;color:var(--text-3)">标签：</span>
@@ -709,19 +718,18 @@ async function addTeacher(){
   if(!name){alert('请填写姓名');return}
   if(cachedTeachers.find(t=>t.name===name)){alert('该老师已存在');return}
   const majors=[...document.querySelectorAll('#new_teacher_majors .filter-chip.active')].map(c=>c.dataset.value);
+  const domains=[...document.querySelectorAll('#new_teacher_domains .filter-chip.active')].map(c=>c.dataset.value);
   const permissions=getPermissionsFromForm();
   const tags=parseTeacherTags();
   try{
-    const subjectLead=document.getElementById('perm_subject_lead')?.checked||false;
-    const leadCode=(document.getElementById('lead_code_input')?.value||'').trim();
-    const t={id:`t-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,name,notes,majors,permissions,tags,subject_lead:subjectLead,lead_majors:subjectLead?majors:[],lead_code:subjectLead?leadCode:null};
+    const t={id:`t-${Date.now()}-${Math.random().toString(36).slice(2,5)}`,name,notes,majors,domains,permissions,tags};
     const res=await sb('/rest/v1/teachers','POST',[t]);
     cachedTeachers.push(Array.isArray(res)?res[0]:t);
     document.getElementById('new_teacher_name').value='';
     document.getElementById('new_teacher_notes').value='';
   document.getElementById('new_teacher_tags').value='';
     document.getElementById('new_teacher_tags').value='';
-    document.querySelectorAll('#new_teacher_majors .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
+    document.querySelectorAll('#new_teacher_majors .filter-chip,#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
     document.getElementById('perm_booking').checked=false;
     document.getElementById('perm_slots').checked=false;
     document.getElementById('perm_schedule').checked=false;
@@ -742,8 +750,9 @@ function openEditTeacher(id){
   document.getElementById('new_teacher_notes').value=t.notes||'';
   document.getElementById('new_teacher_tags').value=(t.tags||[]).join('、');
   document.querySelectorAll('#new_teacher_majors .filter-chip').forEach(c=>{c.classList.toggle('active',(t.majors||[]).includes(c.dataset.value))});
-  const _sl=document.getElementById('perm_subject_lead'); if(_sl){_sl.checked=!!t.subject_lead; document.getElementById('lead_code_wrap').style.display=t.subject_lead?'block':'none';}
-  const _lc=document.getElementById('lead_code_input'); if(_lc) _lc.value=t.lead_code||'';
+  // 回填负责领域 chip
+  const teacherDomains=t.domains||[];
+  document.querySelectorAll('#new_teacher_domains .filter-chip').forEach(c=>c.classList.toggle('active', teacherDomains.includes(c.dataset.value)));
   const p=t.permissions||{};
   document.getElementById('perm_booking').checked=!!p.booking;
   document.getElementById('perm_slots').checked=!!p.slots;
@@ -782,11 +791,10 @@ async function saveEditTeacher(id){
   const notes=document.getElementById('new_teacher_notes').value.trim();
   const tags=parseTeacherTags();
   try{
-    const subjectLead=document.getElementById('perm_subject_lead')?.checked||false;
-    const leadCode=(document.getElementById('lead_code_input')?.value||'').trim();
-    await sb(`/rest/v1/teachers?id=eq.${id}`,'PATCH',{name,notes,majors,permissions,tags,subject_lead:subjectLead,lead_majors:subjectLead?majors:[],lead_code:subjectLead?leadCode:null});
+    const domains=[...document.querySelectorAll('#new_teacher_domains .filter-chip.active')].map(c=>c.dataset.value);
+    await sb(`/rest/v1/teachers?id=eq.${id}`,'PATCH',{name,notes,majors,domains,permissions,tags});
     const idx=cachedTeachers.findIndex(t=>t.id===id);
-    if(idx>=0) Object.assign(cachedTeachers[idx],{name,notes,majors,permissions,tags,subject_lead:subjectLead,lead_majors:subjectLead?majors:[],lead_code:subjectLead?leadCode:null});
+    if(idx>=0) Object.assign(cachedTeachers[idx],{name,notes,majors,domains,permissions,tags});
     cancelEditTeacher();
     renderTeacherList();
   }catch(e){alert('保存失败：'+e.message)}
