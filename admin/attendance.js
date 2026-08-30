@@ -56,6 +56,12 @@ function renderAttendancePage(mc){
 
   // courses matching current type+period filter
   let filteredCourses=cachedCourses;
+  // 视角过滤（跟随链接）：非总览时只看当前领域/专业的课
+  filteredCourses=filteredCourses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
+    return true;
+  });
   if(attTypeFilter) filteredCourses=filteredCourses.filter(c=>c.course_type===attTypeFilter);
   if(attPeriodFilter){
     filteredCourses=filteredCourses.filter(c=>{
