@@ -252,8 +252,8 @@ async function renderPage(){
   try{
     if(curPage==='booking'||curPage==='slots'){
       [cachedSlots,cachedBookings,cachedStudents]=await Promise.all([
-        sb('/rest/v1/slots?select=*&order=date.asc,time_range.asc'),
-        sb('/rest/v1/bookings?select=*&order=slot_date.asc,slot_time_range.asc'),
+        sbAll('/rest/v1/slots?select=*&order=date.asc,time_range.asc'),
+        sbAll('/rest/v1/bookings?select=*&order=slot_date.asc,slot_time_range.asc'),
         sbAll('/rest/v1/students?select=*&order=name.asc')
       ]);
       curPage==='booking'?renderBookingPage(mc):renderSlotsPage(mc);
