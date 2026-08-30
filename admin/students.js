@@ -501,6 +501,8 @@ let progressViewMode = 'student'; // 'student' | 'season'
 async function renderProgressPage(mc, focusStudentId=null){
   mc.innerHTML='<div class="loading">加载中…</div>';
   let students=cachedStudents.filter(s=>s.status==='active'||s.status==='stopped'||s.status==='graduated');
+  // 视角过滤（叠加逻辑）：非总览时按学生主专业+附加专业判断
+  students=students.filter(s=>studentInCurrentView(s));
   if(stMajorFilter!=='all') students=students.filter(s=>matchesMajorFilter(s.major,stMajorFilter));
   if(progressStudentFilter) students=students.filter(s=>matchesStudentSearch(s,progressStudentFilter));
 
