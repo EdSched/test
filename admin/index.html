@@ -37,12 +37,17 @@
   </div>
 </div>
 
-<!-- 管控台：生成/管理领域访问链接 -->
-<div id="consoleOverlay" style="display:none;position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.35);align-items:center;justify-content:center">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:28px 30px;width:min(720px,94vw);max-height:88vh;overflow:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div style="font-family:'Noto Serif SC',serif;font-size:1.15rem;font-weight:600">管控台 · 领域访问链接</div>
+<!-- 管控台：中枢独立页面（访问链接 / 老师管理 / 工作管理） -->
+<div id="consoleOverlay" style="display:none;position:fixed;inset:0;z-index:950;background:var(--bg,#faf9f7);overflow:auto">
+  <div style="max-width:1200px;margin:0 auto;padding:24px 28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div style="font-family:'Noto Serif SC',serif;font-size:1.3rem;font-weight:600">中枢管控台</div>
       <button class="btn btn-outline btn-sm" onclick="closeConsole()">返回中枢台</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--border)">
+      <button id="ctab_keys" class="console-tab" onclick="switchConsoleTab('keys')" style="background:none;border:none;border-bottom:2px solid transparent;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit">访问链接</button>
+      <button id="ctab_teachers" class="console-tab" onclick="switchConsoleTab('teachers')" style="background:none;border:none;border-bottom:2px solid transparent;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit">老师管理</button>
+      <button id="ctab_payroll" class="console-tab" onclick="switchConsoleTab('payroll')" style="background:none;border:none;border-bottom:2px solid transparent;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit">工作管理</button>
     </div>
     <div id="consoleBody"><!-- 由 renderConsole() 填充 --></div>
   </div>
