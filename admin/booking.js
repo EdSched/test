@@ -13,6 +13,13 @@ function renderBookingPage(mc){
     const realMajor=stu?.major||b.major;
     return majorInCurrentView(realMajor);
   });
+  // 视角过滤（跟随链接）：非总览时，按学生真实专业判断是否属于当前领域/专业
+  filtered=filtered.filter(b=>{
+    const stu=cachedStudents?.find(s=>s.name===b.name);
+    const realMajor=stu?.major||b.major;
+    return majorInCurrentView(realMajor);
+  });
+  const total=filtered.length; // 当月·本视角预约总数（不受下方 tab/type/专业下拉影响）
   if(bkTab!=='all') filtered=filtered.filter(b=>b.status===bkTab);
   if(bkType!=='all') filtered=filtered.filter(b=>b.type===bkType);
   if(bkMajor!=='all') filtered=filtered.filter(b=>{
@@ -21,7 +28,6 @@ function renderBookingPage(mc){
     const realMajor=studentRecord?.major||b.major; // 找不到学生档案时退回用 bookings.major，避免数据完全消失
     return matchesMajorFilter(realMajor,bkMajor);
   });
-  const total=cachedBookings.filter(b=>b.slot_date&&b.slot_date.startsWith(ym)&&b.type!=='vip').length;
 
   mc.innerHTML=`
   <div class="page-header">
@@ -85,8 +91,8 @@ function renderVipBookingPage(mc){
     const realMajor=stu?.major||b.major;
     return majorInCurrentView(realMajor);
   });
+  const total=filtered.length; // 当月·本视角VIP预约总数（不受tab影响）
   if(bkTab!=='all') filtered=filtered.filter(b=>b.status===bkTab);
-  const total=filtered.length;
 
   mc.innerHTML=`
   <div class="page-header">
