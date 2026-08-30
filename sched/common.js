@@ -56,8 +56,8 @@ function parseWeekdays(s){
   const arr = String(s).split(/[\/、,，\s;；]+/).map(x=>WD_MAP[x.trim()]).filter(Boolean);
   return [...new Set(arr)].sort((a,b)=>a-b);
 }
-function weekdaysLabel(str){ // "2,4" -> "周二/周四"
-  return String(str||'').split(',').filter(Boolean).map(d=>WEEKDAYS[Number(d)]).join('/');
+function weekdaysLabel(str){ // "2,4"或"周二,周四" -> "周二/周四"
+  return parseWeekdaysSched(str).map(d=>WEEKDAYS[d]).filter(Boolean).join('/');
 }
 const KIND_LABEL = { course:'排课', vip:'VIP', temp:'临时使用', rental:'对外出租', meeting:'开会' };
 const KIND_CLASS = { course:'k-course', vip:'k-vip', temp:'k-temp', rental:'k-rental', meeting:'k-meeting' };
