@@ -482,7 +482,7 @@ function renderAssignDay(){
   if(!rooms.length){ box.innerHTML='<div class="muted">该校区没有教室。</div>'; return; }
   // 某课在选定周几、日期区间内是否“活跃”（用于判断占用/候选）
   const activeInRange=c=>{
-    if(!(c.weekdays||'').split(',').map(s=>s.trim()).includes(wd)) return false;
+    if(!parseWeekdaysSched(c.weekdays).includes(Number(wd))) return false;
     if(ds && c.end_date && c.end_date<ds) return false;   // 已结课
     if(de && c.start_date && c.start_date>de) return false; // 还没开课
     return true;
@@ -522,7 +522,7 @@ function renderAssignDay(){
   // 生成某段（周几+日期区间）的教室占空表
   function buildGrid(gwd, gds, gde){
     const gActive=c=>{
-      if(!(c.weekdays||'').split(',').map(s=>s.trim()).includes(gwd)) return false;
+      if(!parseWeekdaysSched(c.weekdays).includes(Number(gwd))) return false;
       if(c.mode==='线上'||c.campus==='线上') return false;
       if(c.campus!==campus) return false;
       if(gds && c.end_date && c.end_date<gds) return false;
@@ -632,7 +632,7 @@ function renderAssignWeek(){
   function candFor(wd,sl){
     return COURSES.filter(c=>{
       if(assignedSet.has(String(c.id))) return false;
-      const wds=(c.weekdays||'').split(',').map(x=>x.trim());
+      const wds=parseWeekdaysSched(c.weekdays).map(String);
       if(!wds.includes(wd)) return false;
       if(((c.start_time||'')+'-'+(c.end_time||''))!==sl) return false;
       if(term && c.term!==term) return false;
@@ -668,7 +668,7 @@ function renderAssignWeek(){
     WD.forEach(([wd])=>{
       const taken=occ.filter(b=>{
         const c=COURSES.find(x=>String(x.id)===String(b.course_id));
-        const wds=c?((c.weekdays||'').split(',').map(s=>s.trim())):[];
+        const wds=c?parseWeekdaysSched(c.weekdays).map(String):[];
         const bwd=(b.weekday!=null?String(b.weekday):'');
         const timeMatch=((c&&c.start_time||b.start_time||'')+'-'+(c&&c.end_time||b.end_time||''))===sl;
         return (wds.includes(wd)||bwd===wd) && timeMatch;
@@ -734,7 +734,7 @@ function renderAssignWeek(){
       for(const cid of pend){
         const c=COURSES.find(x=>String(x.id)===String(cid)); if(!c) continue;
         const useAcc = (window.WK_UM[cid]!==false) && !!room.meeting_account_id;
-        const wdays=(c.weekdays||'').split(',').map(s=>String(s).trim()).filter(Boolean).map(Number).map(n=>n===0?7:n).filter(n=>n>=1&&n<=7);
+        const wdays=parseWeekdaysSched(c.weekdays);
         const existing=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(cid));
         for(const o of existing) await sbDelete('sched_bookings', o.id);
         const recs=wdays.map(wd=>({ room_id:room.id, kind:'course', course_id:c.id,
@@ -804,7 +804,7 @@ function assignRoomOnly(courseId){
   const groupCourses = c.merge_group ? COURSES.filter(x=>x.merge_group===c.merge_group) : [c];
   const groupIds = groupCourses.map(x=>String(x.id));
   const dispName = c.merge_name || c.name;
-  const wdays=(c.weekdays||'').split(',').map(s=>String(s).trim()).filter(Boolean).map(Number).map(n=>n===0?7:n).filter(n=>n>=1&&n<=7);
+  const wdays=parseWeekdaysSched(c.weekdays);
   if(!wdays.length){ toast('这门课没有设置上课日（周几），无法排。请先在课程管理里给它补上周几。', false); return; }
   const existing=BOOKINGS.filter(b=>b.kind==='course'&&groupIds.includes(String(b.course_id)));
   const ex=existing[0]||null;
@@ -902,7 +902,7 @@ function assignRoomOnly(courseId){
 }
 function assignForm(courseId){
   const c=COURSES.find(x=>String(x.id)===String(courseId));
-  const wdays=(c.weekdays||'').split(',').map(s=>String(s).trim()).filter(Boolean).map(Number).map(n=>n===0?7:n).filter(n=>n>=1&&n<=7);
+  const wdays=parseWeekdaysSched(c.weekdays);
   if(!wdays.length){ toast('这门课没有设置上课日（周几），无法排。请先在课程管理里给它补上周几。', false); return; }
   const online=c.mode==='线上';
   const existing=BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(c.id));
@@ -1287,7 +1287,7 @@ function renderCourseConflicts(lo, hi, campus, scope){
     if(lo && c.end_date<lo) return false;
     return true;
   });
-  const wdsOf=c=>(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x)).map(w=>w===0?7:w);
+  const wdsOf=c=>parseWeekdaysSched(c.weekdays);
   // 某课已排的教室id集合
   const roomsOfCourse=cid=>[...new Set(BOOKINGS.filter(b=>b.kind==='course'&&String(b.course_id)===String(cid)&&b.room_id).map(b=>String(b.room_id)))];
   const issues=[], acked=[];
@@ -1659,7 +1659,7 @@ function previewImport(rows){
           : '<span class="badge b-ok" style="font-size:10px">新增</span>';
         const rowStyle = c.__dup ? (c.__import?' style="background:#fef7f5"':' style="opacity:.5;background:#fdf1ed"') : '';
         return '<tr'+rowStyle+'><td>'+dupTag+act+'</td>'+
-          '<td>'+esc(c.name)+'</td><td>'+esc(c.teacher||'')+'</td><td>'+esc(c.category)+'</td><td>'+esc(c.campus)+'</td><td>'+esc(c.term||'')+'</td><td>'+esc(c.mode)+'</td><td>'+(c.weekdays||'').split(',').filter(Boolean).map(wdName).join('、')+'</td><td>'+esc((c.start_time||'')+'-'+(c.end_time||''))+'</td><td>'+esc((c.start_date||'')+'~'+(c.end_date||''))+'</td><td>'+esc(String(c.sessions||''))+'</td></tr>';
+          '<td>'+esc(c.name)+'</td><td>'+esc(c.teacher||'')+'</td><td>'+esc(c.category)+'</td><td>'+esc(c.campus)+'</td><td>'+esc(c.term||'')+'</td><td>'+esc(c.mode)+'</td><td>'+parseWeekdaysSched(c.weekdays).map(wdName).join('、')+'</td><td>'+esc((c.start_time||'')+'-'+(c.end_time||''))+'</td><td>'+esc((c.start_date||'')+'~'+(c.end_date||''))+'</td><td>'+esc(String(c.sessions||''))+'</td></tr>';
       }).join('')+
       '</tbody></table></div>'+
       '<div style="margin-top:10px"><button class="sm" id="cf_doImport">确认导入 '+impN+' 门'+(dupN?('（跳过 '+(rows.length-impN)+'）'):'')+'</button> <span id="cf_impWarn"></span></div>';
@@ -2042,7 +2042,7 @@ function dupScan(list){
       '<table style="font-size:12px;width:100%"><thead><tr><th>状态</th><th>期</th><th>讲师</th><th>专业</th><th>周几</th><th>时段</th><th>方式</th></tr></thead><tbody>';
     g.forEach((c,i)=>{ ph+='<tr'+(i>0?' style="background:#fff6f4"':'')+'>'+
       '<td>'+(i===0?'<span class="badge b-ok" style="font-size:10px">保留</span>':'<span class="badge b-err" style="font-size:10px">冗余</span>')+'</td>'+
-      '<td>'+esc(c.term||'')+'</td><td>'+esc(c.teacher||'')+'</td><td>'+esc(c.major||'')+'</td><td>'+(c.weekdays||'').split(',').filter(Boolean).map(wd).join('、')+'</td><td>'+esc((c.start_time||'')+'-'+(c.end_time||''))+'</td><td>'+esc(c.mode||'')+'</td></tr>'; });
+      '<td>'+esc(c.term||'')+'</td><td>'+esc(c.teacher||'')+'</td><td>'+esc(c.major||'')+'</td><td>'+parseWeekdaysSched(c.weekdays).map(wd).join('、')+'</td><td>'+esc((c.start_time||'')+'-'+(c.end_time||''))+'</td><td>'+esc(c.mode||'')+'</td></tr>'; });
     ph+='</tbody></table></div>';
   });
   ph+='</div>';
@@ -2059,7 +2059,7 @@ function courseEdit(id){
   const c = isNew
     ? { id:null, name:'', teacher:'', category:CATEGORIES[0], campus:'高马', major:'', course_type:'', term:'', mode:'线下', start_time:'18:00', end_time:'21:00', start_date:'', end_date:'', sessions:'', est_students:'', weekdays:'', meeting_link:'', skip_dates:'' }
     : COURSES.find(x=>String(x.id)===String(id));
-  const wd=(c.weekdays||'').split(',').map(Number);
+  const wd=parseWeekdaysSched(c.weekdays);
   const slotOpts=(sel)=>SLOTS.map(t=>`<option${t===sel?' selected':''}>${t}</option>`).join('');
   const catOpts=CATEGORIES.map(x=>`<option${x===c.category?' selected':''}>${x}</option>`).join('');
   const campOpts=['高马','市谷','线上'].map(x=>`<option${x===c.campus?' selected':''}>${x}</option>`).join('');
@@ -2364,7 +2364,7 @@ async function fixEndByCount(list){
 function computeEndDetail(c){
   const out={end:c.end_date||null, blocked:[], classDates:[]};
   if(!c.start_date || !c.weekdays || !c.sessions) return out;
-  const wds=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x));
+  const wds=parseWeekdaysSched(c.weekdays);
   if(!wds.length) return out;
   const N=Number(c.sessions); if(!N||N<1) return out;
   const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
@@ -2388,7 +2388,7 @@ function computeEndDetail(c){
 /* 倒推：从结课日往前按回数排，返回应有的开课日 */
 function computeStartByCount(c){
   if(!c.end_date || !c.weekdays || !c.sessions) return c.start_date||null;
-  const wds=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x));
+  const wds=parseWeekdaysSched(c.weekdays);
   if(!wds.length) return c.start_date||null;
   const N=Number(c.sessions); if(!N||N<1) return c.start_date||null;
   const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
@@ -2408,7 +2408,7 @@ function computeStartByCount(c){
 }
 function computeEndByCount(c){
   if(!c.start_date || !c.weekdays || !c.sessions) return c.end_date||null;
-  const wds=(c.weekdays||'').split(',').map(s=>Number(s.trim())).filter(x=>!isNaN(x));
+  const wds=parseWeekdaysSched(c.weekdays);
   if(!wds.length) return c.end_date||null;
   const N=Number(c.sessions); if(!N||N<1) return c.end_date||null;
   const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
