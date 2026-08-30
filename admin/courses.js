@@ -1311,7 +1311,7 @@ function acToggleTextMode(){
   if(area.style.display==='none'){
     const rows=acGetRows();
     document.getElementById('ac_text_input').value =
-      rows.map(r=>[r.num,r.date,r.time_range,r.title,r.teacher].join('|')).join('\n');
+      rows.map(r=>[r.num,r.date,r.time_range,r.title,r.teacher].join('\t')).join('\n');
     area.style.display='block';
   } else {
     area.style.display='none';
@@ -1321,8 +1321,8 @@ function acToggleTextMode(){
 function acApplyTextMode(){
   const text=document.getElementById('ac_text_input').value;
   const oldRows=acGetRows();
-  const newRows=text.split('\n').map(l=>l.trim()).filter(Boolean).map((l,i)=>{
-    const p=l.split('|').map(x=>x.trim());
+  const newRows=text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim()).map((l,i)=>{
+    const p=l.split('\t').map(x=>x.trim());
     const num=p[0]||String(i+1);
     // 按回数匹配旧行，继承 id（不丢单回身份/作业绑定）
     const prev=oldRows.find(r=>String(r.num)===String(num))||{};
