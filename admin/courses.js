@@ -1458,6 +1458,7 @@ async function saveAddCourse(){
           session_teacher:r.teacher||mainTeacher,
           is_cancelled:isCancelled,
           cancel_reason:isCancelled?(r.title||'休讲'):null,
+          confirmed,
         };
         if(r.id && existingMap[r.id]){
           // 已有记录：PATCH，id 不变，所有关联（出席/作业）保持
