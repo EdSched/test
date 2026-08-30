@@ -384,16 +384,14 @@ function renderTeachersPage(mc){
       <div class="form-group"><label class="form-label">备注 / 对外宣传姓名</label><input id="new_teacher_notes" placeholder="填写后，宣传页课程担当将显示此名（如：周老师）"></div>
       <div class="form-group"><label class="form-label">分类标签（可叠加，用于搜索标记，不影响任何功能权限）</label><input id="new_teacher_tags" placeholder="用逗号或顿号分隔，如：计划书指导、模拟面试、兼职"></div>
       <div class="form-group">
-        <label class="form-label">负责领域（可多选）</label>
+        <label class="form-label">负责领域（可多选，选后下方展开对应专业）</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px" id="new_teacher_domains">
-          ${DOMAINS.map(d=>`<div class="filter-chip" data-value="${d.label}" onclick="toggleChip(this)" style="padding:4px 10px">${d.label}</div>`).join('')}
+          ${DOMAINS.map(d=>`<div class="filter-chip" data-value="${d.label}" onclick="toggleDomainChip(this)" style="padding:4px 10px">${d.label}</div>`).join('')}
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">负责专业（可多选）</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px" id="new_teacher_majors">
-          ${allMajorKeys().map(m=>`<div class="filter-chip" data-value="${m}" onclick="toggleChip(this)" style="padding:4px 10px">${majorLabel(m)}</div>`).join('')}
-        </div>
+        <label class="form-label">负责专业（可多选，按已选领域展开）</label>
+        <div id="new_teacher_majors" style="min-height:20px"></div>
       </div>
       <div class="form-group">
         <label class="form-label">权限配置</label>
@@ -501,6 +499,7 @@ function renderTeachersPage(mc){
   </div>
   <div class="swipe-hint">← 左右滑动切换：编辑表单 / 老师列表 →</div>`;
   renderTeacherList();
+  if(typeof renderTeacherMajorChips==='function') renderTeacherMajorChips();
 }
 
 
@@ -530,7 +529,7 @@ function cancelEditTeacher(){
   document.getElementById('new_teacher_name').value='';
   document.getElementById('new_teacher_notes').value='';
   document.getElementById('new_teacher_tags').value='';
-  document.querySelectorAll('#new_teacher_majors .filter-chip,#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active')); if(typeof renderTeacherMajorChips==='function') renderTeacherMajorChips();
   document.getElementById('perm_booking').checked=false;
   document.getElementById('perm_slots').checked=false;
   document.getElementById('perm_schedule').checked=false;
@@ -550,7 +549,7 @@ function openTeacherManager(){
   document.getElementById('new_teacher_name').value='';
   document.getElementById('new_teacher_notes').value='';
   document.getElementById('new_teacher_tags').value='';
-  document.querySelectorAll('#new_teacher_majors .filter-chip,#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active')); if(typeof renderTeacherMajorChips==='function') renderTeacherMajorChips();
   document.getElementById('perm_booking').checked=false;
   document.getElementById('perm_slots').checked=false;
   document.getElementById('perm_schedule').checked=false;
@@ -712,6 +711,29 @@ function getPermissionsFromForm(){
   };
 }
 
+// 老师表单：点领域 chip → 切换选中 → 刷新专业区（只展开已选领域下的专业）
+function toggleDomainChip(el){
+  el.classList.toggle('active');
+  renderTeacherMajorChips();
+}
+// 按已选领域展开专业 chip（按领域分组显示）；保留已勾选的专业状态
+function renderTeacherMajorChips(){
+  const box=document.getElementById('new_teacher_majors'); if(!box) return;
+  const selDomains=[...document.querySelectorAll('#new_teacher_domains .filter-chip.active')].map(c=>c.dataset.value);
+  // 记住当前已选专业，重绘后恢复
+  const prevSel=new Set([...box.querySelectorAll('.filter-chip.active')].map(c=>c.dataset.value));
+  if(!selDomains.length){ box.innerHTML='<div style="font-size:11px;color:var(--text-3)">请先选择领域，上方选定后这里展开对应专业</div>'; return; }
+  let html='';
+  selDomains.forEach(dom=>{
+    const majorsInDom=allMajorKeys().filter(m=>MAJOR_DOMAIN[m]===dom);
+    if(!majorsInDom.length) return;
+    html+=`<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text-3);margin-bottom:4px">${dom}</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    html+=majorsInDom.map(m=>`<div class="filter-chip${prevSel.has(m)?' active':''}" data-value="${m}" onclick="toggleChip(this)" style="padding:4px 10px">${majorLabel(m)}</div>`).join('');
+    html+='</div></div>';
+  });
+  box.innerHTML=html||'<div style="font-size:11px;color:var(--text-3)">所选领域下暂无专业</div>';
+}
+
 async function addTeacher(){
   const name=document.getElementById('new_teacher_name').value.trim();
   const notes=document.getElementById('new_teacher_notes').value.trim();
@@ -729,7 +751,7 @@ async function addTeacher(){
     document.getElementById('new_teacher_notes').value='';
   document.getElementById('new_teacher_tags').value='';
     document.getElementById('new_teacher_tags').value='';
-    document.querySelectorAll('#new_teacher_majors .filter-chip,#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active'));
+    document.querySelectorAll('#new_teacher_domains .filter-chip,#perm_booking_types .filter-chip,#perm_slot_types .filter-chip,#perm_vip_content .filter-chip,#perm_student_majors .filter-chip,#perm_student_mgmt_items .filter-chip').forEach(c=>c.classList.remove('active')); if(typeof renderTeacherMajorChips==='function') renderTeacherMajorChips();
     document.getElementById('perm_booking').checked=false;
     document.getElementById('perm_slots').checked=false;
     document.getElementById('perm_schedule').checked=false;
@@ -753,6 +775,15 @@ function openEditTeacher(id){
   // 回填负责领域 chip
   const teacherDomains=t.domains||[];
   document.querySelectorAll('#new_teacher_domains .filter-chip').forEach(c=>c.classList.toggle('active', teacherDomains.includes(c.dataset.value)));
+  // 若老师只有专业没有领域（旧数据），从专业反推领域一起点亮
+  if(!teacherDomains.length && (t.majors||[]).length){
+    const derived=new Set((t.majors||[]).map(m=>MAJOR_DOMAIN[m]).filter(Boolean));
+    document.querySelectorAll('#new_teacher_domains .filter-chip').forEach(c=>{ if(derived.has(c.dataset.value)) c.classList.add('active'); });
+  }
+  // 按已选领域展开专业区，再勾选老师已有专业
+  renderTeacherMajorChips();
+  const myMajors=new Set(t.majors||[]);
+  document.querySelectorAll('#new_teacher_majors .filter-chip').forEach(c=>c.classList.toggle('active', myMajors.has(c.dataset.value)));
   const p=t.permissions||{};
   document.getElementById('perm_booking').checked=!!p.booking;
   document.getElementById('perm_slots').checked=!!p.slots;
