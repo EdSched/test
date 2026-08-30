@@ -498,7 +498,7 @@ function skipReasonMap(c){
 function expand(c){
   const out=[];
   if(!c.start_date||!c.end_date||!c.weekdays||!c.start_time) return out;
-  const wds=c.weekdays.split(',').map(Number);
+  const wds=parseWeekdaysSched(c.weekdays);
   const skip=new Set((c.skip_dates||'').split(',').map(s=>s.trim()).filter(Boolean));
   const except=new Set((c.holiday_except||'').split(',').map(s=>s.trim()).filter(Boolean));
   const rmap=skipReasonMap(c);
@@ -520,7 +520,7 @@ function expandMergedGroup(gc){
   const grp=gc.slice().sort((a,b)=>(a.merge_order||99)-(b.merge_order||99));
   const ref=grp[0];
   if(!ref.weekdays||!ref.start_time) return out;
-  const wds=ref.weekdays.split(',').map(Number);
+  const wds=parseWeekdaysSched(ref.weekdays);
   const starts=grp.map(c=>c.start_date).filter(Boolean).sort();
   const ends=grp.map(c=>c.end_date).filter(Boolean).sort();
   if(!starts.length||!ends.length) return out;
