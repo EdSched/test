@@ -79,6 +79,23 @@ function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.get
 function weekdayOf(dateStr){ // 1=周一...7=周日
   const d=new Date(dateStr+'T00:00:00'); const w=d.getDay(); return w===0?7:w;
 }
+// 统一解析 weekdays，返回 sched 的 1-7 数组（周一=1…周日=7，与 weekdayOf 一致）。
+// 输入兼容：中文"周日/周一…"及单字"一二三…日天"、数字1-7、以及周日既可写 0 也可写 7。
+function parseWeekdaysSched(str){
+  if(str===null||str===undefined||str==='') return [];
+  str=String(str);
+  const days=[];
+  // 中文：周X/星期X/礼拜X 及单字 一二三…日/天（日/天→7）
+  const cn={'日':7,'天':7,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6};
+  const cm=str.match(/[周星期礼拜]+\s*([日天一二三四五六])/g);
+  if(cm) cm.forEach(m=>{const ch=m.slice(-1); if(ch in cn) days.push(cn[ch]);});
+  // 若没有"周/星期"前缀，则直接扫描单字（如"一,三,日"）
+  if(!cm){ for(const ch of str){ if(ch in cn) days.push(cn[ch]); } }
+  // 数字：0 或 7 都作周日→7；1-6 原样
+  const nm=str.match(/\d+/g);
+  if(nm) nm.forEach(n=>{let v=parseInt(n,10); if(v===0||v===7) days.push(7); else if(v>=1&&v<=6) days.push(v);});
+  return [...new Set(days)];
+}
 function overlap(aS,aE,bS,bE){ return aS < bE && bS < aE; } // 时间字符串区间是否重叠
 
 /* 课程归属的"6大类范围"：非语言课用类别；语言课细分日语/英语。用于学科负责人权限约束与筛选 */
@@ -154,7 +171,7 @@ function schedulingReminders(courses, bookings){
 /* 推断课程"班级性质"：共通/线上/周末/下午/晚上/默认。用于课表分组显示 */
 function classKind(c){
   const name=(c.name||'');
-  const wds=(c.weekdays||'').split(',').map(Number).filter(x=>x);
+  const wds=parseWeekdaysSched(c.weekdays);
   const st=(c.start_time||'');
   if(c.course_type==='共通课' || /共通|進学指導|進学指导|高数|高數/.test(name)) return '共通课';
   if(c.mode==='线上') return '线上班';
