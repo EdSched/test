@@ -48,6 +48,26 @@ function majorInCurrentDomain(key) {
   if (!CURRENT_DOMAIN || CURRENT_DOMAIN === 'all') return true;
   return MAJOR_DOMAIN[key] === CURRENT_DOMAIN;
 }
+// 学生可见性（叠加逻辑，仅用于学生管理/学生页）：
+// 学生的完整专业 = major(主) + extra_majors(附加，如日语/英语)。
+// 只要任一专业属于当前视角（领域或专业锁），学生就可见——支持跨领域学生在多个领域被看到。
+function studentInCurrentView(student) {
+  if (!CURRENT_DOMAIN || CURRENT_DOMAIN === 'all') {
+    if (!CURRENT_MAJOR) return true; // 总览无锁：全部可见
+  }
+  if (!student) return false;
+  const majors = [];
+  if (student.major) majors.push(student.major);
+  (student.extra_majors || []).forEach(m => majors.push(m));
+  // 主专业若是分组代码（社会人文组），展开成成员一起判断
+  const expanded = [];
+  majors.forEach(m => {
+    if (typeof MAJOR_GROUPS !== 'undefined' && MAJOR_GROUPS[m]) expanded.push(...MAJOR_GROUPS[m]);
+    else expanded.push(m);
+  });
+  return expanded.some(m => majorInCurrentView(m));
+}
+
 // 统一视角判断：某专业是否在「当前登录视角」内（跟随链接：领域链接=看整个领域；专业链接=只看该专业）
 // 所有功能页（预约/时间槽/出勤等）都用它做数据过滤，标准一致。
 // 空 major 的处理由调用方决定（如学部无专业课靠 domain 显示）。
