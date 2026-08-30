@@ -571,9 +571,20 @@ function tplRenderGroups(){
     wrap.innerHTML='<div style="font-size:12px;color:var(--text-3);padding:8px 0">暂无保存的模板</div>';
     return;
   }
+  // 视角过滤（跟随链接）：非总览只看当前领域/专业的模板（模板任一专业匹配即显示；无专业模板总览才显示）
+  let tpls=cachedTemplates;
+  if(CURRENT_MAJOR){
+    tpls=tpls.filter(t=>(t.major||[]).some(m=>m===CURRENT_MAJOR));
+  }else if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'){
+    tpls=tpls.filter(t=>(t.major||[]).some(m=>majorInCurrentView(m)));
+  }
+  if(!tpls.length){
+    wrap.innerHTML='<div style="font-size:12px;color:var(--text-3);padding:8px 0">暂无匹配当前领域的模板</div>';
+    return;
+  }
   // 按专业分组（多专业模板按专业组合归为一组）
   const groups={};
-  cachedTemplates.forEach(t=>{
+  tpls.forEach(t=>{
     const key=(t.major||[]).length?(t.major||[]).map(m=>majorLabel(m)).join('/'):'未设专业';
     if(!groups[key]) groups[key]=[];
     groups[key].push(t);
@@ -1956,6 +1967,11 @@ function csSetType(t,el){
 
 function csPopulatePeriods(){
   let courses=cachedCourses;
+  courses=courses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
+    return true;
+  });
   if(csTypeFilter!=='全部'){
     if(csTypeFilter==='共通课') courses=courses.filter(c=>c.course_type?.includes('共通'));
     else if(csTypeFilter==='专业课') courses=courses.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
@@ -1972,6 +1988,12 @@ function csPopulatePeriods(){
 
 function csFilterCourses(){
   let courses=cachedCourses;
+  // 视角过滤（跟随链接）：非总览只看当前领域/专业的课
+  courses=courses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
+    return true;
+  });
   if(csTypeFilter!=='全部'){
     if(csTypeFilter==='共通课') courses=courses.filter(c=>c.course_type?.includes('共通'));
     else if(csTypeFilter==='专业课') courses=courses.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
