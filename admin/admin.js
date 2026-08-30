@@ -65,7 +65,7 @@ function openConsole(){
   switchConsoleTab('keys');
 }
 let consoleTab='keys';
-function switchConsoleTab(tab){
+async function switchConsoleTab(tab){
   consoleTab=tab;
   ['keys','teachers','payroll'].forEach(t=>{
     const b=document.getElementById('ctab_'+t);
@@ -74,8 +74,20 @@ function switchConsoleTab(tab){
   const body=document.getElementById('consoleBody');
   if(!body) return;
   if(tab==='keys'){ loadConsole(); }
-  else if(tab==='teachers'){ renderTeachersPage(body); if(typeof renderTeacherList==='function') renderTeacherList(); }
-  else if(tab==='payroll'){ renderPayrollPage(body); }
+  else if(tab==='teachers'){
+    body.innerHTML='<div style="padding:20px;color:var(--text-3);font-size:12px">加载中…</div>';
+    [cachedTeachers, cachedSessions]=await Promise.all([
+      sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[]),
+      sbAll('/rest/v1/course_sessions?homework_enabled=is.true&select=id,course_name&order=course_name.asc').catch(()=>[]),
+    ]);
+    renderTeachersPage(body);
+    if(typeof renderTeacherList==='function') renderTeacherList();
+  }
+  else if(tab==='payroll'){
+    body.innerHTML='<div style="padding:20px;color:var(--text-3);font-size:12px">加载中…</div>';
+    cachedTeachers=await sb('/rest/v1/teachers?select=*&order=name.asc').catch(()=>[]);
+    renderPayrollPage(body);
+  }
 }
 function closeConsole(){
   document.getElementById('consoleOverlay').style.display='none';
