@@ -277,6 +277,7 @@ function renderCourseCleanupPage(mc){
   // 选了具体专业才按 major 匹配；无专业的课（学部/语言）靠 domain 显示，不被专业滤掉
   let filtered=cachedCourses.filter(c=>{
     if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
     if(cleanupMajorFilter==='all') return true;
     const majorList=expandMajorFilter(cleanupMajorFilter);
     return (c.major||[]).some(m=>majorList.includes(m));
@@ -1703,6 +1704,12 @@ function renderSchedulePage(mc){
 
   // 按属性+期数+课程筛选
   let filteredCourses=cachedCourses;
+  // 视角过滤（跟随链接）：非总览只看当前领域/专业的课
+  filteredCourses=filteredCourses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
+    return true;
+  });
   if(schedTypeFilter==='共通课') filteredCourses=filteredCourses.filter(c=>c.course_type?.includes('共通'));
   else if(schedTypeFilter==='专业课') filteredCourses=filteredCourses.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
   else if(schedTypeFilter==='VIP') filteredCourses=filteredCourses.filter(c=>c.course_type?.includes('VIP'));
@@ -2546,6 +2553,7 @@ async function ssPublish(){
 function cleanupSelectAllFiltered(){
   let filtered=cachedCourses.filter(c=>{
     if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
     if(cleanupMajorFilter==='all') return true;
     const majorList=expandMajorFilter(cleanupMajorFilter);
     return (c.major||[]).some(m=>majorList.includes(m));
