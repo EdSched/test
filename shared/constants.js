@@ -15,11 +15,12 @@ const SHAKAI_GROUP = ['shakai', 'shinpan', 'fukushi'];
 // 领域中文 ↔ 罗马音代码。中枢台卡片、访问钥匙标识都从这里读，统一来源避免不一致。
 // 领域不常变；如需增删领域，改这一处即可。
 const DOMAINS = [
-  { code: 'daigakuin_bunka', label: '大学院文科' },
-  { code: 'daigakuin_rika',  label: '大学院理科' },
-  { code: 'gakubu_bunka',    label: '学部文科' },
-  { code: 'gakubu_rika',     label: '学部理科' },
-  { code: 'gengo',           label: '语言' },
+  { code: 'daigakuin_bunka',   label: '大学院文科' },
+  { code: 'daigakuin_rika',    label: '大学院理科' },
+  { code: 'daigakuin_bijutsu', label: '大学院美术' },
+  { code: 'gakubu_bunka',      label: '学部文科' },
+  { code: 'gakubu_rika',       label: '学部理科' },
+  { code: 'gengo',             label: '语言' },
 ];
 // 领域中文 → 代码
 function domainCode(label){ const d=DOMAINS.find(x=>x.label===label); return d?d.code:''; }
