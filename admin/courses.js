@@ -1139,7 +1139,7 @@ function openAddCourseModal(editId){
     document.getElementById('ac_teacher').value=c.teacher||'';
     document.getElementById('ac_campus').value=c.campus||'';
     document.getElementById('ac_delivery').value=c.delivery||'';
-    document.getElementById('ac_weekday').value=c.weekdays||'';
+    acSetWeekdayChips(c.weekdays||'');
     document.getElementById('ac_time_range').value=c.time_range||'';
     document.getElementById('ac_total').value=c.total_sessions||'';
     document.getElementById('ac_first_date').value=c.first_session_date||'';
@@ -1169,7 +1169,8 @@ function openAddCourseModal(editId){
     ['ac_name','ac_teacher','ac_campus','ac_time_range','ac_notes','ac_meeting_url','ac_host_key'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('ac_recording').value = 'no';
     document.getElementById('ac_homework_enabled').value = 'false';
-    ['ac_period','ac_course_type','ac_delivery','ac_weekday'].forEach(id=>document.getElementById(id).value='');
+    ['ac_period','ac_course_type','ac_delivery'].forEach(id=>document.getElementById(id).value='');
+    acSetWeekdayChips('');
     document.getElementById('ac_total').value='';
     document.getElementById('ac_first_date').value='';
     document.getElementById('ac_has_details').checked=false;
@@ -1279,6 +1280,17 @@ function acAddRow(data){
   tbody.appendChild(tr);
 }
 
+// 周几多选 chip：读取点亮的（返回"周二,周四"），设置（按已有值点亮）
+function acGetWeekdayChips(){
+  return [...document.querySelectorAll('#ac_weekday_chips .filter-chip.active')].map(c=>c.dataset.wd).join(',');
+}
+function acSetWeekdayChips(str){
+  const set=new Set(parseWeekdays(str)); // 兼容"周二,周四"/"2,4"/中文等各种格式
+  document.querySelectorAll('#ac_weekday_chips .filter-chip').forEach(c=>{
+    const wdNum=parseWeekdays(c.dataset.wd)[0]; // 该chip对应的数字(周日=0)
+    c.classList.toggle('active', set.has(wdNum));
+  });
+}
 function acGetRows(){
   return [...document.querySelectorAll('#ac_details_body tr')].map((tr)=>{
     const inputs=tr.querySelectorAll('input');
@@ -1292,13 +1304,51 @@ function acGetRows(){
     };
   });
 }
+// 文本模式：把当前明细表格转成「回数|日期|时间|标题|老师」文本，显示文本区供批量修改
+function acToggleTextMode(){
+  const area=document.getElementById('ac_text_area');
+  if(!area) return;
+  if(area.style.display==='none'){
+    const rows=acGetRows();
+    document.getElementById('ac_text_input').value =
+      rows.map(r=>[r.num,r.date,r.time_range,r.title,r.teacher].join('|')).join('\n');
+    area.style.display='block';
+  } else {
+    area.style.display='none';
+  }
+}
+// 应用文本：解析每行「回数|日期|时间|标题|老师」回明细表格（保留原行的 id/作业绑定按回数对应）
+function acApplyTextMode(){
+  const text=document.getElementById('ac_text_input').value;
+  const oldRows=acGetRows();
+  const newRows=text.split('\n').map(l=>l.trim()).filter(Boolean).map((l,i)=>{
+    const p=l.split('|').map(x=>x.trim());
+    const num=p[0]||String(i+1);
+    // 按回数匹配旧行，继承 id（不丢单回身份/作业绑定）
+    const prev=oldRows.find(r=>String(r.num)===String(num))||{};
+    return {
+      id: prev.id||'',
+      num, date:p[1]||'', time_range:p[2]||'', title:p[3]||'', teacher:p[4]||''
+    };
+  });
+  if(!newRows.length){ alert('文本为空，未应用'); return; }
+  acSetRowsFromData(newRows);
+  document.getElementById('ac_text_area').style.display='none';
+}
+// 用给定数据重建明细表格行（复用 acAddRow）
+function acSetRowsFromData(rows){
+  const tbody=document.getElementById('ac_details_body');
+  if(!tbody) return;
+  tbody.innerHTML='';
+  rows.forEach(r=>acAddRow(r));
+}
 
 async function saveAddCourse(){
   const name=document.getElementById('ac_name').value.trim();
   const period=document.getElementById('ac_period').value;
   const total=parseInt(document.getElementById('ac_total').value)||0;
   const firstDate=document.getElementById('ac_first_date').value;
-  const weekdayStr=document.getElementById('ac_weekday').value;
+  const weekdayStr=acGetWeekdayChips();
   if(!name){alert('请填写课程名称');return}
   if(!period){alert('请选择期数');return}
   if(!total||!firstDate||!weekdayStr){alert('请填写回数、第一回日期和星期');return}
