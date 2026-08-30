@@ -250,15 +250,15 @@ function courseColor(name, course){
   if(/新闻|新伝/.test(n)) return {bg:'#e8e4f8',text:'#3a2a7a'};
   if(/福祉/.test(n)) return {bg:'#faecd8',text:'#5a3010'};
   if(/zemi|ゼミ|seminar/i.test(n)) return {bg:'#d8f0ea',text:'#0a4038'};
-  // ② 有专业：按专业代码自动生成（同专业同色）
+  // ② 其他领域：颜色 = 专业 + 名字关键词 + 校区 组合生成
+  //    这样同专业但不同班型（托福/托业）、不同校区的课，颜色都能区分
   const mj=(course&&(course.major||[])[0])||'';
-  if(mj) return autoColorFromStr('major_'+mj);
-  // ③ 没专业：按期数 / 名字关键词生成
-  const kw=(n.match(/托福|托业|托業|衔接|衝刺|冲刺|基础|基礎|N[1-5]|口语|写作/)||[])[0];
-  if(kw) return autoColorFromStr('kw_'+kw);
+  const kw=(n.match(/托福|托业|托業|衔接|衝刺|冲刺|基础|基礎|N[1-5]|口语|写作|会话|中级|高级|进阶|零基础|特进/)||[])[0]||'';
+  const campus=(course&&course.campus)||'';
+  const seed = mj+'|'+kw+'|'+campus;
+  if(seed!=='||') return autoColorFromStr(seed);
   const per=(course&&course.period)||'';
   if(per) return autoColorFromStr('period_'+per);
-  // ④ 兜底：按名字生成（也不再是灰）
   return autoColorFromStr('name_'+n);
 }
 
