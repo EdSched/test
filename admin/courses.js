@@ -1318,6 +1318,18 @@ function acToggleTextMode(){
   }
 }
 // 应用文本：解析每行「回数|日期|时间|标题|老师」回明细表格（保留原行的 id/作业绑定按回数对应）
+// 把各种日期写法规整成 YYYY-MM-DD（<input type=date> 只认这个格式）
+// 兼容：2026-07-16 / 2026/7/16 / 2026.7.16 / 2026年7月16日 等
+function normalizeDateStr(s){
+  s=String(s||'').trim();
+  if(!s) return '';
+  const m=s.match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+  if(m){
+    const y=m[1], mo=String(m[2]).padStart(2,'0'), d=String(m[3]).padStart(2,'0');
+    return `${y}-${mo}-${d}`;
+  }
+  return s; // 认不出就原样（若已是标准格式则前面已匹配）
+}
 function acApplyTextMode(){
   const text=document.getElementById('ac_text_input').value;
   const oldRows=acGetRows();
@@ -1328,7 +1340,7 @@ function acApplyTextMode(){
     const prev=oldRows.find(r=>String(r.num)===String(num))||{};
     return {
       id: prev.id||'',
-      num, date:p[1]||'', time_range:p[2]||'', title:p[3]||'', teacher:p[4]||''
+      num, date:normalizeDateStr(p[1]||''), time_range:p[2]||'', title:p[3]||'', teacher:p[4]||''
     };
   });
   if(!newRows.length){ alert('文本为空，未应用'); return; }
