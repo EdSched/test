@@ -61,8 +61,21 @@ let _consoleKeys=[];
 function openConsole(){
   const el=document.getElementById('consoleOverlay'); if(!el) return;
   document.getElementById('hubOverlay').style.display='none';
-  el.style.display='flex';
-  loadConsole();
+  el.style.display='block';
+  switchConsoleTab('keys');
+}
+let consoleTab='keys';
+function switchConsoleTab(tab){
+  consoleTab=tab;
+  ['keys','teachers','payroll'].forEach(t=>{
+    const b=document.getElementById('ctab_'+t);
+    if(b){ b.style.borderBottomColor = t===tab?'var(--primary,#8b5cf6)':'transparent'; b.style.color = t===tab?'var(--text)':'var(--text-3)'; b.style.fontWeight = t===tab?'600':'400'; }
+  });
+  const body=document.getElementById('consoleBody');
+  if(!body) return;
+  if(tab==='keys'){ loadConsole(); }
+  else if(tab==='teachers'){ renderTeachersPage(body); if(typeof renderTeacherList==='function') renderTeacherList(); }
+  else if(tab==='payroll'){ renderPayrollPage(body); }
 }
 function closeConsole(){
   document.getElementById('consoleOverlay').style.display='none';
