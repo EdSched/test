@@ -74,7 +74,12 @@ getRoleByCode(currentCode()).then(r=>{ if(r){ window.ROLE=r; el('nav').innerHTML
 let ROOMS=[], ACCOUNTS=[], BOOKINGS=[], CUR=null;
 const BK_TKEY='sched_booking_token';
 function myToken(){ let t=localStorage.getItem(BK_TKEY); if(!t){ t='bk'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem(BK_TKEY,t); } return t; }
-function isManager(){ const ps=(window.ROLE&&window.ROLE.perms||'').split(',').map(s=>s.trim()); return (window.ROLE&&window.ROLE.role==='admin')||ps.includes('manage')||ps.includes('occupy'); }
+function isManager(){
+  // 主页面（父窗口）已按 ROLE 判定权限并通过 URL ?canmanage=1 传入 iframe：优先认它
+  if(new URLSearchParams(location.search).get('canmanage')==='1') return true;
+  const ps=(window.ROLE&&window.ROLE.perms||'').split(',').map(s=>s.trim());
+  return (window.ROLE&&window.ROLE.role==='admin')||ps.includes('manage')||ps.includes('occupy');
+}
 
 async function boot(){
   fillSelect(el('campus'), CAMPUSES);
