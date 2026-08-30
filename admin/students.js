@@ -30,6 +30,8 @@ function renderStudentsPage(mc){
       .then(r=>{speEdits=r||[];speRenderBar();}).catch(()=>{});
   }
   let list=cachedStudents;
+  // 视角过滤（叠加逻辑）：非总览时，主专业或附加专业任一属于当前领域/专业即可见
+  list=list.filter(s=>studentInCurrentView(s));
   if(stMajorFilter!=='all') list=list.filter(s=>matchesMajorFilter(s.major,stMajorFilter));
   if(stStatus!=='all') list=list.filter(s=>s.status===stStatus);
   if(stVipFilter==='vip_only') list=list.filter(s=>s.is_vip_course==='VIP'||s.is_vip_course==='大课+VIP');
@@ -141,11 +143,30 @@ function removeVipTeacherTag(name){
   renderVipTeacherTags();
 }
 
+// 学生档案-语言附加选择（与主专业叠加）。存进 extra_majors 数组。
+let stExtraLangs = [];
+function toggleStLang(code){
+  const i=stExtraLangs.indexOf(code);
+  if(i>=0) stExtraLangs.splice(i,1); else stExtraLangs.push(code);
+  ['nihongo','eigo'].forEach(c=>{
+    const el=document.getElementById('st_lang_'+c);
+    if(el) el.classList.toggle('active', stExtraLangs.includes(c));
+  });
+}
+function setStLangs(arr){
+  stExtraLangs = Array.isArray(arr)?arr.slice():[];
+  ['nihongo','eigo'].forEach(c=>{
+    const el=document.getElementById('st_lang_'+c);
+    if(el) el.classList.toggle('active', stExtraLangs.includes(c));
+  });
+}
+
 function openStudentModal(id){
   const s=id?cachedStudents.find(x=>x.id===id):null;
   document.getElementById('studentModalTitle').textContent=s?'编辑学生':'添加学生';
   document.getElementById('studentId').value=s?.id||'';
   populateMajorSelect('st_major', s?.major||'');
+  setStLangs(s?.extra_majors||[]);
   populateVipTeachers(s?.vip_teachers||[]);
   const fields={
     st_name:'name',st_type:'student_type',st_source:'source',
@@ -294,6 +315,7 @@ async function saveStudent(){
   const id=document.getElementById('studentId').value;
   const data={
     name,major,
+    extra_majors:stExtraLangs.slice(),
     student_type:document.getElementById('st_type').value,
     source:document.getElementById('st_source').value,
     course_type:document.getElementById('st_course').value,
