@@ -36,7 +36,9 @@ function renderVipFrameworkPage(mc) {
   vfCurrentId = null;
   const majorOpts = majorOptionsHtml('', { placeholder: '选择专业…' });
 
-  const cards = vfFrameworks.length ? vfFrameworks.map(f => {
+  // 视角过滤（跟随链接）：非总览只看当前领域/专业的框架
+  const visFrameworks = vfFrameworks.filter(f => majorInCurrentView(f.major));
+  const cards = visFrameworks.length ? visFrameworks.map(f => {
     const st = f.status || 'draft';
     return `
     <div onclick="openVipFramework('${f.id}')" style="cursor:pointer;border:1px solid var(--border);border-radius:5px;padding:12px 14px;background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:12px;transition:border-color .12s" onmouseover="this.style.borderColor='var(--text-2)'" onmouseout="this.style.borderColor='var(--border)'">
