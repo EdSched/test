@@ -273,7 +273,10 @@ function gen(){
 }
 function fillMajors(){
   const cat=el('cat').value;
-  const majors=[...new Set(COURSES.filter(c=>c.category===cat && c.major).map(c=>c.major))].sort();
+  let majors=[...new Set(COURSES.filter(c=>c.category===cat && c.major).map(c=>c.major))].sort();
+  // 若该领域下有社会人文组的任一子专业，则提供「社会人文」组选项（一次选中三个子专业）
+  const hasShakaiGroup=majors.some(m=>['社会学','新闻传播学','新聞传播学','社会福祉学','社会人文'].includes(m));
+  if(hasShakaiGroup && !majors.includes('社会人文')) majors=['社会人文',...majors];
   fillSelect(el('major'), majors, v=>v, v=>v, majors.length?'全部专业':'（无专业细分）');
 }
 /* 期多选标签 */
@@ -304,7 +307,12 @@ function baseCourses(){
     if(campus && c.campus!==campus) return false;
     if(c.category==='语言') return withLang;
     if(c.category!==cat) return false;
-    if(major) return c.major===major || c.course_type==='共通课';
+    if(major){
+      // 「社会人文」是组专业：展开为社会学+新闻传播学+社会福祉学一起匹配（含直接标社会人文的）
+      const SHAKAI_GROUP_CN=['社会人文','社会学','新闻传播学','新聞传播学','社会福祉学'];
+      if(major==='社会人文') return SHAKAI_GROUP_CN.includes(c.major) || c.course_type==='共通课';
+      return c.major===major || c.course_type==='共通课';
+    }
     return true;
   });
 }
