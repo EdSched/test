@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>排班日历 · 唯新</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+:root{
+  --bg:#f7f5f0; --surface:#fff; --border:#e2ded6; --border-light:#ede9e2;
+  --tp:#1a1814; --ts:#5a5650; --tm:#9a9590; --sat:#1a4a8a; --sun:#8a1a2c;
+  --zao-bg:#e4f0e8; --zao:#1a5a3a;   /* 早 */
+  --zhong-bg:#fdf0d8; --zhong:#7a5210; /* 中 */
+  --wan-bg:#e0e4f8; --wan:#2a2a7a;    /* 晚 */
+  --ban-bg:#f8e8e0; --ban:#7a3a10;    /* 半 */
+  --cc-bg:#f0e0e8; --cc:#7a1a4a;      /* 出差 */
+  --off-bg:#f2efe9; --off:#9a9590;    /* 休 */
+  --leave-bg:#fbeaea; --leave:#a01818;/* 请假类 */
+}
+#roster, #roster *{ font-family:'DM Mono','Noto Serif SC',monospace; box-sizing:border-box; }
+#roster{ background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:1.2rem; margin-top:14px; color:var(--tp); }
+.rtabs{ display:flex; gap:6px; margin-bottom:14px; }
+.rtab{ background:none; border:1px solid var(--border); border-radius:5px; padding:6px 18px; font-size:13px; cursor:pointer; font-family:inherit; color:var(--ts); }
+.rtab.active{ background:var(--tp); color:#fff; border-color:var(--tp); }
+.rbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:12px; }
+.rbar button{ background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:4px 10px; cursor:pointer; font-family:inherit; font-size:12px; }
+.rtable{ width:100%; border-collapse:collapse; font-size:11px; }
+.rtable th,.rtable td{ border:1px solid var(--border-light); padding:3px 4px; text-align:center; white-space:nowrap; }
+.rtable th.name,.rtable td.name{ text-align:left; position:sticky; left:0; background:var(--surface); z-index:2; min-width:78px; font-weight:500; }
+.rtable th.dept{ text-align:left; background:#f0ede7; font-weight:600; }
+.rtable thead th{ background:#f4f1eb; position:sticky; top:0; z-index:1; }
+.rtable th.sat{ color:var(--sat); } .rtable th.sun{ color:var(--sun); }
+.cell{ cursor:pointer; border-radius:3px; padding:2px 3px; font-size:10px; line-height:1.25; min-height:20px; }
+.c-早{ background:var(--zao-bg); color:var(--zao); }
+.c-中{ background:var(--zhong-bg); color:var(--zhong); }
+.c-晚{ background:var(--wan-bg); color:var(--wan); }
+.c-半{ background:var(--ban-bg); color:var(--ban); }
+.c-出差{ background:var(--cc-bg); color:var(--cc); }
+.c-休{ background:var(--off-bg); color:var(--off); }
+.c-年假,.c-固定休假,.c-请假{ background:var(--leave-bg); color:var(--leave); }
+.legend{ display:flex; gap:8px; flex-wrap:wrap; font-size:10px; margin-top:10px; color:var(--ts); }
+.legend span{ padding:1px 7px; border-radius:3px; }
+.rwrap{ overflow:auto; max-height:74vh; }
+.modal-bg{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:100; }
+.modal-bg.show{ display:flex; }
+.modal{ background:#fff; border-radius:8px; padding:20px 22px; width:min(360px,92vw); }
+.modal h3{ margin:0 0 12px; font-size:15px; }
+.chip{ display:inline-block; border:1px solid var(--border); border-radius:4px; padding:4px 12px; margin:3px 4px 3px 0; cursor:pointer; font-size:12px; }
+.chip.active{ background:var(--tp); color:#fff; border-color:var(--tp); }
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<div style="max-width:1400px;margin:0 auto;padding:0 14px">
+  <div id="roster">
+    <div class="rtabs">
+      <button class="rtab active" id="tab_regular" onclick="switchRoster('regular')">正社员</button>
+      <button class="rtab" id="tab_parttime" onclick="switchRoster('parttime')">兼职</button>
+    </div>
+    <div class="rbar">
+      <button onclick="shiftWeek(-7)">← 上一周</button>
+      <button onclick="shiftWeek(0)">本周</button>
+      <button onclick="shiftWeek(7)">下一周 →</button>
+      <span id="rangeLabel" style="font-weight:600"></span>
+      <span style="margin-left:auto;color:var(--ts)">点格子可编辑（出勤班次 / 休假）</span>
+    </div>
+    <div class="rwrap"><div id="rosterBody"><div style="padding:30px;text-align:center;color:var(--tm)">加载中…</div></div></div>
+    <div class="legend">
+      <span class="c-早">早</span><span class="c-中">中</span><span class="c-晚">晚</span>
+      <span class="c-半">半天</span><span class="c-出差">出差</span>
+      <span class="c-年假">年假</span><span class="c-固定休假">固定休假</span><span class="c-请假">请假</span>
+      <span class="c-休">空=休息</span>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <h3 id="editTitle">编辑</h3>
+    <div style="font-size:12px;color:var(--ts);margin-bottom:10px" id="editSub"></div>
+    <div style="font-size:11px;color:var(--tm);margin-bottom:4px">出勤班次</div>
+    <div id="shiftChips">
+      <span class="chip" data-kind="shift" data-val="早" data-s="09:30" data-e="18:30">早</span>
+      <span class="chip" data-kind="shift" data-val="中" data-s="11:00" data-e="20:00">中</span>
+      <span class="chip" data-kind="shift" data-val="晚" data-s="13:00" data-e="22:00">晚</span>
+      <span class="chip" data-kind="shift" data-val="半" data-s="09:30" data-e="14:00">半</span>
+      <span class="chip" data-kind="shift" data-val="出差" data-s="09:30" data-e="18:30">出差</span>
+    </div>
+    <div style="font-size:11px;color:var(--tm);margin:10px 0 4px">休假</div>
+    <div id="leaveChips">
+      <span class="chip" data-kind="leave" data-val="年假">年假</span>
+      <span class="chip" data-kind="leave" data-val="固定休假">固定休假</span>
+      <span class="chip" data-kind="leave" data-val="请假">请假</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="saveCell()" style="flex:1;background:var(--tp);color:#fff;border:none;border-radius:5px;padding:8px;cursor:pointer;font-family:inherit">保存</button>
+      <button onclick="clearCell()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:8px 14px;cursor:pointer;font-family:inherit">清空(休息)</button>
+      <button onclick="closeEdit()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:8px 14px;cursor:pointer;font-family:inherit">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+const DEPTS=['教务本部','营业本部','管理本部','美术部','综合事业本部'];
+const DAYS=['日','一','二','三','四','五','六'];
+let TEACHERS=[], SLOTS=[], curRoster='regular', weekStart=null;
+let editCtx=null, editSel={kind:null,val:null};
+
+function mondayOf(d){ const x=new Date(d); const w=x.getDay(); const diff=(w===0?-6:1-w); x.setDate(x.getDate()+diff); x.setHours(0,0,0,0); return x; }
+function fmt(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+
+// 从时间段自动判断班次：早9:30 / 中11:00 / 晚13:00（按开始时间就近）
+function shiftFromTime(tr){
+  if(!tr) return '';
+  const m=String(tr).match(/(\d{1,2}):(\d{2})/);
+  if(!m) return '出勤';
+  const h=parseInt(m[1])+parseInt(m[2])/60;
+  if(h<=10.5) return '早';
+  if(h<=12) return '中';
+  return '晚';
+}
+
+async function boot(){
+  try{ if(typeof currentCode==='function'){ getRoleByCode(currentCode()).then(r=>{ if(r) document.getElementById('nav').innerHTML=renderNav('roster.html',r); }).catch(()=>{}); } }catch(e){}
+  weekStart=mondayOf(new Date());
+  await loadData();
+  render();
+}
+async function loadData(){
+  try{
+    TEACHERS = await sbGet('teachers','select=*&order=name.asc') || [];
+    SLOTS = await sbGet('slots','select=*&order=date.asc') || [];
+  }catch(e){ document.getElementById('rosterBody').innerHTML='<div style="padding:20px;color:#a01818">加载失败：'+e.message+'</div>'; }
+}
+function switchRoster(which){
+  curRoster=which;
+  document.getElementById('tab_regular').classList.toggle('active',which==='regular');
+  document.getElementById('tab_parttime').classList.toggle('active',which==='parttime');
+  render();
+}
+function shiftWeek(delta){
+  if(delta===0) weekStart=mondayOf(new Date());
+  else weekStart=addDays(weekStart,delta);
+  render();
+}
+
+// 找某老师某天的出勤/休假记录
+function cellFor(teacherName,dateStr){
+  const rows=SLOTS.filter(s=>s.teacher_name===teacherName && s.date===dateStr && (s.purpose==='attendance'||s.purpose==='leave'));
+  if(!rows.length) return null;
+  // 休假优先显示
+  const leave=rows.find(r=>r.purpose==='leave');
+  if(leave) return {type:'leave', val:leave.leave_type||'请假', id:leave.id};
+  const att=rows[0];
+  const shift=att.shift||shiftFromTime(att.time_range);
+  return {type:'shift', val:shift, id:att.id, time:att.time_range};
+}
+
+function render(){
+  const days=[]; for(let i=0;i<14;i++) days.push(addDays(weekStart,i)); // 显示两周
+  document.getElementById('rangeLabel').textContent=fmt(days[0])+' ～ '+fmt(days[13]);
+  const list=TEACHERS.filter(t=> curRoster==='regular' ? t.staff_type==='正社员' : t.staff_type==='兼职');
+  if(!list.length){ document.getElementById('rosterBody').innerHTML='<div style="padding:30px;text-align:center;color:var(--tm)">暂无'+(curRoster==='regular'?'正社员':'兼职')+'老师</div>'; return; }
+
+  let h='<table class="rtable"><thead><tr><th class="name">姓名</th>';
+  days.forEach(d=>{ const wd=d.getDay(); h+=`<th class="${wd===6?'sat':wd===0?'sun':''}">${d.getMonth()+1}/${d.getDate()}<br><span style="font-size:9px">周${DAYS[wd]}</span></th>`; });
+  h+='</tr></thead><tbody>';
+
+  if(curRoster==='regular'){
+    // 正社员按部门分组
+    DEPTS.forEach(dept=>{
+      const members=list.filter(t=>t.department===dept);
+      if(!members.length) return;
+      h+=`<tr><td class="dept" colspan="${days.length+1}">${dept}</td></tr>`;
+      members.forEach(t=>{ h+=rowFor(t,days); });
+    });
+    // 无部门的正社员
+    const noDept=list.filter(t=>!DEPTS.includes(t.department||''));
+    if(noDept.length){ h+=`<tr><td class="dept" colspan="${days.length+1}">未分部门</td></tr>`; noDept.forEach(t=>{ h+=rowFor(t,days); }); }
+  }else{
+    // 兼职不分部门
+    list.forEach(t=>{ h+=rowFor(t,days); });
+  }
+  h+='</tbody></table>';
+  document.getElementById('rosterBody').innerHTML=h;
+}
+
+function rowFor(t,days){
+  let r=`<tr><td class="name">${esc(t.name)}</td>`;
+  days.forEach(d=>{
+    const ds=fmt(d);
+    const c=cellFor(t.name,ds);
+    let cls='c-休', txt='';
+    if(c){ if(c.type==='leave'){ cls='c-'+c.val; txt=c.val; } else { cls='c-'+c.val; txt=c.val; } }
+    r+=`<td><div class="cell ${cls}" onclick="openEdit('${esc(t.name)}','${ds}')">${txt||'&nbsp;'}</div></td>`;
+  });
+  return r+'</tr>';
+}
+
+function openEdit(name,dateStr){
+  editCtx={name,date:dateStr};
+  editSel={kind:null,val:null};
+  const c=cellFor(name,dateStr);
+  if(c){ editSel={kind:c.type==='leave'?'leave':'shift', val:c.val}; }
+  document.getElementById('editTitle').textContent=name;
+  document.getElementById('editSub').textContent=dateStr+'（周'+DAYS[new Date(dateStr+'T00:00:00').getDay()]+'）';
+  document.querySelectorAll('#shiftChips .chip,#leaveChips .chip').forEach(ch=>{
+    ch.classList.toggle('active', ch.dataset.kind===editSel.kind && ch.dataset.val===editSel.val);
+    ch.onclick=()=>{ document.querySelectorAll('#shiftChips .chip,#leaveChips .chip').forEach(x=>x.classList.remove('active')); ch.classList.add('active'); editSel={kind:ch.dataset.kind,val:ch.dataset.val,s:ch.dataset.s,e:ch.dataset.e}; };
+  });
+  document.getElementById('editModal').classList.add('show');
+}
+function closeEdit(){ document.getElementById('editModal').classList.remove('show'); }
+
+async function saveCell(){
+  if(!editCtx) return;
+  if(!editSel.kind){ alert('请选择班次或休假'); return; }
+  // 先删该老师该天已有的出勤/休假记录
+  const olds=SLOTS.filter(s=>s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave'));
+  try{
+    for(const o of olds){ await sbDelete('slots',o.id); }
+    let row;
+    if(editSel.kind==='shift'){
+      row={ id:Date.now()+'-'+Math.random().toString(36).slice(2,6), teacher_name:editCtx.name, date:editCtx.date, time_range:(editSel.s||'09:30')+'–'+(editSel.e||'18:30'), purpose:'attendance', shift:editSel.val, type:[], major:'', location:'offline_takadanobaba' };
+    }else{
+      row={ id:Date.now()+'-'+Math.random().toString(36).slice(2,6), teacher_name:editCtx.name, date:editCtx.date, time_range:'', purpose:'leave', leave_type:editSel.val, type:[], major:'' };
+    }
+    await sbInsert('slots',[row]);
+    SLOTS=SLOTS.filter(s=>!(s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave')));
+    SLOTS.push(row);
+    closeEdit(); render();
+  }catch(e){ alert('保存失败：'+e.message); }
+}
+async function clearCell(){
+  if(!editCtx) return;
+  const olds=SLOTS.filter(s=>s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave'));
+  try{
+    for(const o of olds){ await sbDelete('slots',o.id); }
+    SLOTS=SLOTS.filter(s=>!(s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave')));
+    closeEdit(); render();
+  }catch(e){ alert('操作失败：'+e.message); }
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+boot();
+</script>
+</body></html>
