@@ -625,7 +625,8 @@ let teacherSlotYear = new Date().getFullYear(), teacherSlotMonth = new Date().ge
 
 function renderSlotManagement(mc) {
   const p = teacherData?.permissions || {};
-  const allowedTypes = p.slot_types || ['daily'];
+  const allowedTypes = (p.slot_types || ['daily']).filter(t=>t!=='attendance');
+  const canAttendance = (p.slot_types || []).includes('attendance');
   const majors = teacherData?.majors || [];
   const ym = `${teacherSlotYear}-${String(teacherSlotMonth + 1).padStart(2, '0')}`;
   const monthSlots = cachedTeacherSlots.filter(s => s.date.startsWith(ym)).sort((a, b) => a.date.localeCompare(b.date));
@@ -656,7 +657,7 @@ function renderSlotManagement(mc) {
             </div>
           </div>
         </div>
-        <div class="form-group"><label class="form-label">用途</label>
+        <div class="form-group" id="ts_purpose_wrap" style="${canAttendance?'':'display:none'}"><label class="form-label">用途</label>
           <div style="display:flex;gap:6px" id="ts_purpose_group">
             <div class="filter-chip active" data-value="interview" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px">面谈</div>
             <div class="filter-chip" data-value="attendance" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px">出勤</div>
