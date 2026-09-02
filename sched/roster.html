@@ -6,16 +6,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <style>
-:root{
+#roster, .modal-bg, .modal{
   --bg:#f7f5f0; --surface:#fff; --border:#e2ded6; --border-light:#ede9e2;
   --tp:#1a1814; --ts:#5a5650; --tm:#9a9590; --sat:#1a4a8a; --sun:#8a1a2c;
-  --zao-bg:#e4f0e8; --zao:#1a5a3a;   /* 早 */
-  --zhong-bg:#fdf0d8; --zhong:#7a5210; /* 中 */
-  --wan-bg:#e0e4f8; --wan:#2a2a7a;    /* 晚 */
-  --ban-bg:#f8e8e0; --ban:#7a3a10;    /* 半 */
-  --cc-bg:#f0e0e8; --cc:#7a1a4a;      /* 出差 */
-  --off-bg:#f2efe9; --off:#9a9590;    /* 休 */
-  --leave-bg:#fbeaea; --leave:#a01818;/* 请假类 */
+  --zao-bg:#e4f0e8; --zao:#1a5a3a;
+  --zhong-bg:#fdf0d8; --zhong:#7a5210;
+  --wan-bg:#e0e4f8; --wan:#2a2a7a;
+  --ban-bg:#f8e8e0; --ban:#7a3a10;
+  --cc-bg:#f0e0e8; --cc:#7a1a4a;
+  --off-bg:#f2efe9; --off:#9a9590;
+  --leave-bg:#fbeaea; --leave:#a01818;
 }
 #roster, #roster *{ font-family:'DM Mono','Noto Serif SC',monospace; box-sizing:border-box; }
 #roster{ background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:1.2rem; margin-top:14px; color:var(--tp); }
@@ -23,7 +23,8 @@
 .rtab{ background:none; border:1px solid var(--border); border-radius:5px; padding:6px 18px; font-size:13px; cursor:pointer; font-family:inherit; color:var(--ts); }
 .rtab.active{ background:var(--tp); color:#fff; border-color:var(--tp); }
 .rbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:12px; }
-.rbar button{ background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:4px 10px; cursor:pointer; font-family:inherit; font-size:12px; }
+.rbar button{ background:#fff; color:#1a1814; border:1px solid #d8d3ca; border-radius:4px; padding:4px 10px; cursor:pointer; font-family:inherit; font-size:12px; }
+.rbar button:hover{ background:#f4f1eb; }
 .rtable{ width:100%; border-collapse:collapse; font-size:11px; }
 .rtable th,.rtable td{ border:1px solid var(--border-light); padding:3px 4px; text-align:center; white-space:nowrap; }
 .rtable th.name,.rtable td.name{ text-align:left; position:sticky; left:0; background:var(--surface); z-index:2; min-width:78px; font-weight:500; }
