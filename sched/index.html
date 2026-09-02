@@ -100,6 +100,7 @@ const HUB_CARDS = [
   // key, 图标, 名称, 说明, 类型('tab'内部函数 / 'iframe'嵌页), 目标
   ['board',    '📋','教室看板','选校区+日期，看当天各教室占用','iframe','board.html'],
   ['timetable','🎓','课程表','按专业/期生成课表，可分享只读链接','iframe','timetable.html'],
+  ['roster',   '🗓️','排班日历','正社员/兼职出勤与休假，自动标早中晚','iframe','roster.html'],
   ['meeting',  '📶','腾讯会议账号占用','查账号空闲/预留，给线上课预留账号','iframe','meeting.html'],
   ['bookingf', '🏫','教室占用录入','查空闲→点教室→录入临时/租用/开会','iframe','booking.html'],
   ['pending',  '✅','预约批准','审批老师提交的教室预约','tab','pending'],
@@ -111,7 +112,7 @@ const HUB_CARDS = [
 ];
 /* 每张卡片需要的权限；manage(管理员)看到全部 */
 const CARD_PERM = {
-  board:'board', timetable:'timetable', meeting:'meeting_view', bookingf:'entry_room',
+  board:'board', timetable:'timetable', roster:'roster', meeting:'meeting_view', bookingf:'entry_room',
   pending:'approve', assign:'assign', conflict:'conflict',
   rooms:'room_manage', accounts:'account_manage', courses:'course'
 };
