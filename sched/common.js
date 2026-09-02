@@ -367,6 +367,7 @@ function toast(msg, ok){ // 顶部临时提示
 const PERM_DEFS = [
   ['board',           '教室看板',        'board.html'],
   ['timetable',       '课程表',          'timetable.html'],
+  ['roster',          '排班日历',        'roster.html'],
   ['meeting_view',    '腾讯会议账号占用', 'meeting.html'],
   ['entry_room',      '教室占用录入',    'booking.html'],      // 仅临时/租用（页面内再限制用途）
   ['entry_room_full', '教室占用录入',    'booking.html'],      // 全部用途（分配UI里隐藏，与上合并）
