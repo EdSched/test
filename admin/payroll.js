@@ -146,15 +146,13 @@ function buildBookingRows(bookings, slots, teacherName) {
 // ── Excel 导出 ──
 function exportPayrollExcel(rows, teacherName, dateRange) {
   const headers = ['姓名', '开始时间', '结束时间', '时长', '工作内容', '工作地点', '备注'];
-  const csvRows = [headers.join('\t')];
-  rows.forEach(r => csvRows.push(headers.map(h => r[h] ?? '').join('\t')));
-  const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'application/vnd.ms-excel;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `工资核算_${teacherName}_${dateRange}.xls`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // 用 SheetJS 生成真正的 xlsx，字段自动分列（原来的 .xls+Tab 会全挤第一列）
+  const aoa = [headers, ...rows.map(r => headers.map(h => r[h] ?? ''))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:10},{wch:20},{wch:20},{wch:8},{wch:10},{wch:14},{wch:40}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '工资核算');
+  XLSX.writeFile(wb, `工资核算_${teacherName}_${dateRange}.xlsx`);
 }
 
 // ══════════════════════════════════
@@ -603,15 +601,12 @@ async function exportWorkRecordsExcel(teacherName) {
   const records = await sb(`/rest/v1/work_records?teacher_name=eq.${encodeURIComponent(teacherName)}&status=eq.approved&order=start_time.asc`);
   if (!records.length) { alert('该老师暂无已通过的工作记录'); return; }
   const headers = ['姓名', '开始时间', '结束时间', '时长', '工作内容', '工作地点', '备注'];
-  const csvRows = [headers.join('\t')];
-  records.forEach(r => csvRows.push([r.teacher_name, r.start_time, r.end_time, r.duration, r.work_type, r.location, r.notes].join('\t')));
-  const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'application/vnd.ms-excel;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `工作记录_${teacherName}.xls`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const aoa = [headers, ...records.map(r => [r.teacher_name, r.start_time, r.end_time, r.duration, r.work_type, r.location, r.notes])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:10},{wch:20},{wch:20},{wch:8},{wch:10},{wch:14},{wch:40}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '工作记录');
+  XLSX.writeFile(wb, `工作记录_${teacherName}.xlsx`);
 }
 
 // 导出全部老师所有 approved 记录为一张 Excel
@@ -619,16 +614,13 @@ async function exportAllWorkRecordsExcel() {
   const records = await sb(`/rest/v1/work_records?status=eq.approved&order=teacher_name.asc,start_time.asc`);
   if (!records.length) { alert('暂无已通过的工作记录'); return; }
   const headers = ['姓名', '开始时间', '结束时间', '时长', '工作内容', '工作地点', '备注'];
-  const csvRows = [headers.join('\t')];
-  records.forEach(r => csvRows.push([r.teacher_name, r.start_time, r.end_time, r.duration, r.work_type, r.location, r.notes].join('\t')));
-  const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'application/vnd.ms-excel;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
+  const aoa = [headers, ...records.map(r => [r.teacher_name, r.start_time, r.end_time, r.duration, r.work_type, r.location, r.notes])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:10},{wch:20},{wch:20},{wch:8},{wch:10},{wch:14},{wch:40}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '工作记录');
   const today = new Date().toISOString().slice(0,10);
-  a.download = `工作记录_全部老师_${today}.xls`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  XLSX.writeFile(wb, `工作记录_全部老师_${today}.xlsx`);
 }
 
 function renderPayrollPage(mc){
