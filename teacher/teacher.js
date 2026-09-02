@@ -656,6 +656,24 @@ function renderSlotManagement(mc) {
             </div>
           </div>
         </div>
+        <div class="form-group"><label class="form-label">用途</label>
+          <div style="display:flex;gap:6px" id="ts_purpose_group">
+            <div class="filter-chip active" data-value="interview" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px">面谈</div>
+            <div class="filter-chip" data-value="attendance" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px">出勤</div>
+          </div>
+        </div>
+        <div class="form-group" id="ts_shift_wrap" style="display:none"><label class="form-label">班次（点选自动填时间）</label>
+          <div style="display:flex;flex-wrap:wrap;gap:5px" id="ts_shift_group">
+            <div class="ts-shift-chip" data-shift="早" data-s="09:30" data-e="18:30" onclick="tsSelectShift(this)" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">早 9:30-18:30</div>
+            <div class="ts-shift-chip" data-shift="中" data-s="11:00" data-e="20:00" onclick="tsSelectShift(this)" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">中 11:00-20:00</div>
+            <div class="ts-shift-chip" data-shift="晚" data-s="13:00" data-e="22:00" onclick="tsSelectShift(this)" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">晚 13:00-22:00</div>
+            <div class="ts-shift-chip" data-shift="半" data-s="09:30" data-e="14:00" onclick="tsSelectShift(this)" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">半天</div>
+            <div class="ts-shift-chip" data-shift="出差" data-s="09:30" data-e="18:30" onclick="tsSelectShift(this)" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">出差</div>
+          </div>
+        </div>
+        <div class="form-group" id="ts_also_wrap" style="display:none">
+          <div class="filter-chip" id="ts_also_interview" onclick="this.classList.toggle('active');document.getElementById('ts_type_block').style.display=this.classList.contains('active')?'block':'none'" style="padding:4px 12px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">＋ 该出勤同时可接面谈</div>
+        </div>
         <div class="form-group"><label class="form-label">时间段</label>
           <div style="display:grid;grid-template-columns:1fr 16px 1fr;gap:4px;align-items:center">
             <input type="time" id="ts_start" value="10:00">
@@ -663,6 +681,7 @@ function renderSlotManagement(mc) {
             <input type="time" id="ts_end" value="12:00">
           </div>
         </div>
+        <div id="ts_type_block">
         <div class="form-group"><label class="form-label">类型（可多选）</label>
           <div style="display:flex;flex-direction:column;gap:8px" id="ts_type_group">
             ${allowedTypes.map(t => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
@@ -687,6 +706,7 @@ function renderSlotManagement(mc) {
           </div>
           </div>
         </div>
+        </div><!-- /ts_type_block -->
         <div class="form-group" style="margin-bottom:0"><label class="form-label">专业</label>
           <select id="ts_major">
             ${majors.map(m => `<option value="${m}">${m === 'shakai_group' ? '社会人文' : MAJORS[m] || m}</option>`).join('')}
@@ -771,11 +791,39 @@ function teacherSlotMonthShift(d) {
   renderTab();
 }
 
+function tsSelectPurpose(el){
+  document.querySelectorAll('#ts_purpose_group .filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const isAttend=el.dataset.value==='attendance';
+  const shiftWrap=document.getElementById('ts_shift_wrap');
+  const alsoWrap=document.getElementById('ts_also_wrap');
+  const typeBlock=document.getElementById('ts_type_block');
+  if(shiftWrap) shiftWrap.style.display=isAttend?'block':'none';
+  if(alsoWrap) alsoWrap.style.display=isAttend?'block':'none';
+  if(isAttend){
+    const also=document.getElementById('ts_also_interview');
+    if(typeBlock) typeBlock.style.display=(also&&also.classList.contains('active'))?'block':'none';
+  }else{
+    if(typeBlock) typeBlock.style.display='block';
+    const also=document.getElementById('ts_also_interview');
+    if(also) also.classList.remove('active');
+  }
+}
+function tsSelectShift(el){
+  document.querySelectorAll('#ts_shift_group .ts-shift-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  if(el.dataset.s) document.getElementById('ts_start').value=el.dataset.s;
+  if(el.dataset.e) document.getElementById('ts_end').value=el.dataset.e;
+}
 async function addTeacherSlot() {
   const start = document.getElementById('ts_start').value;
   const end = document.getElementById('ts_end').value;
   const types = [...document.querySelectorAll('#ts_type_group input:checked')].map(c => c.value);
-  if (!types.length) { alert('请至少选择一个类型'); return; }
+  const purpose = document.querySelector('#ts_purpose_group .filter-chip.active')?.dataset.value || 'interview';
+  const shift = purpose==='attendance' ? (document.querySelector('#ts_shift_group .ts-shift-chip.active')?.dataset.shift || '') : '';
+  const alsoInterview = document.getElementById('ts_also_interview')?.classList.contains('active') || false;
+  const needTypes = purpose==='interview' || (purpose==='attendance' && alsoInterview);
+  if (needTypes && !types.length) { alert('请至少选择一个类型'); return; }
   const vipExclusive = types.includes('vip') && !!document.getElementById('ts_vip_exclusive')?.checked;
   let vipContent = [];
   if (types.includes('vip') && !vipExclusive) {
@@ -807,7 +855,7 @@ async function addTeacherSlot() {
     if (!confirm(`将添加 ${dates.length} 个时间槽，确认？`)) return;
   }
   try {
-    const newSlots = dates.map(date => ({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, date, time_range: timeRange, type: types, major, location, teacher_name: teacherName, vip_content: vipContent.length ? vipContent : null, vip_exclusive: vipExclusive }));
+    const newSlots = dates.map(date => ({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, date, time_range: timeRange, type: types, major, location, teacher_name: teacherName, purpose, shift, also_interview: alsoInterview, vip_content: vipContent.length ? vipContent : null, vip_exclusive: vipExclusive }));
     for (let i = 0; i < newSlots.length; i += 10) {
       const chunk = newSlots.slice(i, i + 10);
       const res = await sb('/rest/v1/slots', 'POST', chunk);
