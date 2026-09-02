@@ -432,6 +432,7 @@ function renderTeachersPage(mc){
               <div class="filter-chip" data-value="plan" onclick="toggleChip(this)" style="padding:3px 9px;font-size:10px">计划书</div>
               <div class="filter-chip" data-value="mock" onclick="toggleChip(this)" style="padding:3px 9px;font-size:10px">模拟面试</div>
               <div class="filter-chip" data-value="vip" onclick="toggleChip(this)" style="padding:3px 9px;font-size:10px">VIP</div>
+              <div class="filter-chip" data-value="attendance" onclick="toggleChip(this)" style="padding:3px 9px;font-size:10px;border-left:2px solid var(--accent)">出勤</div>
             </div>
             <div style="margin-top:8px;margin-left:20px">
               <div style="font-size:10px;color:var(--text-3);margin-bottom:4px">可指导的VIP内容（开设VIP时间槽时只能从这里选）</div>
