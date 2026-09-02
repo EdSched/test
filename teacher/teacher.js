@@ -627,6 +627,7 @@ function renderSlotManagement(mc) {
   const p = teacherData?.permissions || {};
   const allowedTypes = (p.slot_types || ['daily']).filter(t=>t!=='attendance');
   const canAttendance = (p.slot_types || []).includes('attendance');
+  const onlyAttendance = canAttendance && allowedTypes.length===0; // 只有出勤权限，没有面谈类型
   const majors = teacherData?.majors || [];
   const ym = `${teacherSlotYear}-${String(teacherSlotMonth + 1).padStart(2, '0')}`;
   const monthSlots = cachedTeacherSlots.filter(s => s.date.startsWith(ym)).sort((a, b) => a.date.localeCompare(b.date));
@@ -659,8 +660,8 @@ function renderSlotManagement(mc) {
         </div>
         <div class="form-group" id="ts_purpose_wrap" style="${canAttendance?'':'display:none'}"><label class="form-label">用途</label>
           <div style="display:flex;gap:6px" id="ts_purpose_group">
-            <div class="filter-chip active" data-value="interview" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px">面谈</div>
-            <div class="filter-chip" data-value="attendance" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px">出勤</div>
+            <div class="filter-chip${onlyAttendance?'':' active'}" data-value="interview" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px;${onlyAttendance?'display:none':''}">面谈</div>
+            <div class="filter-chip${onlyAttendance?' active':''}" data-value="attendance" onclick="tsSelectPurpose(this)" style="padding:5px 16px;cursor:pointer;border:1px solid var(--border);border-radius:3px">出勤</div>
           </div>
         </div>
         <div class="form-group" id="ts_shift_wrap" style="display:none"><label class="form-label">班次（点选自动填时间）</label>
@@ -673,7 +674,7 @@ function renderSlotManagement(mc) {
           </div>
         </div>
         <div class="form-group" id="ts_also_wrap" style="display:none">
-          <div class="filter-chip" id="ts_also_interview" onclick="this.classList.toggle('active');document.getElementById('ts_type_block').style.display=this.classList.contains('active')?'block':'none'" style="padding:4px 12px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">＋ 该出勤同时可接面谈</div>
+          <div class="filter-chip" id="ts_also_interview" onclick="tsToggleAlsoInterview(this)" style="padding:4px 12px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">＋ 该出勤同时可接面谈</div>
         </div>
         <div class="form-group"><label class="form-label">时间段</label>
           <div style="display:grid;grid-template-columns:1fr 16px 1fr;gap:4px;align-items:center">
@@ -708,6 +709,7 @@ function renderSlotManagement(mc) {
           </div>
         </div>
         </div><!-- /ts_type_block -->
+        <div id="ts_interview_fields" style="${onlyAttendance?'display:none':''}">
         <div class="form-group" style="margin-bottom:0"><label class="form-label">专业</label>
           <select id="ts_major">
             ${majors.map(m => `<option value="${m}">${m === 'shakai_group' ? '社会人文' : MAJORS[m] || m}</option>`).join('')}
@@ -722,6 +724,7 @@ function renderSlotManagement(mc) {
             <option value="both_ichigaya">线上 · 线下均可（市谷）</option>
           </select>
         </div>
+        </div><!-- /ts_interview_fields -->
         <button class="btn btn-primary btn-full" style="margin-top:12px" onclick="addTeacherSlot()">＋ 添加</button>
       </div>
       <div>
@@ -765,6 +768,8 @@ function renderSlotManagement(mc) {
   const today = new Date().toISOString().slice(0, 10);
   const el = document.getElementById('ts_date'); if (el) el.value = today;
   const rs = document.getElementById('ts_repeat_start'); if (rs) rs.value = today;
+  // 只有出勤权限的老师：初始就是出勤状态，隐藏面谈类型/专业/地点
+  if(onlyAttendance){ const att=document.querySelector('#ts_purpose_group .filter-chip[data-value="attendance"]'); if(att) tsSelectPurpose(att); }
 }
 
 function tsSetMode(mode) { teacherSlotMode = mode; renderTab(); }
@@ -801,6 +806,10 @@ function tsSelectPurpose(el){
   const typeBlock=document.getElementById('ts_type_block');
   if(shiftWrap) shiftWrap.style.display=isAttend?'block':'none';
   if(alsoWrap) alsoWrap.style.display=isAttend?'block':'none';
+  // 专业/面谈地点：出勤且没勾兼面谈时隐藏
+  const ivFields=document.getElementById('ts_interview_fields');
+  const alsoOn=document.getElementById('ts_also_interview')?.classList.contains('active');
+  if(ivFields) ivFields.style.display=(isAttend && !alsoOn)?'none':'block';
   if(isAttend){
     const also=document.getElementById('ts_also_interview');
     if(typeBlock) typeBlock.style.display=(also&&also.classList.contains('active'))?'block':'none';
@@ -809,6 +818,14 @@ function tsSelectPurpose(el){
     const also=document.getElementById('ts_also_interview');
     if(also) also.classList.remove('active');
   }
+}
+function tsToggleAlsoInterview(el){
+  el.classList.toggle('active');
+  const on=el.classList.contains('active');
+  const typeBlock=document.getElementById('ts_type_block');
+  const ivFields=document.getElementById('ts_interview_fields');
+  if(typeBlock) typeBlock.style.display=on?'block':'none';
+  if(ivFields) ivFields.style.display=on?'block':'none';
 }
 function tsSelectShift(el){
   document.querySelectorAll('#ts_shift_group .ts-shift-chip').forEach(c=>c.classList.remove('active'));
