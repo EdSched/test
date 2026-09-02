@@ -105,7 +105,7 @@
 <script>
 const DEPTS=['教务本部','营业本部','管理本部','美术部','综合事业本部'];
 const DAYS=['日','一','二','三','四','五','六'];
-let TEACHERS=[], SLOTS=[], curRoster='regular', weekStart=null;
+let TEACHERS=[], ROSTER_SLOTS=[], curRoster='regular', weekStart=null;
 let editCtx=null, editSel={kind:null,val:null};
 
 function mondayOf(d){ const x=new Date(d); const w=x.getDay(); const diff=(w===0?-6:1-w); x.setDate(x.getDate()+diff); x.setHours(0,0,0,0); return x; }
@@ -132,7 +132,7 @@ async function boot(){
 async function loadData(){
   try{
     TEACHERS = await sbGet('teachers','select=*&order=name.asc') || [];
-    SLOTS = await sbGet('slots','select=*&order=date.asc') || [];
+    ROSTER_SLOTS = await sbGet('slots','select=*&order=date.asc') || [];
   }catch(e){ document.getElementById('rosterBody').innerHTML='<div style="padding:20px;color:#a01818">加载失败：'+e.message+'</div>'; }
 }
 function switchRoster(which){
@@ -149,7 +149,7 @@ function shiftWeek(delta){
 
 // 找某老师某天的出勤/休假记录
 function cellFor(teacherName,dateStr){
-  const rows=SLOTS.filter(s=>s.teacher_name===teacherName && s.date===dateStr && (s.purpose==='attendance'||s.purpose==='leave'));
+  const rows=ROSTER_SLOTS.filter(s=>s.teacher_name===teacherName && s.date===dateStr && (s.purpose==='attendance'||s.purpose==='leave'));
   if(!rows.length) return null;
   // 休假优先显示
   const leave=rows.find(r=>r.purpose==='leave');
@@ -219,7 +219,7 @@ async function saveCell(){
   if(!editCtx) return;
   if(!editSel.kind){ alert('请选择班次或休假'); return; }
   // 先删该老师该天已有的出勤/休假记录
-  const olds=SLOTS.filter(s=>s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave'));
+  const olds=ROSTER_SLOTS.filter(s=>s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave'));
   try{
     for(const o of olds){ await sbDelete('slots',o.id); }
     let row;
@@ -229,17 +229,17 @@ async function saveCell(){
       row={ id:Date.now()+'-'+Math.random().toString(36).slice(2,6), teacher_name:editCtx.name, date:editCtx.date, time_range:'', purpose:'leave', leave_type:editSel.val, type:[], major:'' };
     }
     await sbInsert('slots',[row]);
-    SLOTS=SLOTS.filter(s=>!(s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave')));
-    SLOTS.push(row);
+    ROSTER_SLOTS=ROSTER_SLOTS.filter(s=>!(s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave')));
+    ROSTER_SLOTS.push(row);
     closeEdit(); render();
   }catch(e){ alert('保存失败：'+e.message); }
 }
 async function clearCell(){
   if(!editCtx) return;
-  const olds=SLOTS.filter(s=>s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave'));
+  const olds=ROSTER_SLOTS.filter(s=>s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave'));
   try{
     for(const o of olds){ await sbDelete('slots',o.id); }
-    SLOTS=SLOTS.filter(s=>!(s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave')));
+    ROSTER_SLOTS=ROSTER_SLOTS.filter(s=>!(s.teacher_name===editCtx.name && s.date===editCtx.date && (s.purpose==='attendance'||s.purpose==='leave')));
     closeEdit(); render();
   }catch(e){ alert('操作失败：'+e.message); }
 }
