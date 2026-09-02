@@ -633,6 +633,16 @@ function renderSlotsPage(mc){
           <div class="filter-chip" data-value="attendance" onclick="selectSlotPurpose(this)" style="padding:5px 16px;cursor:pointer">出勤</div>
         </div>
       </div>
+      <div class="form-group" id="slotShiftWrap" style="display:none">
+        <label class="form-label">班次（点选自动填时间，可再手动改）</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="slotShiftGroup">
+          <div class="filter-chip" data-shift="早" data-start="09:30" data-end="18:30" onclick="selectShift(this)" style="padding:4px 12px;cursor:pointer">早 9:30-18:30</div>
+          <div class="filter-chip" data-shift="中" data-start="11:00" data-end="20:00" onclick="selectShift(this)" style="padding:4px 12px;cursor:pointer">中 11:00-20:00</div>
+          <div class="filter-chip" data-shift="晚" data-start="13:00" data-end="22:00" onclick="selectShift(this)" style="padding:4px 12px;cursor:pointer">晚 13:00-22:00</div>
+          <div class="filter-chip" data-shift="半" data-start="09:30" data-end="14:00" onclick="selectShift(this)" style="padding:4px 12px;cursor:pointer">半天（时间自定）</div>
+          <div class="filter-chip" data-shift="出差" data-start="09:30" data-end="18:30" onclick="selectShift(this)" style="padding:4px 12px;cursor:pointer">出差</div>
+        </div>
+      </div>
       <div class="form-group" id="slotAlsoInterviewWrap" style="display:none">
         <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
           <div class="filter-chip" id="slotAlsoInterview" onclick="this.classList.toggle('active');document.getElementById('slotTypeWrap').style.display=this.classList.contains('active')?'block':'none'" style="padding:4px 12px;cursor:pointer">＋ 该出勤同时可接面谈</div>
@@ -721,6 +731,8 @@ function selectSlotPurpose(el){
   const isAttend = el.dataset.value==='attendance';
   const alsoWrap=document.getElementById('slotAlsoInterviewWrap');
   const typeWrap=document.getElementById('slotTypeWrap');
+  const shiftWrap=document.getElementById('slotShiftWrap');
+  if(shiftWrap) shiftWrap.style.display = isAttend?'block':'none';
   if(alsoWrap) alsoWrap.style.display = isAttend?'block':'none';
   if(isAttend){
     // 出勤：面谈类型默认隐藏，除非勾了"兼面谈"
@@ -733,9 +745,18 @@ function selectSlotPurpose(el){
     if(also) also.classList.remove('active');
   }
 }
+// 出勤班次：点选自动填标准时间（可再手动改），记录班次名
+function selectShift(el){
+  document.querySelectorAll('#slotShiftGroup .filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const s=el.dataset.start, e=el.dataset.end;
+  if(s) document.getElementById('slotTimeStart').value=s;
+  if(e) document.getElementById('slotTimeEnd').value=e;
+}
 async function addSlot(){
   const ts=document.getElementById('slotTimeStart').value,te=document.getElementById('slotTimeEnd').value;
   const purpose=document.querySelector('#slotPurposeGroup .filter-chip.active')?.dataset.value||'interview';
+  const shift=purpose==='attendance'?(document.querySelector('#slotShiftGroup .filter-chip.active')?.dataset.shift||''):'';
   const alsoInterview=document.getElementById('slotAlsoInterview')?.classList.contains('active')||false;
   const types=[...document.querySelectorAll('#slotTypeGroup input:checked')].map(c=>c.value);
   const major=document.getElementById('slotMajor').value;
@@ -752,7 +773,7 @@ async function addSlot(){
   const existing=new Set(cachedSlots.map(s=>`${s.date}|${s.time_range}|${(Array.isArray(s.type)?s.type:[s.type]).join(',')}|${s.major}|${s.purpose||'interview'}`));
   const toInsert=[];
   const typeKey=types.join(',');
-  for(const date of dates){const key=`${date}|${timeRange}|${typeKey}|${major}|${purpose}`;if(!existing.has(key)){toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,6)}`,date,time_range:timeRange,type:types,major,location,purpose,also_interview:alsoInterview});existing.add(key)}}
+  for(const date of dates){const key=`${date}|${timeRange}|${typeKey}|${major}|${purpose}`;if(!existing.has(key)){toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,6)}`,date,time_range:timeRange,type:types,major,location,purpose,shift,also_interview:alsoInterview});existing.add(key)}}
   if(!toInsert.length){alert('所选日期的时间槽已存在');return}
   try{const res=await sb('/rest/v1/slots','POST',toInsert);cachedSlots=[...cachedSlots,...(Array.isArray(res)?res:toInsert)];renderSlotsPage(document.getElementById('mainContent'));if(toInsert.length>1)alert(`已添加 ${toInsert.length} 个时间槽`)}
   catch(e){alert('添加失败：'+e.message)}
