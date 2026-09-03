@@ -234,6 +234,39 @@ function currentPeriodKey() {
   if (m >= 7 && m <= 9) return '7月期';
   return '10月期';
 }
+// ── 休讲/延期：与 sched 一致的单回日期算法 ──
+// 全局假期（与 sched 共用 sched_holidays 表）
+let HOLIDAYS = [];
+async function loadHolidaysFromDB() {
+  try { HOLIDAYS = await sb('/rest/v1/sched_holidays?select=*') || []; }
+  catch (e) { HOLIDAYS = []; }
+}
+function dateInHoliday(d) {
+  for (const h of HOLIDAYS) { const s = h.start_date, e = h.end_date || h.start_date; if (s && d >= s && d <= e) return true; }
+  return false;
+}
+// 从 first 按 weekdays 排，遇全局假期(未豁免)或休讲(skip)跳过并顺延，排满 N 回。返回日期数组。
+// c 需含：first_session_date, weekdays, skip_dates(可空), holiday_except(可空豁免)
+function computeSessionDates(c, N) {
+  const wdList = parseWeekdays(c.weekdays); // parseWeekdays 返回 getDay 体系(周日=0)
+  if (!wdList.length || !c.first_session_date || !N) return [];
+  const skip = new Set((c.skip_dates || '').split(',').map(s => s.trim()).filter(Boolean));
+  const except = new Set((c.holiday_except || '').split(',').map(s => s.trim()).filter(Boolean));
+  const out = []; let d = c.first_session_date, guard = 0;
+  while (out.length < N && guard++ < 2000) {
+    const wd = new Date(d + 'T12:00:00').getDay(); // 0=周日
+    if (wdList.includes(wd)) {
+      const blocked = (dateInHoliday(d) && !except.has(d)) || skip.has(d);
+      if (!blocked) out.push(d);
+    }
+    if (out.length >= N) break;
+    // 下一天
+    const nx = new Date(d + 'T12:00:00'); nx.setDate(nx.getDate() + 1);
+    d = nx.getFullYear() + '-' + String(nx.getMonth() + 1).padStart(2, '0') + '-' + String(nx.getDate()).padStart(2, '0');
+  }
+  return out;
+}
+
 function periodFromDate(dateStr) {
   if (!dateStr) return '未分期';
   const m = parseInt(dateStr.slice(5, 7));
