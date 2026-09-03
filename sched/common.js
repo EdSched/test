@@ -18,10 +18,23 @@ async function sbGet(table, query){
   if(!r.ok) throw new Error(table + ' 读取失败: ' + r.status + ' ' + await r.text());
   return r.json();
 }
+const _TIME_FIELDS = ['time_range','start_time','end_time'];
+function _normTimeColon(v){
+  if (Array.isArray(v)) return v.map(_normTimeColon);
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k in v) {
+      if (_TIME_FIELDS.includes(k) && typeof v[k] === 'string') o[k] = v[k].replace(/：/g, ':');
+      else o[k] = _normTimeColon(v[k]);
+    }
+    return o;
+  }
+  return v;
+}
 async function sbInsert(table, rows){
   const r = await fetch(SB_URL + '/rest/v1/' + table, {
     method:'POST', headers: sbHeaders({ Prefer:'return=representation' }),
-    body: JSON.stringify(Array.isArray(rows)? rows : [rows])
+    body: JSON.stringify(_normTimeColon(Array.isArray(rows)? rows : [rows]))
   });
   if(!r.ok) throw new Error('写入失败: ' + r.status + ' ' + await r.text());
   return r.json();
@@ -29,7 +42,7 @@ async function sbInsert(table, rows){
 async function sbUpdate(table, id, patch){
   const r = await fetch(SB_URL + '/rest/v1/' + table + '?id=eq.' + id, {
     method:'PATCH', headers: sbHeaders({ Prefer:'return=representation' }),
-    body: JSON.stringify(patch)
+    body: JSON.stringify(_normTimeColon(patch))
   });
   if(!r.ok) throw new Error('更新失败: ' + r.status + ' ' + await r.text());
   return r.json();
