@@ -345,6 +345,7 @@ function renderCourseCleanupPage(mc){
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-outline btn-sm" onclick="cleanupSelectAllFiltered()">☑ 全选当前筛选</button>
       <button class="btn btn-outline btn-sm" onclick="cleanupClearSelection()">清空选择</button>
+      ${(!ACCESS_KEY||ACCESS_KEY.is_admin)?`<button class="btn btn-outline btn-sm" onclick="openHolidayManager()" title="全局假期（与排课系统共用，这段时间所有课放假顺延）">⚙ 全局假期</button>`:''}
       <button class="btn btn-primary btn-sm" onclick="cleanupExportInfo()">📄 导出所选信息</button>
       <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger);background:none" onclick="cleanupDeleteSelected()">删除已选 (<span id="cleanup_count">0</span>)</button>
     </div>
@@ -980,6 +981,77 @@ function setCoursesCampus(c,el){
 }
 
 // ══════════ 期数管理（自定义月份范围） ══════════
+// ══════════ 全局假期管理（与排课系统共用 sched_holidays）══════════
+function openHolidayManager(){
+  let ov=document.getElementById('holidayMgrOverlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='holidayMgrOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:960;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center';
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  renderHolidayMgr();
+}
+function closeHolidayMgr(){ const ov=document.getElementById('holidayMgrOverlay'); if(ov) ov.style.display='none'; }
+function renderHolidayMgr(){
+  const ov=document.getElementById('holidayMgrOverlay');
+  const rows=(HOLIDAYS||[]).slice().sort((a,b)=>(a.start_date||'').localeCompare(b.start_date||'')).map(h=>{
+    const col=h.color==='green'?'#2c8a4f':'#c0392b';
+    const bg=h.color==='green'?'#e7f6ec':'#fdecea';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-light)">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col}"></span>
+      <span style="font-size:12px;flex:1">${h.label||'假期'}　<span style="color:var(--text-3)">${h.start_date||''}${h.end_date&&h.end_date!==h.start_date?(' ~ '+h.end_date):''}</span></span>
+      <button onclick="delHoliday('${h.id}')" class="btn btn-outline btn-sm">删除</button>
+    </div>`;
+  }).join('');
+  ov.innerHTML=`
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px 28px;width:min(560px,94vw);max-height:86vh;overflow:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-family:'Noto Serif SC',serif;font-size:1.1rem;font-weight:600">全局假期</div>
+      <button onclick="closeHolidayMgr()" class="btn btn-outline btn-sm">关闭</button>
+    </div>
+    <div style="font-size:11px;color:var(--text-3);margin-bottom:10px">与排课系统共用同一份假期。这段时间内所有课默认放假、单回顺延（个别课可豁免）。红＝全员放假，绿＝特殊考试假（分领域）。</div>
+    ${rows||'<div style="color:var(--text-3);font-size:12px;padding:10px 0">暂无全局假期</div>'}
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px">＋ 新增假期</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="hol_label" placeholder="假期名（如 春节）" style="width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;font-size:12px">
+        <input id="hol_start" type="date" style="padding:5px 6px;border:1px solid var(--border);border-radius:3px;font-size:12px">
+        <span style="font-size:11px;color:var(--text-3)">到</span>
+        <input id="hol_end" type="date" style="padding:5px 6px;border:1px solid var(--border);border-radius:3px;font-size:12px">
+        <select id="hol_color" style="padding:5px 6px;border:1px solid var(--border);border-radius:3px;font-size:12px">
+          <option value="red">红·全员放假</option>
+          <option value="green">绿·特殊考试假</option>
+        </select>
+        <button onclick="addHoliday()" class="btn btn-primary btn-sm">新增</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-3);margin-top:6px">单日假期：结束日留空或与开始日相同。</div>
+    </div>
+  </div>`;
+}
+async function addHoliday(){
+  const label=document.getElementById('hol_label').value.trim();
+  const start=document.getElementById('hol_start').value;
+  let end=document.getElementById('hol_end').value||start;
+  const color=document.getElementById('hol_color').value||'red';
+  if(!start){ alert('请选开始日'); return; }
+  if(end<start) end=start;
+  try{
+    await sb('/rest/v1/sched_holidays','POST',[{start_date:start,end_date:end,label:label||'假期',color}]);
+    await loadHolidaysFromDB();
+    renderHolidayMgr();
+  }catch(e){ alert('新增失败：'+e.message); }
+}
+async function delHoliday(id){
+  if(!confirm('删除这个全局假期？（排课系统也会同步删除）')) return;
+  try{
+    await sb(`/rest/v1/sched_holidays?id=eq.${id}`,'DELETE');
+    await loadHolidaysFromDB();
+    renderHolidayMgr();
+  }catch(e){ alert('删除失败：'+e.message); }
+}
+
 function openPeriodManager(){
   let ov=document.getElementById('periodMgrOverlay');
   if(!ov){
