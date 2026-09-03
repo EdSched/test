@@ -126,6 +126,13 @@ function promoRender() {
   const formHtml = editing !== null ? `
   <div style="border:1px solid var(--accent);border-radius:4px;padding:14px;margin-bottom:12px;background:var(--bg)">
     <div style="font-size:11px;font-weight:600;margin-bottom:8px">${promoEditingId==='new'?'＋ 新增':'✏ 编辑'}${sec[1]}条目${promoSection==='major_intro'?`<button class="btn btn-outline btn-sm" style="margin-left:10px;font-weight:400;font-size:10px" onclick="promoTplMode=!promoTplMode;promoRender()">${promoTplMode?'← 切换自由编辑':'📋 用模板填写'}</button>`:''}</div>
+    ${promoSection==='course'?`<div style="margin-bottom:8px">
+      <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">📚 从课程安排选择（本${CURRENT_MAJOR?'专业':'领域'}的课，选后自动填入课程名）</label>
+      <select onchange="promoFillCourseName(this.value)" style="${inp}">
+        <option value="">— 选择现有课程 —</option>
+        ${promoAvailCourses().map(nm=>`<option value="${promoEsc(nm)}">${promoEsc(nm)}</option>`).join('')}
+      </select>
+    </div>`:''}
     ${promoSection==='lecturer'&&(promoProfiles||[]).length?`<div style="margin-bottom:8px">
       <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">📇 从讲师档案导入（自动填入标题/正文/关联真实姓名，可再修改润色）</label>
       <select onchange="promoFillFromProfile(this.value)" style="${inp}">
@@ -221,6 +228,22 @@ async function promoTogglePub(id) {
 }
 
 // 从讲师档案一键填入表单（标题＝姓名＋学历；正文＝专攻方向/授课特色/担当课程；绑定＝档案真实姓名）
+// 列出当前专业(promoMajor)的课程名（去重），供课程介绍下拉
+function promoAvailCourses(){
+  const courses=(typeof cachedCourses!=='undefined'&&cachedCourses)||[];
+  const names=courses.filter(c=>{
+    // 按当前专业 promoMajor 匹配（社会人文组展开）
+    const mj=c.major||[];
+    if(promoMajor==='shakai_group') return ['shakai','shinpan','fukushi'].some(x=>mj.includes(x));
+    return mj.includes(promoMajor);
+  }).map(c=>c.name).filter(Boolean);
+  return [...new Set(names)].sort();
+}
+function promoFillCourseName(name){
+  if(!name) return;
+  const t=document.getElementById('pm_title');
+  if(t) t.value=name;
+}
 function promoFillFromProfile(id) {
   if (!id) return;
   const p = (promoProfiles || []).find(x => x.id === id);
