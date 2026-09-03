@@ -1525,6 +1525,8 @@ async function saveAddCourse(){
       // 这样可以保留休讲、调课等手动调整的结果，不会被「总回数」逻辑误删
       const existing=cachedSessions.filter(s=>s.course_id===editingId);
       const existingMap={}; existing.forEach(s=>{ existingMap[s.id]=s; });
+      // 记录保存前的日期（按id），保存后对比，检测单回日期变动
+      const oldDateById={}; existing.forEach(s=>{ oldDateById[s.id]=s.session_date; });
 
       const rows=detailRows; // 来自 acGetRows()：[{id,num,date,title,teacher}, ...]
       if(!rows.length){ alert('单回明细不能为空，至少需要一行课次'); return; }
@@ -1586,7 +1588,20 @@ async function saveAddCourse(){
 
       closeModal('addCourseModal');
       renderCoursesPage(document.getElementById('mainContent'));
-      alert('课程信息已更新，已同步到所有相关页面');
+      // 检测单回日期是否有变动（改日期 / 休讲顺延 / 新增行）
+      let dateChanged=false;
+      for(const r of rows){
+        if(r.id && oldDateById[r.id]!==undefined){ if(oldDateById[r.id]!==r.date) dateChanged=true; }
+        else { dateChanged=true; } // 新增的行也算变动
+      }
+      if(dateChanged){
+        if(confirm('课程已更新。\n\n检测到单回日期有变动（改期/休讲顺延/新增课次），这可能影响排课系统里的教室占用与腾讯会议安排。\n\n是否现在前往排课系统，为变动的日期确认/补上临时教室占用？')){
+          const schedUrl=location.origin+location.pathname.replace(/admin\/.*$/,'sched/index.html');
+          window.open(schedUrl,'_blank');
+        }
+      } else {
+        alert('课程信息已更新，已同步到所有相关页面');
+      }
       return;
     } else {
       courseId=`c-${Date.now()}-${Math.random().toString(36).slice(2,5)}`;
@@ -1893,7 +1908,10 @@ async function confirmReschedule(){
 
     closeModal('rescheduleModal');
     renderCoursesPage(document.getElementById('mainContent'));
-    alert(`已将 ${target.session_date} 标记为休讲，内容已整体顺延，并在 ${newDateStr} 新增第${newSession.session_number}回承接原最后一回内容`);
+    if(confirm(`已将 ${target.session_date} 标记为休讲，内容顺延，末尾 ${newDateStr} 补第${newSession.session_number}回。\n\n新增的补课日期需要在排课系统确认教室占用（可能与其他课撞车）。是否现在前往排课系统确认？`)){
+      const schedUrl=location.origin+location.pathname.replace(/admin\/.*$/,'sched/index.html');
+      window.open(schedUrl,'_blank');
+    }
   }catch(e){alert('操作失败：'+e.message)}
 }
 
