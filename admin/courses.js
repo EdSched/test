@@ -1784,9 +1784,13 @@ async function confirmReschedule(){
     }
 
     // 3. 新增补课日期，内容＝contentChain 最后一项（原本 lastSession 自己的内容）
+    //    补课日跳过全局假期（与 sched 一致），避免补到放假日
     let newDate=new Date(lastSession.session_date+'T12:00:00');
-    do{ newDate.setDate(newDate.getDate()+1); } while(weekdays.length && !weekdays.includes(newDate.getDay()));
-    const newDateStr=newDate.getFullYear()+'-'+String(newDate.getMonth()+1).padStart(2,'0')+'-'+String(newDate.getDate()).padStart(2,'0');
+    const fmtD=dt=>dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+    do{
+      newDate.setDate(newDate.getDate()+1);
+    } while( (weekdays.length && !weekdays.includes(newDate.getDay())) || (typeof dateInHoliday==='function' && dateInHoliday(fmtD(newDate))) );
+    const newDateStr=fmtD(newDate);
     const lastContent=contentChain[contentChain.length-1];
     const newTeacherVal = lastContent.teacher || lastSession.teacher;
 
@@ -1804,6 +1808,16 @@ async function confirmReschedule(){
     };
     const sres=await sb('/rest/v1/course_sessions','POST',[newSession]);
     cachedSessions.push(Array.isArray(sres)?sres[0]:newSession);
+
+    // 同步给 sched：休讲日加进 courses.skip_dates + 更新 end_date（触发器会推给 sched_courses，sched 重算即一致）
+    try{
+      const co=cachedCourses.find(x=>x.id===courseId);
+      const skipSet=new Set(((co?.skip_dates)||'').split(',').map(s=>s.trim()).filter(Boolean));
+      skipSet.add(target.session_date);
+      const newSkip=[...skipSet].sort().join(',');
+      await sb(`/rest/v1/courses?id=eq.${courseId}`,'PATCH',{skip_dates:newSkip,end_date:newDateStr});
+      if(co){ co.skip_dates=newSkip; co.end_date=newDateStr; }
+    }catch(e){ /* 同步失败不阻断休讲本身 */ }
 
     closeModal('rescheduleModal');
     renderCoursesPage(document.getElementById('mainContent'));
