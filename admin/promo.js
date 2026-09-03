@@ -6,6 +6,48 @@
 // 依赖：shared/constants.js、shared/supabase.js、admin.js（须在其后加载）
 // ══════════════════════════════════
 let promoMajor = 'shakai';
+let promoTplMode = false; // 专业介绍模板填写模式
+
+// 专业介绍模板的6个字段
+const PROMO_TPL_FIELDS = [
+  ['gaiyou', '概要'],
+  ['shiten', '独特视角'],
+  ['yuushi', '优势'],
+  ['houkou', '重点方向'],
+  ['kadai', '研究课题例'],
+  ['juuten', '重点研究科'],
+];
+// 从已有 body（模板拼成的 markdown）反解出各字段值，供编辑回填
+function promoParseTpl(body){
+  const vals={}; const b=String(body||'');
+  PROMO_TPL_FIELDS.forEach((f,i)=>{
+    const label=f[1];
+    // 匹配 "## 标签\n内容...（到下一个 ## 或结尾）"
+    const re=new RegExp('##\\s*'+label+'\\s*\\n([\\s\\S]*?)(?=\\n##\\s|$)');
+    const m=b.match(re);
+    vals[f[0]]=m?m[1].trim():'';
+  });
+  return vals;
+}
+// 6字段填写表单
+function promoTemplateFields(editing){
+  const vals=promoParseTpl(editing.body);
+  return `<div style="display:flex;flex-direction:column;gap:8px" id="promo_tpl_wrap">
+    ${PROMO_TPL_FIELDS.map(f=>`<div>
+      <label style="font-size:10px;color:var(--accent,#8b5cf6);font-weight:600;display:block;margin-bottom:3px">${f[1]}</label>
+      <textarea id="tpl_${f[0]}" rows="3" style="width:100%;font-size:12px;line-height:1.7;padding:8px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:inherit;resize:vertical" placeholder="填写「${f[1]}」的内容，支持 - 列表、**粗体**、表格">${promoEsc(vals[f[0]]||'')}</textarea>
+    </div>`).join('')}
+    <div style="font-size:9px;color:var(--text-3)">填完保存，系统会自动拼成带排版的介绍页。每个字段内可用 <code>- 列表</code>、<code>**粗体**</code>、表格。</div>
+  </div>`;
+}
+// 把6字段拼成 markdown（供保存）
+function promoTplToMarkdown(){
+  return PROMO_TPL_FIELDS.map(f=>{
+    const v=(document.getElementById('tpl_'+f[0])||{}).value||'';
+    if(!v.trim()) return '';
+    return '## '+f[1]+'\n'+v.trim();
+  }).filter(Boolean).join('\n\n');
+}
 let promoSection = 'major_intro';
 let promoList = [];
 let promoEditingId = null; // null=不在编辑 | 'new'=新增 | id=编辑该条
@@ -83,7 +125,7 @@ function promoRender() {
   const inp = 'width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:2px;background:var(--bg);font-family:inherit';
   const formHtml = editing !== null ? `
   <div style="border:1px solid var(--accent);border-radius:4px;padding:14px;margin-bottom:12px;background:var(--bg)">
-    <div style="font-size:11px;font-weight:600;margin-bottom:8px">${promoEditingId==='new'?'＋ 新增':'✏ 编辑'}${sec[1]}条目</div>
+    <div style="font-size:11px;font-weight:600;margin-bottom:8px">${promoEditingId==='new'?'＋ 新增':'✏ 编辑'}${sec[1]}条目${promoSection==='major_intro'?`<button class="btn btn-outline btn-sm" style="margin-left:10px;font-weight:400;font-size:10px" onclick="promoTplMode=!promoTplMode;promoRender()">${promoTplMode?'← 切换自由编辑':'📋 用模板填写'}</button>`:''}</div>
     ${promoSection==='lecturer'&&(promoProfiles||[]).length?`<div style="margin-bottom:8px">
       <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">📇 从讲师档案导入（自动填入标题/正文/关联真实姓名，可再修改润色）</label>
       <select onchange="promoFillFromProfile(this.value)" style="${inp}">
@@ -104,7 +146,7 @@ function promoRender() {
       <code>## 小标题</code>　·　<code>**粗体**</code>　·　<code>- 无序列表</code>　·　<code>1. 有序列表</code>　·　表格每行 <code>|学校名|研究科|英语|</code>（首行为表头）　·　空行分段
     </div>
     <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">正文</label>
-    <textarea id="pm_body" rows="10" style="width:100%;font-size:12px;line-height:1.8;padding:9px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:inherit;resize:vertical">${promoEsc(editing.body)}</textarea>
+    ${promoSection==='major_intro'&&promoTplMode?promoTemplateFields(editing):`<textarea id="pm_body" rows="10" style="width:100%;font-size:12px;line-height:1.8;padding:9px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:inherit;resize:vertical">${promoEsc(editing.body)}</textarea>`}
     <div style="display:flex;gap:6px;margin-top:8px">
       <button class="btn btn-primary btn-sm" onclick="promoSave()">保存</button>
       <button class="btn btn-outline btn-sm" onclick="promoEditingId=null;promoRender()">取消</button>
@@ -134,7 +176,7 @@ function promoRender() {
 
 async function promoSave() {
   const title = (document.getElementById('pm_title') || {}).value.trim();
-  const body = (document.getElementById('pm_body') || {}).value;
+  const body = (promoSection==='major_intro'&&promoTplMode) ? promoTplToMarkdown() : (document.getElementById('pm_body') || {}).value;
   const sort_order = parseInt((document.getElementById('pm_sort') || {}).value) || 0;
   const link_name = ((document.getElementById('pm_link') || {}).value || '').trim();
   if (!title && !body.trim()) { alert('请填写标题或正文'); return; }
