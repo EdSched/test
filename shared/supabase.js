@@ -2,6 +2,22 @@
 const SB_URL = 'https://vwntezfvqbrkeovnseku.supabase.co';
 const SB_KEY = 'sb_publishable_cUnCkti5qv1_G4N6Ho5tpw_9pr7pSas';
 
+// 只把时间字段（time_range/start_time/end_time）里的全角冒号「：」转半角「:」
+// 不碰名字/备注/文案等字段（那些用全角冒号是正常中文写法）
+const _TIME_FIELDS = ['time_range','start_time','end_time'];
+function _normTimeColon(v){
+  if (Array.isArray(v)) return v.map(_normTimeColon);
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k in v) {
+      if (_TIME_FIELDS.includes(k) && typeof v[k] === 'string') o[k] = v[k].replace(/：/g, ':');
+      else o[k] = _normTimeColon(v[k]);
+    }
+    return o;
+  }
+  return v;
+}
+
 async function sb(path, method = 'GET', body = null) {
   const opts = {
     method,
@@ -12,7 +28,7 @@ async function sb(path, method = 'GET', body = null) {
       'Prefer': 'return=representation'
     }
   };
-  if (body) opts.body = JSON.stringify(body);
+  if (body) opts.body = JSON.stringify(_normTimeColon(body));
   const r = await fetch(SB_URL + path, opts);
   if (!r.ok) { const e = await r.text(); throw new Error(e); }
   const t = await r.text();
