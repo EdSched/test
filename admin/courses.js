@@ -1823,27 +1823,27 @@ let cachedScheduleSlots=[], cachedTeacherAvail=[], cachedTeachers=[];
 let schedPeriodFilter='all', schedTypeFilter='all', schedCourseFilter='all';
 
 function renderSchedulePage(mc){
-  // 带年份的期数列表
-  const allPeriods=[...new Map(cachedCourses
-    .filter(c=>c.period&&c.first_session_date)
-    .map(c=>{const year=c.first_session_date.slice(0,4);const key=`${year}年${c.period}`;return [key,{key,period:c.period,year}]})
-  ).values()].sort((a,b)=>a.key.localeCompare(b.key));
-
-  // 按属性+期数+课程筛选
-  let filteredCourses=cachedCourses;
-  // 视角过滤（跟随链接）：非总览只看当前领域/专业的课
-  filteredCourses=filteredCourses.filter(c=>{
+  // 视角过滤后的课（筛选项来源，因地制宜——只列本视角实际有的期数）
+  const viewCourses=cachedCourses.filter(c=>{
     if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
     if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
     return true;
   });
+  // 带年份的期数列表（用季度 effectivePeriod，和其他页统一）
+  const allPeriods=[...new Map(viewCourses
+    .filter(c=>c.first_session_date)
+    .map(c=>{const year=c.first_session_date.slice(0,4);const per=effectivePeriod(c);const key=`${year}年${per}`;return [key,{key,period:per,year}]})
+  ).values()].sort((a,b)=>a.key.localeCompare(b.key));
+
+  // 按属性+期数+课程筛选
+  let filteredCourses=viewCourses;
   if(schedTypeFilter==='共通课') filteredCourses=filteredCourses.filter(c=>c.course_type?.includes('共通'));
   else if(schedTypeFilter==='专业课') filteredCourses=filteredCourses.filter(c=>c.course_type&&!c.course_type.includes('共通')&&!c.course_type.includes('VIP'));
   else if(schedTypeFilter==='VIP') filteredCourses=filteredCourses.filter(c=>c.course_type?.includes('VIP'));
 
   if(schedPeriodFilter!=='all'){
     const [filterYear,filterPeriod]=schedPeriodFilter.match(/(\d{4})年(.+)/)?.slice(1)||[];
-    if(filterYear&&filterPeriod) filteredCourses=filteredCourses.filter(c=>c.period===filterPeriod&&c.first_session_date?.startsWith(filterYear));
+    if(filterYear&&filterPeriod) filteredCourses=filteredCourses.filter(c=>effectivePeriod(c)===filterPeriod&&c.first_session_date?.startsWith(filterYear));
   }
   if(schedCourseFilter!=='all') filteredCourses=filteredCourses.filter(c=>c.id===schedCourseFilter);
 
