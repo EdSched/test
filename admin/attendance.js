@@ -19,6 +19,7 @@ function attPresent(v){return v==='offline'||v==='online'||v==='replay';}
 
 let attPeriodFilter='';
 let attTypeFilter='';
+let attCampusFilter='';
 let attMajorFilter='all';
 let sessionEdits={};
 
@@ -46,13 +47,22 @@ async function attLoadHwCounts(silent){
 }
 
 function renderAttendancePage(mc){
+  // 先按视角（领域/专业）过滤出本视角的课，筛选项都基于这些课生成——因地制宜
+  const viewCourses=cachedCourses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
+    return true;
+  });
+  // 期数：用季度(effectivePeriod)+年份，只列本视角课实际有的
   const periods=[...new Set(
-    cachedCourses.filter(c=>c.first_session_date&&c.period).map(c=>{
+    viewCourses.filter(c=>c.first_session_date).map(c=>{
       const y=c.first_session_date.slice(0,4);
-      return y+'年'+c.period;
+      return y+'年'+effectivePeriod(c);
     })
   )].sort();
-  const types=[...new Set(cachedCourses.map(c=>c.course_type).filter(Boolean))];
+  const types=[...new Set(viewCourses.map(c=>c.course_type).filter(Boolean))];
+  // 校区：只列本视角课实际有的
+  const campuses=[...new Set(viewCourses.map(c=>c.campus).filter(Boolean))];
 
   // courses matching current type+period filter
   let filteredCourses=cachedCourses;
@@ -63,10 +73,11 @@ function renderAttendancePage(mc){
     return true;
   });
   if(attTypeFilter) filteredCourses=filteredCourses.filter(c=>c.course_type===attTypeFilter);
+  if(attCampusFilter) filteredCourses=filteredCourses.filter(c=>c.campus===attCampusFilter);
   if(attPeriodFilter){
     filteredCourses=filteredCourses.filter(c=>{
       const y=c.first_session_date?.slice(0,4)||'';
-      return y+'年'+c.period===attPeriodFilter;
+      return y+'年'+effectivePeriod(c)===attPeriodFilter;
     });
   }
   const seen=new Set();
@@ -101,6 +112,12 @@ function renderAttendancePage(mc){
           ${periods.map(p=>`<div class="filter-chip${attPeriodFilter===p?' active':''}" onclick="setAttPeriod('${p}')">${p}</div>`).join('')}
         </div>
       </div>
+      ${campuses.length>1?`<div>
+        <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">校区</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${campuses.map(cp=>`<div class="filter-chip${attCampusFilter===cp?' active':''}" onclick="setAttCampus('${cp}')">${cp}</div>`).join('')}
+        </div>
+      </div>`:''}
       ${attTypeFilter&&availMajors.length?`<div>
         <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">专业</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
@@ -111,7 +128,7 @@ function renderAttendancePage(mc){
     </div>
     ${!attTypeFilter&&!attPeriodFilter?'<div style="font-size:11px;color:var(--text-3);margin-top:10px">请选择课程属性或期数查看课次</div>':''}
   </div>
-  ${attTypeFilter||attPeriodFilter ? renderSessionList(filteredCourses) : ''}`;
+  ${attTypeFilter||attPeriodFilter||attCampusFilter ? renderSessionList(filteredCourses) : ''}`;
   if(!Object.keys(attHwCount).length) attLoadHwCounts();
 }
 
@@ -369,6 +386,10 @@ function setAttPeriod(p){
 function setAttType(t){
   attTypeFilter=attTypeFilter===t?'':t;
   attMajorFilter='all';
+  renderAttendancePage(document.getElementById('mainContent'));
+}
+function setAttCampus(cp){
+  attCampusFilter=attCampusFilter===cp?'':cp;
   renderAttendancePage(document.getElementById('mainContent'));
 }
 function setAttMajor(m){
