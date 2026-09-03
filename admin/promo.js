@@ -19,6 +19,10 @@ const PROMO_SECTIONS = [
 ];
 
 async function renderPromoAdminPage(mc) {
+  // 专业默认跟当前视角：专业锁时用锁定专业；否则用当前领域第一个专业
+  const keys = majorFilterKeys();
+  if (CURRENT_MAJOR) promoMajor = CURRENT_MAJOR;
+  else if (!keys.includes(promoMajor)) promoMajor = keys[0] || 'shakai';
   mc.innerHTML = '<div class="empty">加载中…</div>';
   promoLoad();
 }
@@ -52,7 +56,7 @@ function promoRenderShell() {
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
     <span style="font-size:10px;color:var(--text-3)">专业：</span>
-    ${['shakai','shinpan','fukushi','keiei','keizai'].map(m => `<div class="filter-chip ${promoMajor===m?'active':''}" onclick="promoMajor='${m}';promoEditingId=null;promoLoad()" style="padding:3px 10px;font-size:11px">${majorLabel(m)}</div>`).join('')}
+    ${majorFilterKeys().map(m => `<div class="filter-chip ${promoMajor===m?'active':''}" onclick="promoMajor='${m}';promoEditingId=null;promoLoad()" style="padding:3px 10px;font-size:11px">${m==='shakai_group'?'社会人文':majorLabel(m)}</div>`).join('')}
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px">
     <span style="font-size:10px;color:var(--text-3)">板块：</span>
