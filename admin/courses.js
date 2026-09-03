@@ -284,6 +284,7 @@ let cleanupSelected=new Set();
 let cleanupOpenGroups=new Set();   // 展开的「年+期」分组
 let cleanupShowNonDup=new Set();   // 分组内展开「无重复课程」的key
 let cleanupTypeFilter='all';
+let cleanupCampusFilter='all';
 let cleanupMajorFilter='all';
 let cleanupPeriodFilter='all';
 let cleanupYearFilter='all';
@@ -305,10 +306,18 @@ function renderCourseCleanupPage(mc){
   else if(cleanupTypeFilter==='VIP') filtered=filtered.filter(c=>c.course_type?.includes('VIP'));
 
   if(cleanupPeriodFilter!=='all') filtered=filtered.filter(c=>effectivePeriod(c)===cleanupPeriodFilter);
+  if(cleanupCampusFilter!=='all') filtered=filtered.filter(c=>(c.campus||'')===cleanupCampusFilter);
   if(cleanupYearFilter!=='all') filtered=filtered.filter(c=>c.first_session_date?.startsWith(cleanupYearFilter));
 
-  const allYears=[...new Set(cachedCourses.filter(c=>c.first_session_date).map(c=>c.first_session_date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
-  const allCleanupPeriods=[...new Set(cachedCourses.map(c=>effectivePeriod(c)).filter(p=>p&&p!=='未分期'))].sort();
+  // 视角过滤后的全部课（筛选项来源，因地制宜——只列本视角实际有的期数/年份/校区）
+  const viewCourses=cachedCourses.filter(c=>{
+    if(CURRENT_DOMAIN&&CURRENT_DOMAIN!=='all'&&c.domain!==CURRENT_DOMAIN) return false;
+    if(CURRENT_MAJOR) return (c.major||[]).some(m=>m===CURRENT_MAJOR);
+    return true;
+  });
+  const allYears=[...new Set(viewCourses.filter(c=>c.first_session_date).map(c=>c.first_session_date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+  const allCleanupPeriods=[...new Set(viewCourses.map(c=>effectivePeriod(c)).filter(p=>p&&p!=='未分期'))].sort();
+  const allCleanupCampuses=[...new Set(viewCourses.map(c=>c.campus).filter(Boolean))];
 
   const groups={};
   filtered.forEach(c=>{
@@ -320,12 +329,14 @@ function renderCourseCleanupPage(mc){
   });
   const sortedKeys=Object.keys(groups).sort((a,b)=>b.localeCompare(a)); // 新的在前
 
-  // 标记可能重复的课程：同名课程出现在同一个分组内超过1次
+  // 标记疑似重复：不只看名字——名字+校区+时间段+首回日期 都相同才算真重复
+  // （同名但校区/时间/日期不同的，是不同的课，不算重复）
   const dupKeys=new Set();
   Object.values(groups).forEach(g=>{
-    const nameCount={};
-    g.courses.forEach(c=>{ nameCount[c.name]=(nameCount[c.name]||0)+1; });
-    g.courses.forEach(c=>{ if(nameCount[c.name]>1) dupKeys.add(c.id); });
+    const sig=c=>[c.name,c.campus||'',c.time_range||'',c.first_session_date||'',(c.teacher||'')].join('|');
+    const sigCount={};
+    g.courses.forEach(c=>{ const k=sig(c); sigCount[k]=(sigCount[k]||0)+1; });
+    g.courses.forEach(c=>{ if(sigCount[sig(c)]>1) dupKeys.add(c.id); });
   });
 
   mc.innerHTML=`
@@ -369,6 +380,13 @@ function renderCourseCleanupPage(mc){
         ${allYears.map(y=>`<div class="filter-chip${cleanupYearFilter===y?' active':''}" onclick="setCleanupYear('${y}',this)" style="font-size:11px;padding:3px 10px">${y}年</div>`).join('')}
       </div>
     </div>
+    ${allCleanupCampuses.length>1?`<div>
+      <div style="font-size:10px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">校区</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <div class="filter-chip${cleanupCampusFilter==='all'?' active':''}" onclick="setCleanupCampus('all',this)" style="font-size:11px;padding:3px 10px">全部</div>
+        ${allCleanupCampuses.map(cp=>`<div class="filter-chip${cleanupCampusFilter===cp?' active':''}" onclick="setCleanupCampus('${cp}',this)" style="font-size:11px;padding:3px 10px">${cp}</div>`).join('')}
+      </div>
+    </div>`:''}
   </div>
 
   <div style="font-size:11px;color:var(--text-3);margin-bottom:14px">按「年份+期数」折叠分组，标题行显示重复情况；展开后疑似重复的课程排在最前，无重复的收在一条里按需展开。点击课程行可选中批量删除；「存为模板」可把课程结构保存复用。</div>
@@ -444,6 +462,7 @@ function cleanupToggleNonDup(key){
   renderCourseCleanupPage(document.getElementById('mainContent'));
 }
 function setCleanupType(t,el){cleanupTypeFilter=t;document.querySelectorAll('#mainContent .filter-chip').forEach(c=>c.classList.remove('active'));renderCourseCleanupPage(document.getElementById('mainContent'))}
+function setCleanupCampus(cp,el){cleanupCampusFilter=cp;renderCourseCleanupPage(document.getElementById('mainContent'))}
 function setCleanupMajor(m,el){cleanupMajorFilter=m;renderCourseCleanupPage(document.getElementById('mainContent'))}
 function setCleanupPeriod(p,el){cleanupPeriodFilter=p;renderCourseCleanupPage(document.getElementById('mainContent'))}
 function setCleanupYear(y,el){cleanupYearFilter=y;renderCourseCleanupPage(document.getElementById('mainContent'))}
