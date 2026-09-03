@@ -163,7 +163,11 @@ function cellFor(teacherName,dateStr){
 function render(){
   const days=[]; for(let i=0;i<14;i++) days.push(addDays(weekStart,i)); // 显示两周
   document.getElementById('rangeLabel').textContent=fmt(days[0])+' ～ '+fmt(days[13]);
-  const list=TEACHERS.filter(t=> curRoster==='regular' ? t.staff_type==='正社员' : t.staff_type==='兼职');
+  const hasAttendance=t=>{
+    const st=(t.permissions&&t.permissions.slot_types)||[];
+    return Array.isArray(st)?st.includes('attendance'):false;
+  };
+  const list=TEACHERS.filter(t=> (curRoster==='regular' ? t.staff_type==='正社员' : t.staff_type==='兼职') && hasAttendance(t));
   if(!list.length){ document.getElementById('rosterBody').innerHTML='<div style="padding:30px;text-align:center;color:var(--tm)">暂无'+(curRoster==='regular'?'正社员':'兼职')+'老师</div>'; return; }
 
   let h='<table class="rtable"><thead><tr><th class="name">姓名</th>';
