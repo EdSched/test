@@ -8,14 +8,14 @@
 let promoMajor = 'shakai';
 let promoTplMode = false; // 专业介绍模板填写模式
 
-// 专业介绍模板的6个字段
+// 专业介绍模板的6个字段（含浅色示例，供参考填写）
 const PROMO_TPL_FIELDS = [
-  ['gaiyou', '概要'],
-  ['shiten', '独特视角'],
-  ['yuushi', '优势'],
-  ['houkou', '重点方向'],
-  ['kadai', '研究课题例'],
-  ['juuten', '重点研究科'],
+  ['gaiyou', '概要', '例：社会学是研究人类社会结构、社会关系与社会变迁的学科，涵盖家庭、教育、媒体、城市、阶层等广泛领域。'],
+  ['shiten', '独特视角', '例：本专业强调用批判性、实证性的眼光审视习以为常的社会现象，培养透过现象看本质的分析力。'],
+  ['yuushi', '优势', '例：\n- 师资来自一桥、东大等顶尖研究科\n- 小班教学，计划书一对一指导\n- 历年合格率高'],
+  ['houkou', '重点方向', '例：城市社会学 / 家庭社会学 / 媒介与传播 / 社会阶层与流动'],
+  ['kadai', '研究课题例', '例：\n- 都市青年的居住选择与社会网络\n- 社交媒体对青少年自我认同的影响'],
+  ['juuten', '重点研究科', '例：一桥大学社会学研究科、东京大学人文社会系研究科、早稻田大学文学研究科'],
 ];
 // 从已有 body（模板拼成的 markdown）反解出各字段值，供编辑回填
 function promoParseTpl(body){
@@ -35,7 +35,7 @@ function promoTemplateFields(editing){
   return `<div style="display:flex;flex-direction:column;gap:8px" id="promo_tpl_wrap">
     ${PROMO_TPL_FIELDS.map(f=>`<div>
       <label style="font-size:10px;color:var(--accent,#8b5cf6);font-weight:600;display:block;margin-bottom:3px">${f[1]}</label>
-      <textarea id="tpl_${f[0]}" rows="3" style="width:100%;font-size:12px;line-height:1.7;padding:8px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:inherit;resize:vertical" placeholder="填写「${f[1]}」的内容，支持 - 列表、**粗体**、表格">${promoEsc(vals[f[0]]||'')}</textarea>
+      <textarea id="tpl_${f[0]}" rows="3" style="width:100%;font-size:12px;line-height:1.7;padding:8px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:inherit;resize:vertical" placeholder="${promoEsc(f[2]||('填写「'+f[1]+'」的内容'))}">${promoEsc(vals[f[0]]||'')}</textarea>
     </div>`).join('')}
     <div style="font-size:9px;color:var(--text-3)">填完保存，系统会自动拼成带排版的介绍页。每个字段内可用 <code>- 列表</code>、<code>**粗体**</code>、表格。</div>
   </div>`;
@@ -127,11 +127,14 @@ function promoRender() {
   <div style="border:1px solid var(--accent);border-radius:4px;padding:14px;margin-bottom:12px;background:var(--bg)">
     <div style="font-size:11px;font-weight:600;margin-bottom:8px">${promoEditingId==='new'?'＋ 新增':'✏ 编辑'}${sec[1]}条目${promoSection==='major_intro'?`<button class="btn btn-outline btn-sm" style="margin-left:10px;font-weight:400;font-size:10px" onclick="promoTplMode=!promoTplMode;promoRender()">${promoTplMode?'← 切换自由编辑':'📋 用模板填写'}</button>`:''}</div>
     ${promoSection==='course'?`<div style="margin-bottom:8px">
-      <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">📚 从课程安排选择（本${CURRENT_MAJOR?'专业':'领域'}的课，选后自动填入课程名）</label>
-      <select onchange="promoFillCourseName(this.value)" style="${inp}">
-        <option value="">— 选择现有课程 —</option>
-        ${promoAvailCourses().map(nm=>`<option value="${promoEsc(nm)}">${promoEsc(nm)}</option>`).join('')}
-      </select>
+      <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">📚 从课程安排选择（本${CURRENT_MAJOR?'专业':'领域'}的课，选后自动填入课程名；有单回明细可一键生成课程安排表）</label>
+      <div style="display:flex;gap:6px">
+        <select id="promo_course_pick" onchange="promoFillCourseName(this.value)" style="${inp};flex:1">
+          <option value="">— 选择现有课程 —</option>
+          ${promoAvailCourses().map(nm=>`<option value="${promoEsc(nm)}">${promoEsc(nm)}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="promoGenCourseTable()">↓ 生成课程安排表</button>
+      </div>
     </div>`:''}
     ${promoSection==='lecturer'&&(promoProfiles||[]).length?`<div style="margin-bottom:8px">
       <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">📇 从讲师档案导入（自动填入标题/正文/关联真实姓名，可再修改润色）</label>
@@ -243,6 +246,33 @@ function promoFillCourseName(name){
   if(!name) return;
   const t=document.getElementById('pm_title');
   if(t) t.value=name;
+}
+// 用选中课的单回明细，生成"课程安排表"markdown，填进正文
+function promoGenCourseTable(){
+  const name=(document.getElementById('promo_course_pick')||{}).value || (document.getElementById('pm_title')||{}).value;
+  if(!name){ alert('请先选择或填写课程名'); return; }
+  const courses=(typeof cachedCourses!=='undefined'&&cachedCourses)||[];
+  const sessions=(typeof cachedSessions!=='undefined'&&cachedSessions)||[];
+  // 找该名字的课（可能多门同名不同期，取有单回的）
+  const cs=courses.filter(c=>c.name===name);
+  if(!cs.length){ alert('课程安排里没有这门课'); return; }
+  // 收集这些课的单回
+  const ids=cs.map(c=>c.id);
+  const sess=sessions.filter(s=>ids.includes(s.course_id)).sort((a,b)=>(a.session_date||'').localeCompare(b.session_date||''));
+  const body=document.getElementById('pm_body');
+  if(!sess.length){
+    // 没单回：给个空模板示例
+    const tpl='## 课程安排\n\n| 回 | 日期 | 内容 | 授课 |\n|---|---|---|---|\n| 1 | 2026-07-16 | （填写本回内容） | 老师名 |\n| 2 | … | … | … |';
+    if(body){ body.value=(body.value?body.value+'\n\n':'')+tpl; }
+    alert('这门课暂无单回明细，已插入空白课程安排表模板供填写。');
+    return;
+  }
+  // 有单回：生成表格
+  let md='## 课程安排\n\n| 回 | 日期 | 内容 | 授课 |\n|---|---|---|---|\n';
+  sess.forEach((s,i)=>{
+    md+=`| ${s.session_number||i+1} | ${s.session_date||''} | ${s.session_title||s.title||''} | ${s.session_teacher||s.teacher||''} |\n`;
+  });
+  if(body){ body.value=(body.value?body.value+'\n\n':'')+md; }
 }
 // 列出当前专业(promoMajor)的讲师档案（档案subject是中文名，用majorLabel转换匹配）
 function promoAvailProfiles(){
