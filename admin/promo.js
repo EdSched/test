@@ -137,7 +137,7 @@ function promoRender() {
       <label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">📇 从讲师档案导入（自动填入标题/正文/关联真实姓名，可再修改润色）</label>
       <select onchange="promoFillFromProfile(this.value)" style="${inp}">
         <option value="">— 选择讲师档案 —</option>
-        ${promoProfiles.map(p=>`<option value="${p.id}">${promoEsc((p.subject||'未分类'))} · ${promoEsc(p.name)}${promoPubMap[p.name]?`（对外：${promoEsc(promoPubMap[p.name])}）`:''}</option>`).join('')}
+        ${promoAvailProfiles().map(p=>`<option value="${p.id}">${promoEsc((p.subject||'未分类'))} · ${promoEsc(p.name)}${promoPubMap[p.name]?`（对外：${promoEsc(promoPubMap[p.name])}）`:''}</option>`).join('')}
       </select>
     </div>`:''}
     <div style="display:grid;grid-template-columns:1fr ${promoSection==='lecturer'?'180px ':''}90px;gap:8px;margin-bottom:8px">
@@ -243,6 +243,18 @@ function promoFillCourseName(name){
   if(!name) return;
   const t=document.getElementById('pm_title');
   if(t) t.value=name;
+}
+// 列出当前专业(promoMajor)的讲师档案（档案subject是中文名，用majorLabel转换匹配）
+function promoAvailProfiles(){
+  const all=promoProfiles||[];
+  const majorCn=promoMajor==='shakai_group'?['社会学','新闻传播学','社会福祉学']:[majorLabel(promoMajor)];
+  const filtered=all.filter(p=>{
+    const subj=(p.subject||'').trim();
+    if(!subj) return true; // 未分类的档案也显示（可能是没标专业的）
+    return majorCn.includes(subj);
+  });
+  // 若过滤后为空（可能档案没按专业标），退回显示全部，避免选不到
+  return filtered.length?filtered:all;
 }
 function promoFillFromProfile(id) {
   if (!id) return;
