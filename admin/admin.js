@@ -297,7 +297,10 @@ async function renderPage(){
       cachedCourses=filterByDomain(cachedCourses);
       renderCoursesPage(mc);
     } else if(curPage==='promo'){
-      cachedCourses=await sbAll('/rest/v1/courses?select=*&order=created_at.desc').catch(()=>cachedCourses||[]);
+      [cachedCourses,cachedSessions]=await Promise.all([
+        sbAll('/rest/v1/courses?select=*&order=created_at.desc').catch(()=>cachedCourses||[]),
+        sbAll('/rest/v1/course_sessions?select=*&order=session_date.asc').catch(()=>cachedSessions||[])
+      ]);
       renderPromoAdminPage(mc);
     } else if(curPage==='coursecleanup'){
       [cachedCourses,cachedSessions,cachedTeachers]=await Promise.all([
@@ -943,10 +946,18 @@ async function initApp(){
 let profList=null;
 let profOpenSubjects=new Set();
 let profEditingId=null;
+let profNewPreset=null; // "为某老师添加介绍"时预填的固定信息
+// 基于已有档案，为该老师添加另一份介绍：带出固定信息（姓名/学校/学位/年份），清空专业+介绍内容
+function profAddFor(id){
+  const src=profList.find(p=>p.id===id); if(!src) return;
+  profNewPreset={ _addFor:true, name:src.name, school:src.school, degree:src.degree, years:src.years, vip:src.vip,
+    domain:'', subject:'', courses:'', keywords:'', feature:'', notes:'' };
+  profEditingId='new';
+  profRender();
+}
 
 const PROF_FIELDS=[
   ['name','讲师姓名（本名；与老师管理同名即自动关联账号）*'],
-  ['department','所属学系（如 社会人文）'],['subject','所属学科（如 社会学）'],
   ['school','毕业或所属大学院研究科'],['degree','学位（含在读）'],
   ['years','执教年份'],['vip','VIP指导（可/否）'],
 ];
@@ -987,9 +998,16 @@ function profRender(){
 
   const formHtml=(p)=>`
   <div style="border:1px solid var(--accent);border-radius:4px;padding:14px;margin-bottom:10px;background:var(--bg)">
-    <div style="font-size:11px;font-weight:600;margin-bottom:8px">${profEditingId==='new'?'＋ 新增讲师档案':'✏ 编辑讲师档案'}</div>
+    <div style="font-size:11px;font-weight:600;margin-bottom:8px">${profEditingId==='new'?'＋ 新增讲师档案':(p._addFor?`＋ 为「${profEsc(p.name)}」添加介绍`:'✏ 编辑讲师档案')}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:8px">
       ${PROF_FIELDS.map(([k,l])=>`<div><label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">${l}</label><input id="pf_${k}" value="${profEsc(p[k])}" style="${inp}"></div>`).join('')}
+      <div><label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">领域 *</label>
+        <select id="pf_domain" onchange="profDomainChange()" style="${inp}">
+          <option value="">选择领域</option>
+          ${(typeof DOMAINS!=='undefined'?DOMAINS:[]).map(d=>`<option value="${d.label}"${p.domain===d.label?' selected':''}>${d.label}</option>`).join('')}
+        </select></div>
+      <div><label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">专业 *</label>
+        <select id="pf_subject" style="${inp}"><option value="">请先选领域</option></select></div>
       <div><label style="font-size:9px;color:var(--text-3);display:block;margin-bottom:2px">排序</label><input id="pf_sort" type="number" value="${p.sort_order||0}" style="${inp}"></div>
     </div>
     ${[['courses','担当课程'],['keywords','可指导方向（关键词）'],['feature','授课特色'],['notes','备注']].map(([k,l])=>`
@@ -997,11 +1015,12 @@ function profRender(){
     <textarea id="pf_${k}" rows="${k==='feature'?4:2}" style="width:100%;font-size:11px;line-height:1.7;padding:6px 8px;border:1px solid var(--border);border-radius:2px;background:var(--surface);font-family:inherit;resize:vertical;margin-bottom:6px">${profEsc(p[k])}</textarea>`).join('')}
     <div style="display:flex;gap:6px;margin-top:4px">
       <button class="btn btn-primary btn-sm" onclick="profSave()">保存</button>
-      <button class="btn btn-outline btn-sm" onclick="profEditingId=null;profRender()">取消</button>
+      <button class="btn btn-outline btn-sm" onclick="profEditingId=null;profNewPreset=null;profRender()">取消</button>
     </div>
+    <input type="hidden" id="pf_subject_preset" value="${profEsc(p.subject||'')}">
   </div>`;
 
-  if(profEditingId==='new'){box.innerHTML=formHtml({});return}
+  if(profEditingId==='new'){box.innerHTML=formHtml(profNewPreset||{});setTimeout(profDomainChange,0);return}
 
   // 按所属学科分组折叠
   const groups={};
@@ -1020,17 +1039,20 @@ function profRender(){
         <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border-light);border-radius:3px;margin-bottom:6px;flex-wrap:wrap">
           <div style="flex:1;min-width:220px">
             <div style="font-size:12px;font-weight:600">${profEsc(p.name)}
+              <span style="font-size:9px;color:var(--accent,#8b5cf6);margin-left:4px">${profEsc(p.domain||'')}${p.subject?' · '+profEsc(p.subject):''}</span>
               ${cachedTeachers.some(t=>t.name===p.name)?`<span style="font-size:9px;color:var(--ok);margin-left:6px">🔗 已关联账号${(cachedTeachers.find(t=>t.name===p.name)?.notes||'').trim()?`（对外：${profEsc(cachedTeachers.find(t=>t.name===p.name).notes)}）`:''}</span>`:`<span style="font-size:9px;color:var(--text-3);margin-left:6px">无账号（不影响）</span>`}
               ${profIncomplete(p)?`<span style="font-size:9px;background:var(--warn-bg,#f8f0d8);color:var(--warn,#b8860b);border-radius:2px;padding:0 5px;margin-left:4px">信息不全</span>`:''}
             </div>
             <div style="font-size:10px;color:var(--text-3);margin-top:2px">${profEsc(p.school||'')} ${profEsc(p.degree||'')} · ${profEsc((p.courses||'').slice(0,40))}${(p.courses||'').length>40?'…':''}</div>
           </div>
+          <button class="btn btn-outline btn-sm" onclick="profAddFor('${p.id}')" title="用该老师的固定信息，新增另一个领域/专业的介绍">＋ 添加介绍</button>
           <button class="btn btn-outline btn-sm" onclick="profEditingId='${p.id}';profRender()">✏ 编辑</button>
           <button class="btn btn-sm" style="color:var(--danger);border:1px solid var(--danger);background:none" onclick="profDelete('${p.id}')">删除</button>
         </div>`).join('')}
       </div>`:''}
     </div>`;
   }).join('')||'<div class="empty" style="padding:30px">暂无讲师档案，可导入 Excel 或手动新增</div>';
+  if(profEditingId&&profEditingId!=='new') setTimeout(profDomainChange,0);
 }
 
 function profToggleSubj(s){
@@ -1038,17 +1060,32 @@ function profToggleSubj(s){
   profRender();
 }
 
+// 讲师档案：领域变→专业下拉联动（只列该领域的专业）；保留已选专业
+function profDomainChange(){
+  const dom=(document.getElementById('pf_domain')||{}).value||'';
+  const sel=document.getElementById('pf_subject'); if(!sel) return;
+  const preset=(document.getElementById('pf_subject_preset')||{}).value||'';
+  const cur=sel.value||preset;
+  if(!dom){ sel.innerHTML='<option value="">请先选领域</option>'; return; }
+  // 该领域下的专业（用 MAJOR_DOMAIN 反查，标签用中文名）
+  let opts='<option value="">选择专业</option>';
+  (typeof allMajorKeys==='function'?allMajorKeys():[]).forEach(k=>{
+    if(MAJOR_DOMAIN[k]===dom){ const cn=majorLabel(k); opts+=`<option value="${cn}"${cur===cn?' selected':''}>${cn}</option>`; }
+  });
+  sel.innerHTML=opts;
+}
 async function profSave(){
   const g=id=>(document.getElementById('pf_'+id)||{}).value||'';
   const row={
     name:g('name').trim(),
-    department:g('department').trim(), subject:g('subject').trim(),
+    domain:g('domain').trim(), subject:g('subject').trim(),
     school:g('school').trim(), degree:g('degree').trim(), years:g('years').trim(),
     vip:g('vip').trim(), courses:g('courses').trim(), keywords:g('keywords').trim(),
     feature:g('feature').trim(), notes:g('notes').trim(),
     sort_order:parseInt((document.getElementById('pf_sort')||{}).value)||0,
   };
   if(!row.name){alert('请填写讲师姓名');return}
+  if(!row.domain){alert('请选择领域');return}
   try{
     if(profEditingId==='new'){
       row.id=`prof-${Date.now()}-${Math.random().toString(36).slice(2,5)}`;
@@ -1061,6 +1098,7 @@ async function profSave(){
       if(idx>=0) Object.assign(profList[idx],row);
     }
     profEditingId=null;
+    profNewPreset=null;
     profRender();
   }catch(e){alert('保存失败：'+e.message)}
 }
