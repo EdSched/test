@@ -297,6 +297,7 @@ async function renderPage(){
       cachedCourses=filterByDomain(cachedCourses);
       renderCoursesPage(mc);
     } else if(curPage==='promo'){
+      cachedCourses=await sbAll('/rest/v1/courses?select=*&order=created_at.desc').catch(()=>cachedCourses||[]);
       renderPromoAdminPage(mc);
     } else if(curPage==='coursecleanup'){
       [cachedCourses,cachedSessions,cachedTeachers]=await Promise.all([
