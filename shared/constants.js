@@ -95,8 +95,10 @@ function allMajorKeys() {
 //   'all' → 全部真实专业；分组 key（如 shakai_group）→ 其成员；其他 → [自身]
 function expandMajorFilter(key) {
   if (key === 'all') return allMajorKeys();
-  if (MAJOR_GROUPS[key]) return [...MAJOR_GROUPS[key]];
-  return [key];
+  if (MAJOR_GROUPS[key]) return [key, ...MAJOR_GROUPS[key]]; // 选组：组代码本身 + 成员
+  // 选组内单个专业：也带上所属组代码（组的共通课，如社会人文大课，组内各专业都要能看到）
+  const groups = Object.keys(MAJOR_GROUPS || {}).filter(g => (MAJOR_GROUPS[g] || []).includes(key));
+  return [key, ...groups];
 }
 
 // 筛选栏 chip 顺序：经营 经济 [社会人文组] 社会 新传 福祉 …新增专业追加末尾
