@@ -485,7 +485,7 @@ function renderTeachersPage(mc){
             </div>
           </div>
           <!-- 营业功能大类 row（仅 admin/中枢可见；营业管理归中枢，领域端不显示） -->
-          <div style="padding:10px" id="sales_perm_block">
+          ${(!ACCESS_KEY||ACCESS_KEY.is_admin)?`<div style="padding:10px" id="sales_perm_block">
             <div style="font-size:11px;font-weight:600;margin-bottom:6px">💼 营业功能（按需勾选子项 · 中枢管理）</div>
             <div style="margin-left:4px;display:flex;flex-direction:column;gap:6px">
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer"><input type="checkbox" id="perm_promo" style="accent-color:var(--accent);width:15px;height:15px">宣传相关<span style="font-size:9px;color:var(--text-3)">专业/讲师/课程介绍与当期课程表，含对外分享链接</span></label>
@@ -493,7 +493,7 @@ function renderTeachersPage(mc){
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer"><input type="checkbox" id="perm_lect_info" style="accent-color:var(--accent);width:15px;height:15px">讲师信息查询<span style="font-size:9px;color:var(--text-3)">内部检索讲师档案，可切换展示卡片给客户看/截图</span></label>
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer"><input type="checkbox" id="perm_vip_sales" style="accent-color:var(--accent);width:15px;height:15px">VIP营业规划<span style="font-size:9px;color:var(--text-3)">看到全部 VIP 框架模板，可转分享给上课老师（营业角色）</span></label>
             </div>
-          </div>
+          </div>`:''}
           <!-- admission_query row -->
           <div style="padding:10px">
             <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;cursor:pointer;margin-bottom:8px;white-space:nowrap"><input type="checkbox" id="perm_admission_query" style="accent-color:var(--accent);flex-shrink:0;width:16px;height:16px;min-width:16px">出願数据查询</label>
@@ -612,6 +612,11 @@ let teacherExpandedId=null;
 
 function teacherFilteredList(){
   let list=cachedTeachers;
+  // 领域端（非admin）：排除带"营业老师""保录老师"标签的人（这些只admin管，不给学科负责人）
+  const isDomainAccount = typeof ACCESS_KEY!=='undefined' && ACCESS_KEY && !ACCESS_KEY.invalid && !ACCESS_KEY.is_admin;
+  if(isDomainAccount){
+    list=list.filter(t=>{ const tags=t.tags||[]; return !tags.includes('营业老师') && !tags.includes('保录老师'); });
+  }
   if(teacherTagFilter) list=list.filter(t=>(t.tags||[]).includes(teacherTagFilter));
   if(teacherTypeFilter) list=list.filter(t=>(t.staff_type||'')===teacherTypeFilter);
   if(teacherDeptFilter) list=list.filter(t=>(t.department||'')===teacherDeptFilter);
