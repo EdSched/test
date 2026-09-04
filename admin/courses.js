@@ -217,6 +217,7 @@ async function confirmCourseImport(){
 }
 
 let coursesMajorFilter='none';  // 初始不选任何专业，需手动点选后才显示课程（避免一打开满屏）
+let coursesDomainFilter='';  // 总览时按领域筛（空=全部领域）
 let coursesPeriodFilter='current'; // 'current' | 'all'
 
 // 判断当前是哪个期（按当前月份）
@@ -770,6 +771,8 @@ async function openApplyTemplate(templateId){
 function renderCoursesPage(mc){
   // 专业钥匙锁定：强制默认选中锁定的专业（用户不能改）
   if(CURRENT_MAJOR) coursesMajorFilter=CURRENT_MAJOR;
+  // 锁定在具体领域（领域账号/切换视角进入）：默认显示该领域全部课（不管领域有没有建专业）
+  else if(CURRENT_DOMAIN && CURRENT_DOMAIN!=='all' && coursesMajorFilter==='none') coursesMajorFilter='all';
 
   const curPeriod=currentPeriodKey();
   // 领域感知筛选：
@@ -977,6 +980,11 @@ function setCoursesPeriod(p,el){
 }
 function setCoursesCampus(c,el){
   coursesCampusFilter=c;
+  renderCoursesPage(document.getElementById('mainContent'));
+}
+function setCoursesDomain(d,el){
+  coursesDomainFilter=d;
+  coursesMajorFilter=d?'all':'none'; // 选了领域自动显示该领域全部；清领域回到不选
   renderCoursesPage(document.getElementById('mainContent'));
 }
 
