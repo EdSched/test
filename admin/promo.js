@@ -64,12 +64,17 @@ async function renderPromoAdminPage(mc) {
   // 专业默认跟当前视角：专业锁时用锁定专业；否则用当前领域第一个专业
   const keys = majorFilterKeys();
   if (CURRENT_MAJOR) promoMajor = CURRENT_MAJOR;
-  else if (!keys.includes(promoMajor)) promoMajor = keys[0] || 'shakai';
+  else if (!keys.includes(promoMajor)) promoMajor = keys[0] || '';
   mc.innerHTML = '<div class="empty">加载中…</div>';
   promoLoad();
 }
 
 async function promoLoad() {
+  if(!promoMajor){
+    const mc=document.getElementById('mainContent');
+    if(mc) mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">当前领域暂无专业。请先在「学生档案」或课程中为该领域新建专业，再来管理宣传内容。</div>';
+    return;
+  }
   try {
     const jobs = [sb(`/rest/v1/promo_content?major=eq.${promoMajor}&select=*&order=sort_order.asc,created_at.asc`)];
     if (promoProfiles === null) {
