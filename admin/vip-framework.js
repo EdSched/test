@@ -34,7 +34,7 @@ async function loadVipFrameworks() {
 // ── 主页面：框架列表 + 新建 ──
 function renderVipFrameworkPage(mc) {
   vfCurrentId = null;
-  const majorOpts = majorOptionsHtml('', { placeholder: '选择专业…' });
+  const majorOpts = majorOptionsHtml('', { placeholder: '选择专业…', keys: majorFilterKeys() });
 
   // 视角过滤（跟随链接）：非总览只看当前领域/专业的框架
   const visFrameworks = vfFrameworks.filter(f => majorInCurrentView(f.major));
