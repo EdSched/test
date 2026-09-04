@@ -52,8 +52,13 @@ function renderAdmissionDbPage(mc) {
   <!-- 专业筛选（支持多选） -->
   <div style="margin-bottom:6px;font-size:10px;color:var(--text-3)">点击选择专业（可多选）；点「社会人文」同时加载社会学+新闻传播+社会福祉</div>
   <div class="filter-row" style="margin-bottom:8px" id="adbMajorRow">
-    <div class="filter-chip" onclick="toggleAdbMajor('shakai_group',this)" id="adb_chip_shakai_group">社会人文</div>
-    ${Object.entries(ADMISSION_MAJORS).map(([k,v])=>`
+    ${(CURRENT_DOMAIN==='all'||!CURRENT_DOMAIN||CURRENT_DOMAIN==='大学院文科')?`<div class="filter-chip" onclick="toggleAdbMajor('shakai_group',this)" id="adb_chip_shakai_group">社会人文</div>`:''}
+    ${Object.entries(ADMISSION_MAJORS).filter(([k,v])=>{
+      if(!CURRENT_DOMAIN||CURRENT_DOMAIN==='all') return true;
+      // 已知领域的按领域判断；出愿专用未登记的key默认当大学院文科
+      const dom = MAJOR_DOMAIN[k] || '大学院文科';
+      return dom===CURRENT_DOMAIN;
+    }).map(([k,v])=>`
       <div class="filter-chip" onclick="toggleAdbMajor('${k}',this)" id="adb_chip_${k}">${v}${majorCounts[k]?` <span style="font-size:9px;opacity:.6">${majorCounts[k]}</span>`:''}</div>
     `).join('')}
     <div class="filter-chip" onclick="clearAdbMajors()" style="color:var(--text-3)">清除</div>
@@ -545,8 +550,20 @@ async function deleteAdmissionSchool() {
 // ── 导出 Excel ──
 function exportAdmissionExcel() {
   const filtered = filterAdmissionSchools();
-  if (!filtered.length) { alert('没有可导出的数据'); return; }
   const showMajor = adbSelectedMajors.length !== 1;
+  // 表头字段定义（空数据时也用它导出模板）
+  const HEADERS = ['大学名','設置主体','研究科名','専攻名','コース名','出願類型','資格審査','出願期間','筆記試験時間','口述試験時間','合格発表時間','英語成績','日本語成績'];
+  if (!filtered.length) {
+    // 没数据：导出只有表头的空模板 + 一行说明
+    if(!confirm('当前没有数据。是否导出【空白表头模板】供录入（其他学科可下载后按此格式填写）？')) return;
+    const head = (showMajor?['专业']:[]).concat(HEADERS);
+    const ws = XLSX.utils.aoa_to_sheet([head, head.map(()=>'')]); // 表头 + 一空行示意
+    ws['!cols'] = head.map(k => ({ wch: ['研究科名','専攻名'].includes(k)?22:k==='大学名'?18:k==='コース名'?16:10 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '出願数据模板');
+    XLSX.writeFile(wb, `出願数据_空白模板_${new Date().toISOString().slice(0,10)}.xlsx`);
+    return;
+  }
   const rows = filtered.map(s => {
     const row = {};
     if (showMajor) row['专业'] = ADMISSION_MAJORS[s.major] || s.major;
