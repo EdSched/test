@@ -612,10 +612,19 @@ let teacherExpandedId=null;
 
 function teacherFilteredList(){
   let list=cachedTeachers;
-  // 领域端（非admin）：排除带"营业老师""保录老师"标签的人（这些只admin管，不给学科负责人）
+  // 领域端（非admin）：排除带"营业老师""保录老师"标签的人
   const isDomainAccount = typeof ACCESS_KEY!=='undefined' && ACCESS_KEY && !ACCESS_KEY.invalid && !ACCESS_KEY.is_admin;
   if(isDomainAccount){
     list=list.filter(t=>{ const tags=t.tags||[]; return !tags.includes('营业老师') && !tags.includes('保录老师'); });
+  }
+  // 按当前视角自动过滤：专业锁→只看教该专业的；领域→只看该领域的（老师专业/领域叠加判断）
+  if(typeof CURRENT_MAJOR!=='undefined' && CURRENT_MAJOR){
+    list=list.filter(t=>(t.majors||[]).includes(CURRENT_MAJOR));
+  } else if(typeof CURRENT_DOMAIN!=='undefined' && CURRENT_DOMAIN && CURRENT_DOMAIN!=='all'){
+    list=list.filter(t=>{
+      if((t.domains||[]).includes(CURRENT_DOMAIN)) return true;
+      return (t.majors||[]).some(m=>MAJOR_DOMAIN[m]===CURRENT_DOMAIN);
+    });
   }
   if(teacherTagFilter) list=list.filter(t=>(t.tags||[]).includes(teacherTagFilter));
   if(teacherTypeFilter) list=list.filter(t=>(t.staff_type||'')===teacherTypeFilter);
