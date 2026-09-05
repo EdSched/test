@@ -190,26 +190,25 @@ function generateMajorKey(label) {
 
 // 新增一个专业到数据库，返回生成的 key（重名/已存在则直接返回已有 key，不重复创建）
 // 新增专业。keyArg 可选：传入则用你指定的英文代号（如 kannkou），留空则按拼音自动生成
-async function createMajor(label, keyArg) {
+async function createMajor(label, keyArg, domainArg) {
   label = String(label || '').trim();
   if (!label) return null;
-  // 先看是否已经存在同名专业（避免重复创建多个 key 对应同一个中文名）
   const existing = Object.entries(MAJORS).find(([k, v]) => v === label);
   if (existing) return existing[0];
   let key = String(keyArg || '').trim().toLowerCase();
   if (key) {
-    // 指定了英文代号：校验格式与冲突
     if (!/^[a-z][a-z0-9_]*$/.test(key)) { alert('英文代号格式不对：只能用小写字母/数字/下划线，且以字母开头（如 kannkou）'); return null; }
     if (key === 'all' || key === 'shakai_group') { alert(`「${key}」是系统保留字，请换一个`); return null; }
     if (MAJORS[key]) { alert(`英文代号「${key}」已被专业「${MAJORS[key]}」占用，请换一个`); return null; }
   } else {
-    // 未指定 → 按拼音自动生成，冲突则加随机后缀
     key = generateMajorKey(label);
     if (MAJORS[key]) key = key + Date.now().toString(36).slice(-3);
   }
+  const domain = String(domainArg || '').trim();
   try {
-    await sb('/rest/v1/majors', 'POST', { key, label });
+    await sb('/rest/v1/majors', 'POST', domain ? { key, label, domain } : { key, label });
     MAJORS[key] = label;
+    if (domain) MAJOR_DOMAIN[key] = domain;
     return key;
   } catch (e) {
     alert('新增专业失败：' + e.message);
