@@ -67,13 +67,14 @@ function openConsole(){
 let consoleTab='keys';
 async function switchConsoleTab(tab){
   consoleTab=tab;
-  ['keys','teachers','payroll'].forEach(t=>{
+  ['keys','teachers','payroll','majors'].forEach(t=>{
     const b=document.getElementById('ctab_'+t);
     if(b){ b.style.borderBottomColor = t===tab?'var(--primary,#8b5cf6)':'transparent'; b.style.color = t===tab?'var(--text)':'var(--text-3)'; b.style.fontWeight = t===tab?'600':'400'; }
   });
   const body=document.getElementById('consoleBody');
   if(!body) return;
   if(tab==='keys'){ loadConsole(); }
+  else if(tab==='majors'){ renderMajorManager(body); }
   else if(tab==='teachers'){
     body.innerHTML='<div style="padding:20px;color:var(--text-3);font-size:12px">加载中…</div>';
     [cachedTeachers, cachedSessions]=await Promise.all([
@@ -92,6 +93,82 @@ async function switchConsoleTab(tab){
 function closeConsole(){
   document.getElementById('consoleOverlay').style.display='none';
   showHub();
+}
+
+// ══════════ 专业管理中心（各领域专业的核心映射，学生/课程/老师/宣传都用它）══════════
+async function renderMajorManager(body){
+  body.innerHTML='<div style="padding:20px;color:var(--text-3);font-size:12px">加载中…</div>';
+  // 直接从库拉全部专业（含domain）
+  let rows=[];
+  try{ rows=await sb('/rest/v1/majors?select=*&order=domain,label')||[]; }catch(e){ body.innerHTML='<div style="padding:20px;color:var(--danger)">加载失败：'+e.message+'</div>'; return; }
+  window._majorRows=rows;
+  // 按领域分组
+  const byDom={};
+  rows.forEach(r=>{ const d=r.domain||'（未设领域）'; (byDom[d]=byDom[d]||[]).push(r); });
+  const domainOpts=DOMAINS.map(d=>`<option value="${d.label}">${d.label}</option>`).join('');
+  let html=`
+  <div style="max-width:900px">
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:14px">各领域的专业清单。这是学生档案、课程、老师、宣传等所有"专业"选择的统一数据源。新建/删除在此集中管理。</div>
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:18px;background:var(--bg,#faf9f7)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:10px">＋ 新建专业</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">领域</div>
+          <select id="mm_domain" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">${domainOpts}</select></div>
+        <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">专业中文名</div>
+          <input id="mm_label" placeholder="如 机械工学" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;width:130px"></div>
+        <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">日语罗马音代号</div>
+          <input id="mm_key" placeholder="如 kikai" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;width:110px"></div>
+        <button class="btn btn-primary btn-sm" onclick="mmCreate()">新建</button>
+      </div>
+      <div style="font-size:9px;color:var(--text-3);margin-top:6px">代号只能小写字母/数字/下划线，以字母开头。与全站专业代码风格统一。</div>
+    </div>`;
+  // 按 DOMAINS 顺序 + 未设领域，列出每个领域的专业
+  const domOrder=[...DOMAINS.map(d=>d.label),'（未设领域）'];
+  domOrder.forEach(dom=>{
+    const list=byDom[dom]; if(!list||!list.length) return;
+    html+=`<div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:${dom==='（未设领域）'?'var(--danger)':'var(--text)'}">${dom} <span style="font-size:10px;color:var(--text-3)">(${list.length})</span></div>
+      <div style="display:flex;flex-direction:column;gap:4px">`;
+    list.forEach(m=>{
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px">
+        <span style="font-size:12px;font-weight:500">${majorEsc(m.label)}</span>
+        <span style="font-size:10px;color:var(--text-3)">${m.key}</span>
+        ${dom==='（未设领域）'?`<select onchange="mmSetDomain('${m.key}',this.value)" style="font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:3px"><option value="">归到领域…</option>${domainOpts}</select>`:''}
+        <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="mmDelete('${m.key}','${majorEsc(m.label)}')">删除</button>
+      </div>`;
+    });
+    html+='</div></div>';
+  });
+  html+='</div>';
+  body.innerHTML=html;
+}
+function majorEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+async function mmCreate(){
+  const domain=document.getElementById('mm_domain').value;
+  const label=document.getElementById('mm_label').value.trim();
+  const key=document.getElementById('mm_key').value.trim();
+  if(!label){ alert('请填专业中文名'); return; }
+  if(!key){ alert('请填日语罗马音代号'); return; }
+  const res=await createMajor(label,key,domain);
+  if(res){ await loadMajorsFromDB(); renderMajorManager(document.getElementById('consoleBody')); }
+}
+async function mmSetDomain(key,domain){
+  if(!domain) return;
+  try{
+    await sb(`/rest/v1/majors?key=eq.${key}`,'PATCH',{domain});
+    MAJOR_DOMAIN[key]=domain;
+    await loadMajorsFromDB();
+    renderMajorManager(document.getElementById('consoleBody'));
+  }catch(e){ alert('设置失败：'+e.message); }
+}
+async function mmDelete(key,label){
+  if(!confirm(`删除专业「${label}」(${key})？\n\n注意：已用此专业的学生/课程/老师不会自动清除，只是专业选项消失。确定删除？`)) return;
+  try{
+    await sb(`/rest/v1/majors?key=eq.${key}`,'DELETE');
+    delete MAJORS[key]; delete MAJOR_DOMAIN[key];
+    await loadMajorsFromDB();
+    renderMajorManager(document.getElementById('consoleBody'));
+  }catch(e){ alert('删除失败：'+e.message); }
 }
 async function loadConsole(){
   const body=document.getElementById('consoleBody');
