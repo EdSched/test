@@ -33,7 +33,11 @@ function renderStudentsPage(mc){
   // 视角过滤（叠加逻辑）：非总览时，主专业或附加专业任一属于当前领域/专业即可见
   list=list.filter(s=>studentInCurrentView(s));
   const viewTotal=list.length; // 当前视角学生总数（不受下方专业/状态/搜索筛选影响）
-  if(stMajorFilter!=='all') list=list.filter(s=>matchesMajorFilter(s.major,stMajorFilter));
+  if(stMajorFilter!=='all') list=list.filter(s=>{
+    // 主专业匹配，或附加专业(extra_majors,如日语/英语)匹配——叠加逻辑
+    if(matchesMajorFilter(s.major,stMajorFilter)) return true;
+    return (s.extra_majors||[]).some(m=>matchesMajorFilter(m,stMajorFilter));
+  });
   if(stStatus!=='all') list=list.filter(s=>s.status===stStatus);
   if(stVipFilter==='vip_only') list=list.filter(s=>s.is_vip_course==='VIP'||s.is_vip_course==='大课+VIP');
   if(stVipFilter==='vip_exclusive') list=list.filter(s=>s.is_vip_course==='VIP');
