@@ -673,9 +673,7 @@ function renderSlotManagement(mc) {
             <div class="ts-shift-chip" data-shift="出差" data-s="09:30" data-e="18:30" onclick="tsSelectShift(this)" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">出差</div>
           </div>
         </div>
-        <div class="form-group" id="ts_also_wrap" style="display:none">
-          <div class="filter-chip" id="ts_also_interview" onclick="tsToggleAlsoInterview(this)" style="padding:4px 12px;font-size:11px;border:1px solid var(--border);border-radius:3px;cursor:pointer">＋ 该出勤同时可接面谈</div>
-        </div>
+        <div class="form-group" id="ts_also_wrap" style="display:none"></div>
         <div class="form-group"><label class="form-label">时间段</label>
           <div style="display:grid;grid-template-columns:1fr 16px 1fr;gap:4px;align-items:center">
             <input type="time" id="ts_start" value="10:00">
@@ -805,19 +803,10 @@ function tsSelectPurpose(el){
   const alsoWrap=document.getElementById('ts_also_wrap');
   const typeBlock=document.getElementById('ts_type_block');
   if(shiftWrap) shiftWrap.style.display=isAttend?'block':'none';
-  if(alsoWrap) alsoWrap.style.display=isAttend?'block':'none';
-  // 专业/面谈地点：出勤且没勾兼面谈时隐藏
+  // 出勤：隐藏面谈类型/专业/地点（面谈请单独填）；面谈：显示
   const ivFields=document.getElementById('ts_interview_fields');
-  const alsoOn=document.getElementById('ts_also_interview')?.classList.contains('active');
-  if(ivFields) ivFields.style.display=(isAttend && !alsoOn)?'none':'block';
-  if(isAttend){
-    const also=document.getElementById('ts_also_interview');
-    if(typeBlock) typeBlock.style.display=(also&&also.classList.contains('active'))?'block':'none';
-  }else{
-    if(typeBlock) typeBlock.style.display='block';
-    const also=document.getElementById('ts_also_interview');
-    if(also) also.classList.remove('active');
-  }
+  if(ivFields) ivFields.style.display=isAttend?'none':'block';
+  if(typeBlock) typeBlock.style.display=isAttend?'none':'block';
 }
 function tsToggleAlsoInterview(el){
   el.classList.toggle('active');
@@ -839,8 +828,8 @@ async function addTeacherSlot() {
   const types = [...document.querySelectorAll('#ts_type_group input:checked')].map(c => c.value);
   const purpose = document.querySelector('#ts_purpose_group .filter-chip.active')?.dataset.value || 'interview';
   const shift = purpose==='attendance' ? (document.querySelector('#ts_shift_group .ts-shift-chip.active')?.dataset.shift || '') : '';
-  const alsoInterview = document.getElementById('ts_also_interview')?.classList.contains('active') || false;
-  const needTypes = purpose==='interview' || (purpose==='attendance' && alsoInterview);
+  const alsoInterview = false;
+  const needTypes = purpose==='interview';
   if (needTypes && !types.length) { alert('请至少选择一个类型'); return; }
   const vipExclusive = types.includes('vip') && !!document.getElementById('ts_vip_exclusive')?.checked;
   let vipContent = [];
@@ -877,12 +866,8 @@ async function addTeacherSlot() {
     dates.forEach(date => {
       const base = { time_range: timeRange, major, location, teacher_name: teacherName, vip_content: vipContent.length ? vipContent : null, vip_exclusive: vipExclusive };
       if(purpose==='attendance'){
-        // 纯出勤记录
+        // 纯出勤记录（面谈请单独填面谈时间槽）
         newSlots.push({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, date, type: [], purpose:'attendance', shift, also_interview:false, ...base });
-        // 勾了兼面谈 → 额外独立的面谈记录（互不关联）
-        if(alsoInterview && types.length){
-          newSlots.push({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2,6)}i`, date, type: types, purpose:'interview', shift:'', also_interview:false, ...base });
-        }
       } else {
         newSlots.push({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, date, type: types, purpose:'interview', shift:'', also_interview:false, ...base });
       }
