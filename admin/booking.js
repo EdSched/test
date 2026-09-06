@@ -651,11 +651,7 @@ function renderSlotsPage(mc){
           <div class="filter-chip" data-shift="出差" data-start="09:30" data-end="18:30" onclick="selectShift(this)" style="padding:4px 12px;cursor:pointer">出差</div>
         </div>
       </div>
-      <div class="form-group" id="slotAlsoInterviewWrap" style="display:none">
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-          <div class="filter-chip" id="slotAlsoInterview" onclick="this.classList.toggle('active');document.getElementById('slotTypeWrap').style.display=this.classList.contains('active')?'block':'none'" style="padding:4px 12px;cursor:pointer">＋ 该出勤同时可接面谈</div>
-        </label>
-      </div>
+      <div class="form-group" id="slotAlsoInterviewWrap" style="display:none"></div>
       <div class="form-group"><label class="form-label">专业</label>
         <select id="slotMajor">
           ${Object.entries(MAJORS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}
@@ -742,26 +738,16 @@ function setSlotMode(m){
 }
 function toggleWd(btn){btn.classList.toggle('selected')}
 function datesForWeekdays(wds,s,e){const start=new Date(s),end=new Date(e);if(isNaN(start)||isNaN(end)||start>end)return[];const dates=[],cur=new Date(start);while(cur<=end){if(wds.includes(cur.getDay()))dates.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+1)}return dates}
-// 时间槽用途切换：面谈→显示面谈类型；出勤→隐藏面谈类型，显示"兼面谈"按钮
+// 时间槽用途切换：出勤→只显示班次；面谈→显示面谈类型。两者时间各填各的，不再兼容
 function selectSlotPurpose(el){
   document.querySelectorAll('#slotPurposeGroup .filter-chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
   const isAttend = el.dataset.value==='attendance';
-  const alsoWrap=document.getElementById('slotAlsoInterviewWrap');
   const typeWrap=document.getElementById('slotTypeWrap');
   const shiftWrap=document.getElementById('slotShiftWrap');
   if(shiftWrap) shiftWrap.style.display = isAttend?'block':'none';
-  if(alsoWrap) alsoWrap.style.display = isAttend?'block':'none';
-  if(isAttend){
-    // 出勤：面谈类型默认隐藏，除非勾了"兼面谈"
-    const also=document.getElementById('slotAlsoInterview');
-    if(typeWrap) typeWrap.style.display = (also&&also.classList.contains('active'))?'block':'none';
-  } else {
-    // 面谈：正常显示面谈类型
-    if(typeWrap) typeWrap.style.display='block';
-    const also=document.getElementById('slotAlsoInterview');
-    if(also) also.classList.remove('active');
-  }
+  // 出勤：隐藏面谈类型（面谈请单独填）；面谈：显示面谈类型
+  if(typeWrap) typeWrap.style.display = isAttend?'none':'block';
 }
 // 出勤班次：点选自动填标准时间（可再手动改），记录班次名
 function selectShift(el){
@@ -775,14 +761,14 @@ async function addSlot(){
   const ts=document.getElementById('slotTimeStart').value,te=document.getElementById('slotTimeEnd').value;
   const purpose=document.querySelector('#slotPurposeGroup .filter-chip.active')?.dataset.value||'interview';
   const shift=purpose==='attendance'?(document.querySelector('#slotShiftGroup .filter-chip.active')?.dataset.shift||''):'';
-  const alsoInterview=document.getElementById('slotAlsoInterview')?.classList.contains('active')||false;
+  const alsoInterview=false;
   const types=[...document.querySelectorAll('#slotTypeGroup input:checked')].map(c=>c.value);
   const major=document.getElementById('slotMajor').value;
   const location=document.getElementById('slotLocation').value||'online';
   if(!ts||!te){alert('请填写时间段');return}
   if(ts>=te){alert('结束时间需晚于开始时间');return}
-  // 面谈用途必须选面谈类型；出勤用途若勾了"兼面谈"也要选类型
-  const needTypes = purpose==='interview' || (purpose==='attendance'&&alsoInterview);
+  // 只有面谈用途需要选面谈类型；出勤不需要
+  const needTypes = purpose==='interview';
   if(needTypes && !types.length){alert('请至少选择一个面谈类型');return}
   const timeRange=`${ts}–${te}`;
   let dates=[];
@@ -795,14 +781,9 @@ async function addSlot(){
     const key=`${date}|${timeRange}|${typeKey}|${major}|${purpose}`;
     if(existing.has(key)) continue;
     if(purpose==='attendance'){
-      // 出勤：存一条纯出勤记录（给管理者看，无面谈类型）
+      // 纯出勤（给管理者看，无面谈类型）。面谈请单独填面谈时间槽
       toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,6)}`,date,time_range:timeRange,type:[],major,location,purpose:'attendance',shift,also_interview:false});
-      // 若勾了"也接面谈"：额外存一条独立的面谈记录（给学生看，带面谈类型）——两条互不关联，删一条不影响另一条
-      if(alsoInterview && types.length){
-        toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}i`,date,time_range:timeRange,type:types,major,location,purpose:'interview',shift:'',also_interview:false});
-      }
     } else {
-      // 纯面谈
       toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,6)}`,date,time_range:timeRange,type:types,major,location,purpose:'interview',shift:'',also_interview:false});
     }
     existing.add(key);
