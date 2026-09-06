@@ -688,8 +688,8 @@ function renderSlotsPage(mc){
           const isLocked=s.locked||false;
           return `<div class="slot-item" style="${isLocked?'background:var(--danger-bg);border-color:var(--danger)':''}">
             <div class="slot-item-left">
-              ${s.purpose==='attendance'?`<span class="tag" style="background:#e8f0e4;color:#2a5a1a">出勤${s.also_interview?'+面谈':''}</span>`:''}
-              ${(s.purpose!=='attendance'||s.also_interview)&&(Array.isArray(s.type)?s.type.length:s.type)?`<span class="tag ${typeTag(Array.isArray(s.type)?s.type[0]:s.type)}">${(Array.isArray(s.type)?s.type:[s.type]).filter(Boolean).map(t=>t==='daily'?'日常':t==='plan'?'计划书':t==='vip'?'VIP':'模拟').join('・')}</span>`:''}
+              ${s.purpose==='attendance'?`<span class="tag" style="background:#e8f0e4;color:#2a5a1a">出勤${s.shift?'·'+s.shift:''}</span>`:''}
+              ${s.purpose!=='attendance'&&(Array.isArray(s.type)?s.type.length:s.type)?`<span class="tag ${typeTag(Array.isArray(s.type)?s.type[0]:s.type)}">${(Array.isArray(s.type)?s.type:[s.type]).filter(Boolean).map(t=>t==='daily'?'日常':t==='plan'?'计划书':t==='vip'?'VIP':'模拟').join('・')}</span>`:''}
               <span style="font-size:10px;color:var(--text-3)">${MAJORS[s.major]||s.major}</span>
               <span style="font-weight:500">${s.date.slice(5)}</span>
               <span style="font-size:10px;color:${dc}">${dow}</span>
@@ -773,7 +773,22 @@ async function addSlot(){
   const existing=new Set(cachedSlots.map(s=>`${s.date}|${s.time_range}|${(Array.isArray(s.type)?s.type:[s.type]).join(',')}|${s.major}|${s.purpose||'interview'}`));
   const toInsert=[];
   const typeKey=types.join(',');
-  for(const date of dates){const key=`${date}|${timeRange}|${typeKey}|${major}|${purpose}`;if(!existing.has(key)){toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,6)}`,date,time_range:timeRange,type:types,major,location,purpose,shift,also_interview:alsoInterview});existing.add(key)}}
+  for(const date of dates){
+    const key=`${date}|${timeRange}|${typeKey}|${major}|${purpose}`;
+    if(existing.has(key)) continue;
+    if(purpose==='attendance'){
+      // 出勤：存一条纯出勤记录（给管理者看，无面谈类型）
+      toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,6)}`,date,time_range:timeRange,type:[],major,location,purpose:'attendance',shift,also_interview:false});
+      // 若勾了"也接面谈"：额外存一条独立的面谈记录（给学生看，带面谈类型）——两条互不关联，删一条不影响另一条
+      if(alsoInterview && types.length){
+        toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}i`,date,time_range:timeRange,type:types,major,location,purpose:'interview',shift:'',also_interview:false});
+      }
+    } else {
+      // 纯面谈
+      toInsert.push({id:`${Date.now()}-${Math.random().toString(36).slice(2,6)}`,date,time_range:timeRange,type:types,major,location,purpose:'interview',shift:'',also_interview:false});
+    }
+    existing.add(key);
+  }
   if(!toInsert.length){alert('所选日期的时间槽已存在');return}
   try{const res=await sb('/rest/v1/slots','POST',toInsert);cachedSlots=[...cachedSlots,...(Array.isArray(res)?res:toInsert)];renderSlotsPage(document.getElementById('mainContent'));if(toInsert.length>1)alert(`已添加 ${toInsert.length} 个时间槽`)}
   catch(e){alert('添加失败：'+e.message)}
