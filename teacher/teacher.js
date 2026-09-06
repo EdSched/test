@@ -873,7 +873,20 @@ async function addTeacherSlot() {
     if (!confirm(`将添加 ${dates.length} 个时间槽，确认？`)) return;
   }
   try {
-    const newSlots = dates.map(date => ({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, date, time_range: timeRange, type: types, major, location, teacher_name: teacherName, purpose, shift, also_interview: alsoInterview, vip_content: vipContent.length ? vipContent : null, vip_exclusive: vipExclusive }));
+    let newSlots = [];
+    dates.forEach(date => {
+      const base = { time_range: timeRange, major, location, teacher_name: teacherName, vip_content: vipContent.length ? vipContent : null, vip_exclusive: vipExclusive };
+      if(purpose==='attendance'){
+        // 纯出勤记录
+        newSlots.push({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, date, type: [], purpose:'attendance', shift, also_interview:false, ...base });
+        // 勾了兼面谈 → 额外独立的面谈记录（互不关联）
+        if(alsoInterview && types.length){
+          newSlots.push({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2,6)}i`, date, type: types, purpose:'interview', shift:'', also_interview:false, ...base });
+        }
+      } else {
+        newSlots.push({ id: `sl-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, date, type: types, purpose:'interview', shift:'', also_interview:false, ...base });
+      }
+    });
     for (let i = 0; i < newSlots.length; i += 10) {
       const chunk = newSlots.slice(i, i + 10);
       const res = await sb('/rest/v1/slots', 'POST', chunk);
