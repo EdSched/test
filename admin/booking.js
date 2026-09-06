@@ -2,6 +2,8 @@
 // BOOKING PAGE
 // ══════════════════════════════════
 let bkSection='regular'; // 'regular' | 'vip'
+let slotFilterTeacher=''; // 时间槽按填写人筛选
+let slotFilterPurpose=''; // 时间槽按用途筛选(''/attendance/interview)
 
 function renderBookingPage(mc){
   if(bkSection==='vip'){ renderVipBookingPage(mc); return; }
@@ -581,7 +583,13 @@ function exportExcel(){
 // ══════════════════════════════════
 function renderSlotsPage(mc){
   const ym=`${bkYear}-${String(bkMonth+1).padStart(2,'0')}`;
-  const monthSlots=cachedSlots.filter(s=>s.date.startsWith(ym)&&majorInCurrentView(s.major)).sort((a,b)=>a.date.localeCompare(b.date)||a.time_range.localeCompare(b.time_range));
+  let monthSlots=cachedSlots.filter(s=>s.date.startsWith(ym)&&majorInCurrentView(s.major)).sort((a,b)=>a.date.localeCompare(b.date)||a.time_range.localeCompare(b.time_range));
+  // 填写人 + 用途 筛选
+  if(slotFilterTeacher) monthSlots=monthSlots.filter(s=>(s.teacher_name||'')===slotFilterTeacher);
+  if(slotFilterPurpose==='attendance') monthSlots=monthSlots.filter(s=>s.purpose==='attendance');
+  else if(slotFilterPurpose==='interview') monthSlots=monthSlots.filter(s=>s.purpose!=='attendance');
+  // 本月所有填写人（供下拉）
+  const fillers=[...new Set(cachedSlots.filter(s=>s.date.startsWith(ym)&&s.teacher_name).map(s=>s.teacher_name))].sort();
   const slotBookedCount={};
   cachedBookings.filter(b=>b.status!=='cancelled').forEach(b=>{slotBookedCount[b.slot_id]=(slotBookedCount[b.slot_id]||0)+1});
 
@@ -675,7 +683,16 @@ function renderSlotsPage(mc){
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)">本月时间槽 <span class="badge-count">${monthSlots.length}</span></div>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <select onchange="slotFilterTeacher=this.value;renderSlotsPage(document.getElementById('mainContent'))" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:3px">
+            <option value="">全部填写人</option>
+            ${fillers.map(f=>`<option value="${f}" ${slotFilterTeacher===f?'selected':''}>👤${f}</option>`).join('')}
+          </select>
+          <select onchange="slotFilterPurpose=this.value;renderSlotsPage(document.getElementById('mainContent'))" style="font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:3px">
+            <option value="" ${!slotFilterPurpose?'selected':''}>全部用途</option>
+            <option value="attendance" ${slotFilterPurpose==='attendance'?'selected':''}>仅出勤</option>
+            <option value="interview" ${slotFilterPurpose==='interview'?'selected':''}>仅面谈</option>
+          </select>
           <button class="btn-ghost" style="color:var(--danger)" onclick="clearMonthSlots()">清空本月</button>
           <button class="btn-ghost" onclick="clearAllSlots()">清空全部</button>
         </div>
@@ -694,6 +711,7 @@ function renderSlotsPage(mc){
               <span style="font-weight:500">${s.date.slice(5)}</span>
               <span style="font-size:10px;color:${dc}">${dow}</span>
               <span style="color:var(--text-2);font-size:10px">${s.time_range}</span>
+              ${s.teacher_name?`<span style="font-size:10px;color:var(--accent,#8b5cf6)">👤${s.teacher_name}</span>`:'<span style="font-size:10px;color:var(--text-3)">👤未标记</span>'}
               ${locationShort(s.location)?`<span style="font-size:10px;color:${locationColor(s.location)}">${locationShort(s.location)}</span>`:''}
               <span style="font-size:10px;color:${isLocked?'var(--danger)':booked>=cap?'var(--danger)':'var(--ok)'}">${isLocked?'🔒 已锁定':booked+'/'+cap}</span>
             </div>
