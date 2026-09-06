@@ -696,20 +696,18 @@ let teacherExpandedId=null;
 
 function teacherFilteredList(){
   let list=cachedTeachers;
-  // 领域端（非admin）：排除带"营业老师""保录老师"标签的人
   const isDomainAccount = typeof ACCESS_KEY!=='undefined' && ACCESS_KEY && !ACCESS_KEY.invalid && !ACCESS_KEY.is_admin;
+  // 领域端（非admin）：排除带"营业老师""保录老师"标签的人
   if(isDomainAccount){
     list=list.filter(t=>{ const tags=t.tags||[]; return !tags.includes('营业老师') && !tags.includes('保录老师'); });
   }
-  // 按当前视角过滤：按"隶属领域"(managed_by)判断谁能管这个老师；managed_by空则回退"负责领域"domains
-  if(typeof CURRENT_DOMAIN!=='undefined' && CURRENT_DOMAIN && CURRENT_DOMAIN!=='all'){
-    list=list.filter(t=>{
-      const managed = (t.managed_by&&t.managed_by.length) ? t.managed_by : (t.domains||[]);
-      if(managed.includes(CURRENT_DOMAIN)) return true;
-      // 兼容完全没填领域的老师：用负责专业反查领域
-      if(!managed.length) return (t.majors||[]).some(m=>MAJOR_DOMAIN[m]===CURRENT_DOMAIN);
-      return false;
-    });
+  // 专业链接（限定专业）：只看"负责专业含该专业"的老师（教这个专业的，如英语链接只看教英语的）
+  if(typeof CURRENT_MAJOR!=='undefined' && CURRENT_MAJOR){
+    list=list.filter(t=>(t.majors||[]).includes(CURRENT_MAJOR));
+  }
+  // 领域链接（无专业锁）：按"隶属领域"(managed_by)过滤；没设隶属的老师(如营业)只admin显示，不进任何领域
+  else if(typeof CURRENT_DOMAIN!=='undefined' && CURRENT_DOMAIN && CURRENT_DOMAIN!=='all'){
+    list=list.filter(t=>(t.managed_by||[]).includes(CURRENT_DOMAIN));
   }
   if(teacherTagFilter) list=list.filter(t=>(t.tags||[]).includes(teacherTagFilter));
   if(teacherTypeFilter) list=list.filter(t=>(t.staff_type||'')===teacherTypeFilter);
