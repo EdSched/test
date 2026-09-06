@@ -856,7 +856,7 @@ function toggleDomainChip(el){
 // 按已选领域展开专业 chip（按领域分组显示）；保留已勾选的专业状态
 function renderTeacherMajorChips(){
   const box=document.getElementById('new_teacher_majors'); if(!box) return;
-  const selDomains=[...document.querySelectorAll('#new_teacher_domains .filter-chip.active')].map(c=>c.dataset.value);
+  const selDomains=[...new Set([...document.querySelectorAll('#new_teacher_domains .filter-chip.active')].map(c=>c.dataset.value))];
   // 记住当前已选专业，重绘后恢复
   const prevSel=new Set([...box.querySelectorAll('.filter-chip.active')].map(c=>c.dataset.value));
   if(!selDomains.length){ box.innerHTML='<div style="font-size:11px;color:var(--text-3)">请先选择领域，上方选定后这里展开对应专业</div>'; return; }
