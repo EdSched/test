@@ -177,7 +177,7 @@ function renderPayrollSection(container) {
         <label class="form-label">老师</label>
         <select id="pr_teacher">
           <option value="">请选择老师</option>
-          ${cachedTeachers.map(t => `<option value="${t.name}" ${payrollTeacher === t.name ? 'selected' : ''}>${t.name}</option>`).join('')}
+          ${(typeof teacherFilteredList==='function'?teacherFilteredList():cachedTeachers).map(t => `<option value="${t.name}" ${payrollTeacher === t.name ? 'selected' : ''}>${t.name}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="margin:0">
@@ -193,8 +193,8 @@ function renderPayrollSection(container) {
     <div style="margin-bottom:14px;padding-top:10px;border-top:1px solid var(--border-light)">
       <label class="form-label">按专业批量生成（自动覆盖该专业所有老师）</label>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
-        ${[['keiei','経営学'],['keizai','経済学'],['shakai','社会学'],['shinpan','新闻传播学'],['fukushi','社会福祉学']].map(([key,label]) =>
-          `<button class="btn btn-outline btn-sm" onclick="runPayrollByMajor('${key}')">${label}</button>`
+        ${majorFilterKeys().map(key =>
+          `<button class="btn btn-outline btn-sm" onclick="runPayrollByMajor('${key}')">${key==='shakai_group'?'社会人文':majorLabel(key)}</button>`
         ).join('')}
         <button class="btn btn-outline btn-sm" onclick="runPayrollByMajor('all')">全部老师</button>
       </div>
@@ -291,9 +291,13 @@ async function runPayrollByMajor(majorKey) {
   payrollStart = start;
   payrollEnd = end;
 
+  const baseTeachers = (typeof teacherFilteredList==='function') ? teacherFilteredList() : cachedTeachers;
   const teacherNames = majorKey === 'all'
-    ? cachedTeachers.map(t => t.name)
-    : cachedTeachers.filter(t => (t.majors || []).includes(majorKey)).map(t => t.name);
+    ? baseTeachers.map(t => t.name)
+    : baseTeachers.filter(t => {
+        if(majorKey==='shakai_group') return ['shakai','shinpan','fukushi'].some(x=>(t.majors||[]).includes(x));
+        return (t.majors || []).includes(majorKey);
+      }).map(t => t.name);
 
   if (!teacherNames.length) { alert('该专业下暂无老师'); return; }
 
