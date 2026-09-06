@@ -1124,9 +1124,19 @@ function profRender(){
 
   if(profEditingId==='new'){box.innerHTML=formHtml(profNewPreset||{});setTimeout(profDomainChange,0);return}
 
+  // 视角过滤：专业链接→只看该专业档案；领域链接→只看该领域档案；admin→全部
+  let viewProfs=profList;
+  if(typeof CURRENT_MAJOR!=='undefined' && CURRENT_MAJOR){
+    const cn=MAJORS[CURRENT_MAJOR]||CURRENT_MAJOR;
+    viewProfs=profList.filter(p=>(p.subject||'').trim()===cn);
+  } else if(typeof CURRENT_DOMAIN!=='undefined' && CURRENT_DOMAIN && CURRENT_DOMAIN!=='all'){
+    viewProfs=profList.filter(p=>(p.domain||'')===CURRENT_DOMAIN);
+  }
+  if(cnt) cnt.textContent=viewProfs.length;
+
   // 按所属学科分组折叠
   const groups={};
-  profList.forEach(p=>{const k=(p.subject||'未分类').trim()||'未分类';if(!groups[k])groups[k]=[];groups[k].push(p);});
+  viewProfs.forEach(p=>{const k=(p.subject||'未分类').trim()||'未分类';if(!groups[k])groups[k]=[];groups[k].push(p);});
   box.innerHTML=Object.entries(groups).map(([subj,list])=>{
     const open=profOpenSubjects.has(subj);
     return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:4px;overflow:hidden">
